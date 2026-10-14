@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from boundary_contracts import schema_dir
 from boundary_contracts.errors import BoundaryError
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
@@ -18,14 +19,14 @@ _BASE = "file:///boundary/"
 @lru_cache(maxsize=1)
 def _registry() -> Registry:
     reg = Registry()
-    for p in sorted((SCHEMA_ROOT / "boundary").glob("*.schema.json")):
+    for p in sorted(schema_dir().glob("*.schema.json")):
         reg = reg.with_resource(_BASE + p.name, Resource.from_contents(json.loads(p.read_text("utf-8")), DRAFT202012))
     return reg
 
 
 @lru_cache(maxsize=None)
 def _validator(name: str) -> Draft202012Validator:
-    if not (SCHEMA_ROOT / "boundary" / f"{name}.schema.json").exists():
+    if not (schema_dir() / f"{name}.schema.json").exists():
         raise ValueError(f"알 수 없는 경계 스키마: {name}")
     return Draft202012Validator({"$ref": _BASE + f"{name}.schema.json"}, registry=_registry())
 

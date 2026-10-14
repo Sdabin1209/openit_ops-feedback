@@ -2,7 +2,8 @@
 
 - 요청자: ops-feedback
 - 대상: `boundary-contracts/pyproject.toml`, `survey-service/schema`
-- 상태: 헤드 결정 필요
+- 처리 결과(헤드 회신): 결정: boundary 스키마는 패키지(v1.0.0)로 해결. 문진 스키마 패키지화는 survey-service 과제, 그때까지 스냅샷(survey/v<정수>/) 유지.
+- 이전 상태: 헤드 결정 필요
 
 ## 부족한 점
 1. `boundary_contracts` 패키지는 `schemas/*.json`을 담지 않는다(`packages = ["boundary_contracts"]`). `pip install`한 쪽은 레코드를 검증할 스키마가 없다.

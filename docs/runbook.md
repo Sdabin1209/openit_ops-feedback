@@ -33,11 +33,12 @@ python3 -m venv .venv
 ```
 OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api
 # 컨테이너
+scripts/build_wheels.sh   # git archive v1.0.0 -> wheel (build/wheels)
 docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short HEAD) .
 docker run -p 8080:8080 -v ops-log:/data -e OPS_INGEST_TOKEN=... ops-feedback-ingest
 ```
 
-확인: `curl localhost:8080/healthz`, `/readyz`. 스모크 시험(이미지 빌드, 기동, 수집, 중복, 인증): `scripts/smoke.sh` (WSL에서 docker가 없으면 `docker.exe`를 쓴다).
+확인: `curl localhost:8080/healthz`, `/readyz`. 스모크 시험(호스트 포트는 Docker가 배정, 이미지 빌드, 기동, 수집, 중복, 인증): `scripts/smoke.sh` (WSL에서 docker가 없으면 `docker.exe`를 쓴다).
 
 ## 잡 실행 (주기는 cron 등 외부에서)
 

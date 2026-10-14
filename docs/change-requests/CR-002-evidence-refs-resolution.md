@@ -2,7 +2,8 @@
 
 - 요청자: ops-feedback
 - 대상: `RollbackRequest.evidence_refs`, `INTERFACES.md` I5/I7
-- 상태: 헤드 결정 필요
+- 처리 결과(헤드 회신): 결정: evidence_refs는 이 영역이 해석하는 불투명 Id, 게이트는 기록만. 지표 스냅샷 방식 유지.
+- 이전 상태: 헤드 결정 필요
 
 ## 부족한 점
 `evidence_refs`는 Id 배열이지만 그 Id가 무엇이고 어디서 읽는지 계약에 없다. ops-feedback은 롤백을 평가할 때 릴리스별 지표 스냅샷(`metric-<해시>`: 릴리스, 창, 총 턴 수, 실패 사례 수, 유형별 수, 실패율)을 만들어 자기 저장소에 두고 그 Id를 넣는다. 게이트나 사람이 이 Id를 해석하려면 읽는 경로가 필요하다.

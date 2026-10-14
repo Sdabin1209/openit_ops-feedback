@@ -4,14 +4,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DOCKER=docker
 if ! docker info >/dev/null 2>&1; then DOCKER=docker.exe; fi
-IMG=ops-feedback-ingest:smoke
+IMG=ops-feedback-ingest:smoke-$$
 NAME=ops-feedback-smoke-$$
-PORT=${SMOKE_PORT:-18080}
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
-CV=$(cat vendor/boundary-contracts/pyproject.toml | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+bash scripts/build_wheels.sh >/dev/null
+CV=$(cat build/wheels/BOUNDARY_TAG)
 $DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" .
-trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true' EXIT
-$DOCKER run -d --name $NAME -p 127.0.0.1:$PORT:8080 -e OPS_INGEST_TOKEN=smoke-token $IMG >/dev/null
+trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
+$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -e OPS_INGEST_TOKEN=smoke-token $IMG >/dev/null
+PORT=$($DOCKER port $NAME 8080/tcp | head -1 | tr -d '\r' | sed 's/.*://')
+echo "host port: $PORT"
 for i in $(seq 1 30); do
   curl -fsS http://127.0.0.1:$PORT/healthz >/dev/null 2>&1 && break
   sleep 1

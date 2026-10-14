@@ -53,3 +53,9 @@ def test_unreachable_is_unavailable():
     with pytest.raises(BoundaryError) as x:
         HttpTraceIngest("http://127.0.0.1:1", "t", timeout=0.5).send(envelope())
     assert x.value.code == "UNAVAILABLE" and x.value.retryable
+
+
+def test_http_status_table_matches_conventions_9():
+    from ops_feedback.api import HTTP_STATUS
+    assert HTTP_STATUS == {"INVALID_RECORD": 400, "PERMISSION_DENIED": 403, "NOT_FOUND": 404, "CONFLICT": 409,
+                           "FAILED_PRECONDITION": 412, "UNSUPPORTED_VERSION": 422, "INTEGRITY_ERROR": 422, "UNAVAILABLE": 503}

@@ -2,7 +2,8 @@
 
 - 요청자: ops-feedback
 - 대상: `INTERFACES.md` I6, `CONVENTIONS.md` 3, 6절
-- 상태: 제안(구현함, 확정 필요)
+- 처리 결과(헤드 회신): 결정: CONVENTIONS 9절에 HTTP 규약 확정. 상태 코드 표 반영함.
+- 이전 상태: 제안(구현함, 확정 필요)
 
 I6은 `send(envelope) -> IngestResult`만 정하고 서비스 API의 전송 형식이 없다. survey-service와 맞추기 위해 다음으로 구현했다.
 

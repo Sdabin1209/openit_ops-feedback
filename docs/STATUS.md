@@ -13,6 +13,7 @@
 ## 시험
 
 - `.venv/bin/python -m pytest -q`: 전부 통과(85건).
+- 헤드 회신 후속(0.1.1) 반영 후 재실행 결과는 CHANGELOG 0.1.1과 최신 커밋 기준.
 - `scripts/smoke.sh`: `SMOKE OK`.
 
 ## 남은 일
@@ -21,8 +22,7 @@
 - 지표 대시보드, 피드백 배포기, 검토 UI, 사람 신고(FEEDBACK/HUMAN) 탐지 경로, 모델 기반 탐지기.
 - I4/I5 실제 SDK 연결(release-gate가 배포하면 `release_reader`/`gate_service` 팩토리 설정).
 - 실패 사례·비식별 trace 보관/삭제 정책.
-- Git 태그 기반 의존 설치(현재는 `scripts/sync_vendor.sh` 사본, CR-004). 이미지 CI 게시와 digest 제출(D24)은 CI가 생기면.
-- list_cases를 SQL 필터로(사례가 많아질 때).
+- 문진 스키마 패키지화(survey-service 과제, 현재 스냅샷). 이미지 CI 게시와 digest 제출(D24)은 CI가 생기면.
 
 ## 막힌 것
 

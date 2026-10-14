@@ -41,7 +41,7 @@ SQLite 파일 두 개로 시작한다. 쓰기 경로가 하나뿐이고 용량�
 
 메모리 구현은 같은 클래스에 `MemoryBackend`를 끼운 것이다. 로직(검증, 멱등, 버전 규칙, 필터, 페이지)은 한 곳에 있어 두 구현이 같은 적합성 시험(`tests/test_conformance_*.py`)을 통과한다.
 
-한계(**확인**): `list_cases`는 필터를 파이썬에서 거른다(전체 스캔). 사례가 수만 건을 넘기면 SQL 필터로 바꾼다.
+`list_cases`의 필터·최신 version·페이지는 SQLite에서 SQL로 처리한다(인덱스: review_status/failure_type/source_release_id, source_release_id/created_at). 메모리 구현은 같은 의미를 파이썬으로 구현하고 같은 시험을 통과한다.
 
 ## 3. 수집 (I6)
 

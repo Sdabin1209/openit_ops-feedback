@@ -9,12 +9,6 @@ B = ROOT.parent / "boundary-contracts"
 S = ROOT.parent / "survey-service" / "schema"
 
 
-@pytest.mark.skipif(not B.exists(), reason="이웃 리포지토리가 없다")
-def test_boundary_snapshot_current():
-    for p in SNAP.joinpath("boundary").glob("*.json"):
-        assert p.read_bytes() == (B / "schemas" / p.name).read_bytes(), f"{p.name} 스냅샷이 오래되었다: scripts/sync_vendor.sh"
-
-
 @pytest.mark.skipif(not S.exists(), reason="이웃 리포지토리가 없다")
 def test_survey_snapshot_current():
     assert (SNAP / "survey/v1/TurnTrace.json").read_bytes() == (S / "schemas/TurnTrace.json").read_bytes()

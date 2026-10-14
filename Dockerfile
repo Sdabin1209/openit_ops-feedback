@@ -1,11 +1,11 @@
 # ingest-api 이미지. 설정은 환경 변수로만 받고 비밀 값은 넣지 않는다. 로그는 표준 출력. 비root로 실행.
 FROM python:3.12-slim AS build
 WORKDIR /src
-COPY vendor/boundary-contracts /src/vendor/boundary-contracts
+COPY build/wheels /wheels
 COPY pyproject.toml requirements.lock /src/
 COPY src /src/src
 RUN pip install --no-cache-dir --prefix=/install -r requirements.lock \
- && pip install --no-cache-dir --prefix=/install --no-deps /src/vendor/boundary-contracts /src
+ && pip install --no-cache-dir --prefix=/install --no-deps /wheels/*.whl /src
 
 FROM python:3.12-slim
 ARG COMMIT=unknown

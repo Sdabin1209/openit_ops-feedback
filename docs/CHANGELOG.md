@@ -1,5 +1,13 @@
 # 변경 이력
 
+## 0.1.1 (2026-10-15)
+
+- boundary-contracts v1.0.0 패키지를 사용: 복사본(vendor/, _schemas/boundary) 제거, 이미지는 git archive로 만든 wheel 설치. requirements.txt에 태그 의존 기록.
+- HTTP 상태 코드를 CONVENTIONS 9절 표와 대조하는 시험 추가.
+- list_cases를 SQL 필터로 구현(SQLite). 기존 0.1.0 DB 파일과는 테이블 구조가 달라 호환되지 않는다(배포 전이라 이전 없음).
+- 스모크: 고정 포트 제거(호스트 포트 자동 배정), 실행마다 고유 컨테이너·이미지 이름.
+- 변경 요청 5건에 헤드 회신 반영.
+
 ## 0.1.0 (2026-10-15)
 
 - 설계(`docs/design.md`)와 경계 문서(`docs/boundary.md`) 작성.

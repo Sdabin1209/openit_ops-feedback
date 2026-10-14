@@ -27,6 +27,9 @@ class _Backend(ABC):
     @abstractmethod
     def scan(self, after_seq: int) -> Iterator[tuple[int, dict]]: ...   # seq 오름차순
     @abstractmethod
+    def query(self, after_seq: int, latest_only: bool, review_status: Optional[str], failure_type: Optional[str],
+              source_release_id: Optional[str], since: Optional[str], limit: int) -> list[tuple[int, dict]]: ...
+    @abstractmethod
     def put_trace(self, ref: str, trace: dict) -> None: ...
     @abstractmethod
     def get_trace(self, ref: str) -> Optional[dict]: ...
@@ -61,6 +64,24 @@ class MemoryBackend(_Backend):
         with self._lock:
             snap = [(s, json.loads(json.dumps(r))) for s, r in self._cases if s > after_seq]
         yield from snap
+
+    def query(self, after_seq, latest_only, review_status, failure_type, source_release_id, since, limit):
+        with self._lock:
+            latest: dict[str, int] = {}
+            for seq, r in self._cases:
+                latest[r["case_id"]] = max(latest.get(r["case_id"], 0), r["version"])
+            out = []
+            for seq, r in self._cases:
+                if seq <= after_seq or (latest_only and r["version"] != latest[r["case_id"]]):
+                    continue
+                if review_status and r["review_status"] != review_status: continue
+                if failure_type and r["failure_type"] != failure_type: continue
+                if source_release_id and r["source_release_id"] != source_release_id: continue
+                if since and r["created_at"] < since: continue
+                out.append((seq, json.loads(json.dumps(r))))
+                if len(out) >= limit:
+                    break
+            return out
 
     def put_trace(self, ref, trace):
         with self._lock:
@@ -104,7 +125,10 @@ class SqliteBackend(_Backend):
         self._db.executescript("""
             CREATE TABLE IF NOT EXISTS cases(
               seq INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, version INTEGER NOT NULL,
-              record TEXT NOT NULL, UNIQUE(case_id, version));
+              review_status TEXT NOT NULL, failure_type TEXT NOT NULL, source_release_id TEXT NOT NULL,
+              created_at TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(case_id, version));
+            CREATE INDEX IF NOT EXISTS cases_filter ON cases(review_status, failure_type, source_release_id);
+            CREATE INDEX IF NOT EXISTS cases_release ON cases(source_release_id, created_at);
             CREATE TABLE IF NOT EXISTS traces(ref TEXT PRIMARY KEY, trace TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS aux(kind TEXT NOT NULL, key TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind, key));
         """)
@@ -118,8 +142,9 @@ class SqliteBackend(_Backend):
 
     def insert_case(self, record):
         return self._x(lambda: self._db.execute(
-            "INSERT INTO cases(case_id,version,record) VALUES(?,?,?)",
-            (record["case_id"], record["version"], json.dumps(record, ensure_ascii=False))).lastrowid)
+            "INSERT INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record) VALUES(?,?,?,?,?,?,?)",
+            (record["case_id"], record["version"], record["review_status"], record["failure_type"],
+             record["source_release_id"], record["created_at"], json.dumps(record, ensure_ascii=False))).lastrowid)
 
     def versions(self, case_id):
         return self._x(lambda: [json.loads(r) for (r,) in self._db.execute(
@@ -129,6 +154,21 @@ class SqliteBackend(_Backend):
         rows = self._x(lambda: self._db.execute("SELECT seq,record FROM cases WHERE seq>? ORDER BY seq", (after_seq,)).fetchall())
         for s, r in rows:
             yield s, json.loads(r)
+
+    def query(self, after_seq, latest_only, review_status, failure_type, source_release_id, since, limit):
+        where, args = ["c.seq>?"], [after_seq]
+        if latest_only:
+            where.append("NOT EXISTS (SELECT 1 FROM cases d WHERE d.case_id=c.case_id AND d.version>c.version)")
+        for col, v in (("review_status", review_status), ("failure_type", failure_type), ("source_release_id", source_release_id)):
+            if v:
+                where.append(f"c.{col}=?")
+                args.append(v)
+        if since:
+            where.append("c.created_at>=?")
+            args.append(since)
+        q = f"SELECT c.seq,c.record FROM cases c WHERE {' AND '.join(where)} ORDER BY c.seq LIMIT ?"
+        rows = self._x(lambda: self._db.execute(q, (*args, limit)).fetchall())
+        return [(s_, json.loads(r)) for s_, r in rows]
 
     def put_trace(self, ref, trace):
         self._x(lambda: self._db.execute("INSERT OR IGNORE INTO traces(ref,trace) VALUES(?,?)", (ref, json.dumps(trace, ensure_ascii=False))))
@@ -221,31 +261,11 @@ class FailureStoreImpl:
         except ValueError:
             raise BoundaryError("INVALID_RECORD", "cursor 형식 오류") from None
         since = fmt_ts(updated_since) if updated_since is not None else None
-        rows = list(self._b.scan(0))
-        latest_seq: dict[str, int] = {}
-        for seq, r in rows:
-            latest_seq[r["case_id"]] = max(latest_seq.get(r["case_id"], 0), seq)
-        items: list[dict] = []
-        last_seq: Optional[int] = None
-        more = False
-        for seq, r in rows:
-            if seq <= after:
-                continue
-            if latest_only and latest_seq[r["case_id"]] != seq:
-                continue
-            if review_status and r["review_status"] != review_status:
-                continue
-            if failure_type and r["failure_type"] != failure_type:
-                continue
-            if source_release_id and r["source_release_id"] != source_release_id:
-                continue
-            if since and r["created_at"] < since:
-                continue
-            if len(items) == limit:
-                more = True
-                break
-            items.append(r)
-            last_seq = seq
+        rows = self._b.query(after, latest_only, review_status, failure_type, source_release_id, since, limit + 1)
+        more = len(rows) > limit
+        rows = rows[:limit]
+        items = [r for _, r in rows]
+        last_seq = rows[-1][0] if rows else None
         return items, (str(last_seq) if more and last_seq is not None else None)
 
     def get_trace(self, deidentified_trace_ref: str) -> dict:
