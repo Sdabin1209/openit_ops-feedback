@@ -122,6 +122,7 @@ class Detector(Protocol):
 - `case_id` = `fc-` + `canonical` 해시(salt 넣은 session/turn 의사 식별자)의 앞 32자. 원본 ID를 쓰지 않는다.
 - `deidentified_trace_ref` = `tr-` + 비식별 trace의 `canonical` 해시. 같은 내용은 같은 ref. 저장소는 case를 받을 때 ref의 trace가 먼저 저장돼 있어야 한다(`FAILED_PRECONDITION`).
 - `created_at` = 원본의 `received_at`(잡 실행 시각이 아니다). `source_release_id` = 봉투의 `release_id`(필수). `runtime_contract_version` = 봉투 값. `deidentified`는 항상 true(스키마가 const로 강제).
+- `question_set`(선택): 설정에 `release_reader`가 있으면 I4 `get_release(source_release_id).question_set`을 채운다. 읽기 실패(`BoundaryError`)면 생략한다. 릴리스별로 한 번만 읽는다. 검토 version은 이 값을 보존한다.
 - `ext["ops-feedback"]`: `detections`, `primary_rule`, `deid_policy_id`, `deid_stats`.
 - 같은 Trace를 두 번 처리하면: 사례가 이미 있고 내용이 같으면 그대로(`cases_existing`). 설정이 바뀌어 내용이 달라졌고 아직 PENDING v1이면 건드리지 않고 `skipped_diff`로 보고한다(불변 레코드, 검토를 덮지 않는다). 검토가 끝난 사례도 건드리지 않는다.
 - 처리 표시: 원본 행의 `status`(`DONE_CASE`, `NO_FAILURE`, `DEID_FAILED`, `PUBLISH_FAILED`)와 설정 해시. 게시 중 `UNAVAILABLE`이면 표시하지 않아 다음 실행에서 다시 한다. `--reprocess`는 표시를 지우고 전부 다시 돌린다(결과는 같다. `tests/test_job.py`).

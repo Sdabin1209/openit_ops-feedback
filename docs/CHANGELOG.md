@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.2.0 (2026-10-15)
+
+- boundary-contracts v1.1.0: 새 레코드는 pipeline_schema_version "1.1", 읽기는 1.0·1.1 모두.
+- FailureCase.question_set: source_release_id의 ReleaseManifest(I4 get_release)에서 채운다. 릴리스를 읽지 못하면 생략하고 사례는 만든다. 읽기 실패 뒤 성공하면 기존 PENDING 사례와 내용이 달라 skipped_diff로 보고된다.
+- 검토에서 expected를 적을 때 expected_kind(PARSER|GENERATOR)를 함께 요구한다.
+- wheel 스크립트와 requirements의 태그를 v1.1.0으로.
+
 ## 0.1.1 (2026-10-15)
 
 - boundary-contracts v1.0.0 패키지를 사용: 복사본(vendor/, _schemas/boundary) 제거, 이미지는 git archive로 만든 wheel 설치. requirements.txt에 태그 의존 기록.

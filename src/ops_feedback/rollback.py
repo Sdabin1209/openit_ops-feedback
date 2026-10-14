@@ -17,7 +17,7 @@ from .failurestore import FailureStoreImpl
 from .logstore import LogStore
 from .schemas import validate_record
 
-PIPELINE_SCHEMA_VERSION = "1.0"
+from boundary_contracts import PIPELINE_SCHEMA_VERSION  # 새 레코드는 이 버전으로 쓴다(1.1). 읽기는 1.0·1.1 모두
 
 
 class RollbackPlanner:

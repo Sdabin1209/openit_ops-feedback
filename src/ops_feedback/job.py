@@ -25,7 +25,7 @@ from .failurestore import FailureStoreImpl
 from .logstore import LogStore
 from .rollback import RollbackPlanner
 
-PIPELINE_SCHEMA_VERSION = "1.0"
+from boundary_contracts import PIPELINE_SCHEMA_VERSION  # 새 레코드는 이 버전으로 쓴다(1.1). 읽기는 1.0·1.1 모두
 
 
 @dataclass
@@ -44,6 +44,19 @@ class JobReport:
         return self.__dict__.copy()
 
 
+def _question_set(reader, release_id: str, cache: dict) -> Optional[dict]:
+    """source_release_id의 ReleaseManifest(I4)에서 문항 세트 ref. 읽을 수 없으면 None(필드 생략, 1.0 호환)."""
+    if reader is None:
+        return None
+    if release_id not in cache:
+        try:
+            qs = reader.get_release(release_id).get("question_set")
+            cache[release_id] = dict(qs) if isinstance(qs, dict) else None
+        except BoundaryError:
+            cache[release_id] = None
+    return cache[release_id]
+
+
 def case_id_for(deid: Deidentifier, session_id: str, turn_id: str) -> str:
     return "fc-" + sha256_hash({"s": deid.pseudonym("case", session_id), "t": deid.pseudonym("case", turn_id)})[7:39]
 
@@ -51,8 +64,9 @@ def case_id_for(deid: Deidentifier, session_id: str, turn_id: str) -> str:
 def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deidentifier, detectors: list[Detector],
              classifier: Classifier, planner: Optional[RollbackPlanner] = None, clock: Clock = utc_now,
              limit: Optional[int] = None, reprocess: bool = False, retry_deid_failed: bool = False,
-             evaluate_rollback: bool = True) -> JobReport:
+             evaluate_rollback: bool = True, release_reader=None) -> JobReport:
     rep = JobReport()
+    qs_cache: dict = {}
     cfg_hash = sha256_hash({"deid": deid.policy.fingerprint(), "detection": cfg["detection"],
                             "classification": cfg["classification"]})
     if reprocess:
@@ -98,6 +112,9 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
                 "deid_stats": res.stats,
             }},
         }
+        qs = _question_set(release_reader, env["release_id"], qs_cache)
+        if qs is not None:
+            case["question_set"] = qs
         try:
             existing = _existing(store, case["case_id"])
             if existing is None:
@@ -158,11 +175,11 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     planner = None
     rb = cfg.get("rollback")
     rr = cfg.get("release_reader")
+    reader = _import(rr["factory"])(**(rr.get("args") or {})) if rr else None
     if rb and rr:
-        reader = _import(rr["factory"])(**(rr.get("args") or {}))
         gate = _import(cfg["gate_service"]["factory"])(**(cfg["gate_service"].get("args") or {})) if cfg.get("gate_service") else None
         planner = RollbackPlanner(store=store, log=log, release_reader=reader, gate=gate, policy=rb, clock=clock)
-    return log, store, deid, detectors, classifier, planner
+    return log, store, deid, detectors, classifier, planner, reader
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -174,10 +191,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--no-rollback", action="store_true")
     a = ap.parse_args(argv)
     cfg = load_config(a.config)
-    log, store, deid, detectors, classifier, planner = build_from_config(cfg, dict(os.environ))
+    log, store, deid, detectors, classifier, planner, reader = build_from_config(cfg, dict(os.environ))
     rep = run_once(cfg=cfg, log=log, store=store, deid=deid, detectors=detectors, classifier=classifier, planner=planner,
                    limit=a.limit, reprocess=a.reprocess, retry_deid_failed=a.retry_deid_failed,
-                   evaluate_rollback=not a.no_rollback)
+                   evaluate_rollback=not a.no_rollback, release_reader=reader)
     print(json.dumps(rep.as_dict(), ensure_ascii=False, sort_keys=True))
     return 1 if rep.errors else 0
 
