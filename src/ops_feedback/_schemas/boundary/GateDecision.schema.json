@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GateDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "decision_id",
+    "decided_at",
+    "gate_policy_version",
+    "subject",
+    "runtime_contract_version",
+    "result",
+    "checks",
+    "approver"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "decision_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "decided_at": {
+      "$ref": "_common.schema.json#/$defs/Timestamp"
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question_set",
+        "lora_a",
+        "lora_b"
+      ],
+      "properties": {
+        "question_set": {
+          "$ref": "_common.schema.json#/$defs/ArtifactRef"
+        },
+        "lora_a": {
+          "$ref": "_common.schema.json#/$defs/ArtifactRef"
+        },
+        "lora_b": {
+          "$ref": "_common.schema.json#/$defs/ArtifactRef"
+        }
+      }
+    },
+    "runtime_contract_version": {
+      "$ref": "_common.schema.json#/$defs/RuntimeContractVersion"
+    },
+    "result": {
+      "enum": [
+        "PASS",
+        "REJECT"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "result"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "CONTRACT_COMPAT",
+              "QUESTION_MODEL_COMPAT",
+              "ACCEPTANCE_EVAL",
+              "CLINICAL_SAFETY"
+            ]
+          },
+          "result": {
+            "enum": [
+              "PASS",
+              "FAIL"
+            ]
+          },
+          "evidence_ref": {
+            "$ref": "_common.schema.json#/$defs/Id"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reject_reasons": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "approver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "$ref": "_common.schema.json#/$defs/Id"
+        }
+      }
+    },
+    "release_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "gate_policy_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "이 판정이 적용한 게이트 검사 규칙의 버전. 어떤 검사가 필수였는지는 이 버전이 정한다."
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    },
+    "submission_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "PASS"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "release_id"
+        ],
+        "not": {
+          "required": [
+            "reject_reasons"
+          ]
+        },
+        "properties": {
+          "checks": {
+            "items": {
+              "properties": {
+                "result": {
+                  "const": "PASS"
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "reject_reasons"
+        ],
+        "not": {
+          "required": [
+            "release_id"
+          ]
+        }
+      }
+    }
+  ],
+  "description": "문항·모델 조합 하나에 대한 게이트 판정. 통과와 반려 모두 기록한다. PASS이면 모든 검사가 PASS이고 release_id가 있다."
+}

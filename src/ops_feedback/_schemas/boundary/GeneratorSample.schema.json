@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GeneratorSample",
+  "description": "LoRA-B 학습·검증·평가 샘플 하나. input과 expected는 문진 스키마(ResponseGeneratorInput, GeneratorOutput)로 별도 검증한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "sample_id",
+    "scenario_id",
+    "question_set",
+    "runtime_contract_version",
+    "style_guide_version",
+    "split",
+    "origin",
+    "input",
+    "expected"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "sample_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "scenario_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "question_set": {
+      "$ref": "_common.schema.json#/$defs/ArtifactRef"
+    },
+    "runtime_contract_version": {
+      "$ref": "_common.schema.json#/$defs/RuntimeContractVersion"
+    },
+    "split": {
+      "enum": [
+        "TRAIN",
+        "VALIDATION",
+        "EVAL"
+      ]
+    },
+    "origin": {
+      "enum": [
+        "SYNTHETIC",
+        "FAILURE_CASE_SEED"
+      ]
+    },
+    "seed_case_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "style_guide_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "input": {
+      "type": "object",
+      "description": "ResponseGeneratorInput"
+    },
+    "expected": {
+      "type": "object",
+      "description": "GeneratorOutput"
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    }
+  },
+  "if": {
+    "properties": {
+      "origin": {
+        "const": "FAILURE_CASE_SEED"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "seed_case_id"
+    ]
+  }
+}

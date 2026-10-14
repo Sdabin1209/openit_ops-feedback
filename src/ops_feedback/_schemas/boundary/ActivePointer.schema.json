@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ActivePointer",
+  "description": "지금 서비스가 써야 하는 릴리스. pointer_version은 변경마다 1씩 늘어나는 정수라 읽는 쪽이 값만 비교해 변경을 알아챈다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "release_id",
+    "pointer_version",
+    "activated_at",
+    "cause"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "release_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "pointer_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "activated_at": {
+      "$ref": "_common.schema.json#/$defs/Timestamp"
+    },
+    "cause": {
+      "enum": [
+        "ACTIVATE",
+        "ROLLBACK"
+      ]
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    }
+  }
+}

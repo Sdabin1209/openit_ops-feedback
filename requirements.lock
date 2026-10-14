@@ -1,0 +1,8 @@
+# 의존 고정(D22). 갱신: pip freeze 후 이 파일만 수정한다. boundary-contracts와 이 패키지는 Dockerfile이 따로 설치한다.
+attrs==26.1.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+PyYAML==6.0.3
+referencing==0.37.0
+rpds-py==2026.9.1
+typing_extensions==4.16.0

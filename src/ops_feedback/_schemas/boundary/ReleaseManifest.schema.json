@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReleaseManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "release_id",
+    "created_at",
+    "gate_decision_id",
+    "question_set",
+    "lora_a",
+    "lora_b",
+    "runtime_contract_version",
+    "turn_engine_version",
+    "model_runtime_version",
+    "content_hash"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "release_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "created_at": {
+      "$ref": "_common.schema.json#/$defs/Timestamp"
+    },
+    "gate_decision_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "question_set": {
+      "$ref": "_common.schema.json#/$defs/ArtifactRef"
+    },
+    "lora_a": {
+      "$ref": "_common.schema.json#/$defs/ArtifactRef"
+    },
+    "lora_b": {
+      "$ref": "_common.schema.json#/$defs/ArtifactRef"
+    },
+    "runtime_contract_version": {
+      "$ref": "_common.schema.json#/$defs/RuntimeContractVersion"
+    },
+    "turn_engine_version": {
+      "$ref": "_common.schema.json#/$defs/LibraryVersion"
+    },
+    "model_runtime_version": {
+      "$ref": "_common.schema.json#/$defs/LibraryVersion"
+    },
+    "content_hash": {
+      "$ref": "_common.schema.json#/$defs/Hash"
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    }
+  },
+  "description": "게이트가 통과시킨 문항 세트·LoRA-A·LoRA-B 조합. 불변이다. content_hash는 이 객체에서 content_hash를 뺀 값의 정규화 JSON(RFC 8785)의 해시이며, 참조한 산출물은 각각 자기 content_hash를 가진다."
+}

@@ -1,0 +1,271 @@
+"""비식별 처리기. 원본(로그 저장소)을 읽는 유일한 컴포넌트.
+
+방식: 문진 스키마의 TurnTrace 정의를 따라 걸으며 '허용한 것만 남긴다'(허용 목록 방식).
+- 스키마가 열거값·상수로 정한 문자열은 남긴다(구조 정보).
+- 자유 문자열은 정책이 키 이름으로 허용한 것만 남기고 나머지는 마스킹 토큰으로 바꾼다.
+- 스키마에 없는 키, 구조가 없는 자유 객체, 어느 가지에도 맞지 않는 값은 제거한다(보수적 제거).
+- 정책이 지목한 정의(예: Value)는 통째로 마스킹하거나 제거한다.
+- 마지막에 잔존 패턴 검사를 하고 걸리면 실패로 닫는다(DeidError). 이 경우 FailureCase를 만들지 않는다.
+정책 값(허용 키, 정의 목록, 패턴, 처리 방식)은 코드에 박지 않고 설정으로 받는다.
+"""
+from __future__ import annotations
+
+import re
+from collections import Counter
+from dataclasses import dataclass, field
+from typing import Any, Iterator, Optional
+
+from boundary_contracts.canonical import sha256_hash
+
+from .logstore import DeidentifierView
+from .schemas import trace_schema
+
+MASK = "[MASKED]"
+DROPPED = "[DROPPED]"
+_DROP = object()
+
+
+class DeidError(Exception):
+    """비식별 결과에 개인정보 의심 패턴이 남았다. 결과를 버린다(fail-closed)."""
+
+
+@dataclass(frozen=True)
+class DeidPolicy:
+    policy_id: str
+    keep_string_keys: frozenset
+    scrub_string_keys: frozenset
+    pseudonymize_keys: frozenset
+    mask_defs: frozenset
+    drop_defs: frozenset
+    mask_number_keys: frozenset
+    unlisted_string_action: str          # "mask" | "drop"
+    residual_patterns: dict
+    scrub_replacements: dict
+
+    @classmethod
+    def from_config(cls, cfg: dict) -> "DeidPolicy":
+        for k in ("policy_id", "keep_string_keys", "unlisted_string_action"):
+            if k not in cfg:
+                raise ValueError(f"deid 설정에 {k}가 없다. 비식별 기준은 사용자가 정하며 기본값이 없다.")
+        if cfg["unlisted_string_action"] not in ("mask", "drop"):
+            raise ValueError("deid.unlisted_string_action은 mask 또는 drop")
+        pats = cfg.get("residual_patterns") or {}
+        for name, p in pats.items():
+            re.compile(p)
+        return cls(
+            policy_id=str(cfg["policy_id"]),
+            keep_string_keys=frozenset(cfg.get("keep_string_keys") or []),
+            scrub_string_keys=frozenset(cfg.get("scrub_string_keys") or []),
+            pseudonymize_keys=frozenset(cfg.get("pseudonymize_keys") or []),
+            mask_defs=frozenset(cfg.get("mask_defs") or []),
+            drop_defs=frozenset(cfg.get("drop_defs") or []),
+            mask_number_keys=frozenset(cfg.get("mask_number_keys") or []),
+            unlisted_string_action=cfg["unlisted_string_action"],
+            residual_patterns=dict(pats),
+            scrub_replacements=dict(cfg.get("scrub_patterns") or {}),
+        )
+
+    def fingerprint(self) -> str:
+        return sha256_hash({
+            "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys), "scrub": sorted(self.scrub_string_keys),
+            "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
+            "num": sorted(self.mask_number_keys), "unlisted": self.unlisted_string_action,
+            "residual": self.residual_patterns, "scrub_patterns": self.scrub_replacements})
+
+
+@dataclass
+class DeidResult:
+    trace: dict
+    stats: dict
+    policy_fingerprint: str
+
+
+def _jtype(v: Any) -> str:
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "boolean"
+    if isinstance(v, int):
+        return "integer"
+    if isinstance(v, float):
+        return "number"
+    if isinstance(v, str):
+        return "string"
+    if isinstance(v, list):
+        return "array"
+    return "object"
+
+
+class _Walker:
+    def __init__(self, defs: dict, policy: DeidPolicy, salt: str) -> None:
+        self.defs = defs
+        self.p = policy
+        self.salt = salt
+        self.stats: Counter = Counter()
+        self._scrub = {n: re.compile(pat) for n, pat in policy.scrub_replacements.items()}
+
+    # --- 스키마 해석 ---
+    def _resolve(self, node: dict, names: tuple = ()) -> tuple[dict, tuple]:
+        while "$ref" in node:
+            name = node["$ref"].rsplit("/", 1)[-1]
+            names += (name,)
+            node = self.defs[name]
+        return node, names
+
+    def _match(self, node: dict, data: Any) -> bool:
+        node, _ = self._resolve(node)
+        if "const" in node:
+            return data == node["const"]
+        if "enum" in node:
+            return data in node["enum"]
+        for k in ("oneOf", "anyOf"):
+            if k in node:
+                return any(self._match(b, data) for b in node[k])
+        t = node.get("type")
+        if t is not None:
+            ts = t if isinstance(t, list) else [t]
+            jt = _jtype(data)
+            if not (jt in ts or (jt == "integer" and "number" in ts)):
+                return False
+        if isinstance(data, dict) and "properties" in node:
+            if not set(node.get("required", [])) <= set(data):
+                return False
+            if node.get("additionalProperties") is False and not set(data) <= set(node["properties"]):
+                return False
+            # 상수 판별자(예: kind)가 있으면 맞는지 본다
+            for k, sub in node["properties"].items():
+                if k in data:
+                    s, _ = self._resolve(sub)
+                    if "const" in s and data[k] != s["const"]:
+                        return False
+        return True
+
+    # --- 걷기 ---
+    def walk(self, data: Any, node: dict, key: str, path: str) -> Any:
+        node, names = self._resolve(node)
+        for n in names:
+            if n in self.p.drop_defs:
+                self.stats["dropped_by_def"] += 1
+                self.stats[f"path_dropped:{path}"] += 1
+                return DROPPED
+            if n in self.p.mask_defs:
+                self.stats["masked_by_def"] += 1
+                self.stats[f"path_masked:{path}"] += 1
+                return MASK
+        for k in ("oneOf", "anyOf"):
+            if k in node:
+                for b in node[k]:
+                    if self._match(b, data):
+                        return self.walk(data, b, key, path)
+                return self._unknown(data, path)
+        if "const" in node or "enum" in node:
+            return data if self._match(node, data) else self._unknown(data, path)
+        if data is None:
+            return None
+        if isinstance(data, str):
+            return self._string(data, key, path)
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, (int, float)):
+            if key in self.p.mask_number_keys:
+                self.stats["masked_numbers"] += 1
+                self.stats[f"path_masked:{path}"] += 1
+                return None
+            return data
+        if isinstance(data, list):
+            items = node.get("items")
+            if items is None:
+                self.stats["dropped_free_objects"] += 1
+                return []
+            out = []
+            for v in data:
+                r = self.walk(v, items, key, path + "[]")
+                out.append(MASK if r is _DROP else r)
+            return out
+        if isinstance(data, dict):
+            props = node.get("properties")
+            if not props:
+                self.stats["dropped_free_objects"] += 1
+                self.stats[f"path_dropped:{path}"] += 1
+                return {}
+            out = {}
+            for k, v in data.items():
+                if k not in props:
+                    self.stats["dropped_unknown_keys"] += 1   # 키 이름도 값일 수 있어 기록하지 않는다
+                    continue
+                r = self.walk(v, props[k], k, f"{path}.{k}" if path else k)
+                if r is not _DROP:
+                    out[k] = r
+            return out
+        return self._unknown(data, path)
+
+    def _unknown(self, data: Any, path: str) -> Any:
+        self.stats["dropped_unmatched"] += 1
+        self.stats[f"path_dropped:{path}"] += 1
+        return MASK if isinstance(data, str) else _DROP
+
+    def _string(self, s: str, key: str, path: str) -> Any:
+        if key in self.p.pseudonymize_keys:
+            self.stats["pseudonymized"] += 1
+            return "p-" + sha256_hash({"salt": self.salt, "key": key, "value": s})[7:39]
+        if key in self.p.scrub_string_keys:
+            for name, rx in self._scrub.items():
+                s, n = rx.subn(f"[{name}]", s)
+                self.stats["scrubbed"] += n
+            return s
+        if key in self.p.keep_string_keys:
+            return s
+        self.stats["masked_strings"] += 1
+        self.stats[f"path_masked:{path}"] += 1
+        return MASK if self.p.unlisted_string_action == "mask" else _DROP
+
+
+def _leaf_strings(v: Any) -> Iterator[str]:
+    if isinstance(v, str):
+        yield v
+    elif isinstance(v, list):
+        for x in v:
+            yield from _leaf_strings(x)
+    elif isinstance(v, dict):
+        for x in v.values():
+            yield from _leaf_strings(x)
+
+
+class Deidentifier:
+    """원본을 읽는 유일한 컴포넌트. view는 LogStore.grant_deidentifier_view()로 받는다."""
+
+    def __init__(self, policy: DeidPolicy, salt: str, view: Optional[DeidentifierView] = None) -> None:
+        if not salt:
+            raise ValueError("의사 식별자용 salt가 비어 있다")
+        self.policy = policy
+        self._salt = salt
+        self._view = view
+        self._residual = {n: re.compile(p) for n, p in policy.residual_patterns.items()}
+
+    def pending(self, limit: Optional[int] = None) -> list[dict]:
+        """아직 처리하지 않은 원본 봉투(row: envelope, received_at, ...). 원본을 읽는 유일한 경로."""
+        if self._view is None:
+            raise RuntimeError("원본 읽기 권한이 없다")
+        return self._view.read_unprocessed(limit)
+
+    def deidentify(self, envelope: dict) -> DeidResult:
+        ver = envelope["runtime_contract_version"]
+        schema = trace_schema(ver)
+        defs = schema["$defs"]
+        w = _Walker(defs, self.policy, self._salt)
+        out = w.walk(envelope["trace"], {"$ref": "#/$defs/TurnTrace"}, "", "")
+        if not isinstance(out, dict):
+            raise DeidError("trace 전체가 제거되었다")
+        for s in _leaf_strings(out):
+            if s in (MASK, DROPPED):
+                continue
+            for name, rx in self._residual.items():
+                if rx.search(s):
+                    raise DeidError(f"비식별 결과에 잔존 패턴({name})이 있다")
+        stats = {k: v for k, v in w.stats.items() if not k.startswith("path_")}
+        stats["masked_paths"] = sorted(k[len("path_masked:"):] for k in w.stats if k.startswith("path_masked:"))
+        stats["dropped_paths"] = sorted(k[len("path_dropped:"):] for k in w.stats if k.startswith("path_dropped:"))
+        return DeidResult(trace=out, stats=stats, policy_fingerprint=self.policy.fingerprint())
+
+    def pseudonym(self, key: str, value: str) -> str:
+        return "p-" + sha256_hash({"salt": self._salt, "key": key, "value": value})[7:39]

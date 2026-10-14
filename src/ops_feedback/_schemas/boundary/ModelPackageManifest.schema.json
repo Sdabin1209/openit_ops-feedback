@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ModelPackageManifest",
+  "description": "불변 모델 패키지(LoRA 어댑터 하나). 상태는 두지 않는다. 승인 여부는 GateDecision이 조합 단위로 기록한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "package_id",
+    "version",
+    "role",
+    "created_at",
+    "runtime_contract_version",
+    "base_model",
+    "adapter_hash",
+    "serving_config",
+    "serving_config_hash",
+    "lineage",
+    "eval_report_ref",
+    "content_hash"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "package_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role": {
+      "enum": [
+        "LORA_A",
+        "LORA_B"
+      ]
+    },
+    "created_at": {
+      "$ref": "_common.schema.json#/$defs/Timestamp"
+    },
+    "runtime_contract_version": {
+      "$ref": "_common.schema.json#/$defs/RuntimeContractVersion"
+    },
+    "base_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "_common.schema.json#/$defs/Id"
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "adapter_hash": {
+      "$ref": "_common.schema.json#/$defs/Hash"
+    },
+    "serving_config": {
+      "type": "object",
+      "description": "추론 서버 설정. 형식은 model-runtime이 정하며 serving_config_hash로 고정한다"
+    },
+    "serving_config_hash": {
+      "$ref": "_common.schema.json#/$defs/Hash"
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset",
+        "training_run_id",
+        "turn_engine_version",
+        "model_runtime_version"
+      ],
+      "properties": {
+        "dataset": {
+          "$ref": "_common.schema.json#/$defs/ArtifactRef"
+        },
+        "training_run_id": {
+          "$ref": "_common.schema.json#/$defs/Id"
+        },
+        "turn_engine_version": {
+          "$ref": "_common.schema.json#/$defs/LibraryVersion"
+        },
+        "model_runtime_version": {
+          "$ref": "_common.schema.json#/$defs/LibraryVersion"
+        }
+      }
+    },
+    "eval_report_ref": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "content_hash": {
+      "$ref": "_common.schema.json#/$defs/Hash"
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    }
+  }
+}

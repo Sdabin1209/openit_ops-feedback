@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IngestResult",
+  "description": "TraceEnvelope 수집 결과. 같은 (session_id, turn_id)를 다시 받으면 DUPLICATE이고 먼저 받은 것이 유지된다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "session_id",
+    "turn_id",
+    "status",
+    "received_at"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "session_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "turn_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "status": {
+      "enum": [
+        "ACCEPTED",
+        "DUPLICATE"
+      ]
+    },
+    "received_at": {
+      "$ref": "_common.schema.json#/$defs/Timestamp"
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    }
+  }
+}

@@ -1,0 +1,54 @@
+# 예시 설정. 값은 시험과 시연용이며 사용자가 정한 기준이 아니다.
+# 비식별 기준(deid), 보관 기간(retention), 분류체계(classification), 롤백 기준(rollback)은 사용자 결정 사항이다.
+storage:
+  log_db: data/log.db          # 로그 저장소(원본). 비식별 처리기만 읽는다.
+  failure_db: data/failures.db # 실패 사례 저장소(비식별 뒤의 것만)
+
+deid:
+  policy_id: example-conservative-v0
+  salt_env: OPS_DEID_SALT               # 의사 식별자 salt. 환경 변수로만 받는다.
+  pseudonymize_keys: [session_id, turn_id]
+  # 스키마가 열거값으로 정하지 않은 자유 문자열 중 남길 키. 구조 식별자만 둔다.
+  keep_string_keys: [question_id, slot_id, repeat_key, guide_id, pending_id, code, category]
+  scrub_string_keys: []                 # 패턴 치환 후 남길 키(없음)
+  scrub_patterns: {}
+  unlisted_string_action: mask          # mask | drop
+  mask_defs: [Value]                    # 환자 답변 값(숫자 포함)은 통째로 마스킹
+  drop_defs: [QuestionBank]             # 문항 정의는 릴리스 산출물이라 사례에 싣지 않는다
+  mask_number_keys: []
+  residual_patterns:                    # 결과에 남으면 실패로 닫는 패턴
+    email: '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    phone_kr: '0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}'
+    rrn_kr: '\d{6}[- ]?[1-4]\d{6}'
+
+detection:
+  detectors:
+    - type: rule
+      rules:
+        - {id: TURN_FAILURE_SIGNAL}
+        - {id: TURN_FAILED_STEPS}
+        - {id: COMMIT_ERROR}
+        - {id: GENERATOR_FALLBACK}
+        - {id: STAFF_ALERT_DELIVERY_FAILED}
+        - {id: INTERVENTION_FAILED}
+        - {id: PARSER_EMPTY, enabled: false}
+        - {id: UNRECOGNIZED_STREAK, enabled: false, params: {threshold: 3}}
+
+classification:                         # 분류체계는 미정(O11). 아래 값은 자리표시자다.
+  default_failure_type: UNCLASSIFIED
+  rule_to_type: {}
+  priority: [TURN_FAILURE_SIGNAL, COMMIT_ERROR, TURN_FAILED_STEPS]
+
+retention:
+  raw_days: null                        # 미정(사용자 결정). null이면 원본을 지우지 않는다.
+
+# rollback 항목을 두면 롤백 평가를 한다. release_reader가 없으면 평가를 건너뛴다.
+# rollback:
+#   window_hours: 24
+#   min_turns: 100
+#   max_failure_rate: 0.05
+#   counted_review_statuses: [PENDING, CONFIRMED]
+#   requested_by_role: ops-feedback
+#   auto_submit: false
+# release_reader: {factory: "모듈:함수"}
+# gate_service: {factory: "모듈:함수"}

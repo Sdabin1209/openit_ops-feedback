@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FailureCase",
+  "description": "비식별을 마친 실패 사례. 불변이며 검토 결과는 version을 올린 새 레코드로 낸다. 실패 유형 분류체계는 미정(O11)이라 문자열이다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pipeline_schema_version",
+    "case_id",
+    "version",
+    "created_at",
+    "source_release_id",
+    "runtime_contract_version",
+    "deidentified",
+    "deidentified_trace_ref",
+    "failure_type",
+    "detection_method",
+    "review_status"
+  ],
+  "properties": {
+    "pipeline_schema_version": {
+      "$ref": "_common.schema.json#/$defs/PipelineSchemaVersion"
+    },
+    "case_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "$ref": "_common.schema.json#/$defs/Timestamp"
+    },
+    "source_release_id": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "runtime_contract_version": {
+      "$ref": "_common.schema.json#/$defs/RuntimeContractVersion"
+    },
+    "deidentified": {
+      "const": true
+    },
+    "deidentified_trace_ref": {
+      "$ref": "_common.schema.json#/$defs/Id"
+    },
+    "failure_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "detection_method": {
+      "enum": [
+        "RULE",
+        "MODEL",
+        "HUMAN",
+        "FEEDBACK"
+      ]
+    },
+    "expected": {
+      "type": "object",
+      "description": "정답이 확정된 경우 해당 문진 스키마 출력"
+    },
+    "review_status": {
+      "enum": [
+        "PENDING",
+        "CONFIRMED",
+        "DISMISSED"
+      ]
+    },
+    "ext": {
+      "type": "object",
+      "description": "영역이 계약을 바꾸지 않고 덧붙이는 부가 정보. 키는 영역 이름(예: 'model-lab')이고 값은 그 영역이 정한다. 다른 영역은 이해하지 못해도 보존하고 전달해야 하며, 판단에 쓰지 않는다. 여러 영역이 필요로 하게 되면 정식 필드로 올린다."
+    }
+  },
+  "then": {
+    "properties": {
+      "expected": {}
+    }
+  }
+}
