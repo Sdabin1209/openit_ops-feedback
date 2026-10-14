@@ -102,3 +102,12 @@ def test_raw_purge_only_when_configured(pipeline):
     rep = run(pipeline)
     assert rep.purged_raw == 2
     assert len(all_cases(pipeline["store"])) == 1          # 사례는 원본 삭제와 무관
+
+
+def test_examples_match_generator(tmp_path):
+    """examples/ 의 출력 예시가 코드와 어긋나지 않는다."""
+    import subprocess, sys, shutil, pathlib
+    root = pathlib.Path(__file__).parent.parent
+    before = {p.name: p.read_text() for p in (root / "examples").glob("*.json")}
+    subprocess.run([sys.executable, "scripts/make_examples.py"], cwd=root, check=True)
+    assert before == {p.name: p.read_text() for p in (root / "examples").glob("*.json")}

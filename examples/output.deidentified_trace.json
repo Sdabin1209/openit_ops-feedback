@@ -1,0 +1,71 @@
+{
+  "session_id": "p-599a3a1090ab2a289d8b174c7b95d74f",
+  "turn_id": "p-96a26733615bb4ca7688dd826caa6325",
+  "contract_version": 1,
+  "frontend_message": {
+    "session_id": "p-599a3a1090ab2a289d8b174c7b95d74f",
+    "kind": "UTTERANCE",
+    "utterance": "[MASKED]"
+  },
+  "intervention_decision": null,
+  "orchestrator_input": null,
+  "parser_input": {
+    "utterance": "[MASKED]",
+    "last_directive": null,
+    "awaiting_questions": [],
+    "question_names": [],
+    "answered_slots": [],
+    "guide_list": []
+  },
+  "parser_output": {
+    "items": [
+      {
+        "item_no": 0,
+        "target": {
+          "question_id": "q1",
+          "repeat_key": "",
+          "slot_id": "sys"
+        },
+        "value": "[MASKED]",
+        "source_text": "[MASKED]",
+        "intent": "ANSWERED_INTENT",
+        "progress_op": null,
+        "guide_id": null,
+        "evidence": [
+          {
+            "start": 0,
+            "end": 3,
+            "offset_unit": "unicode_code_point",
+            "text": "[MASKED]"
+          }
+        ]
+      }
+    ]
+  },
+  "normalizer_input": null,
+  "normalizer_output": null,
+  "judge_input": null,
+  "judge_output": null,
+  "record_writer_input": null,
+  "record_writer_output": null,
+  "planner_input": null,
+  "planner_output": null,
+  "generator_input": null,
+  "generator_output": {
+    "response_text": "[MASKED]",
+    "is_fallback": true
+  },
+  "frontend_input": null,
+  "staff_console_input": null,
+  "dispatch_input": null,
+  "dispatch_output": null,
+  "orchestrator_output": null,
+  "session_before": null,
+  "session_after": null,
+  "log_entry": null,
+  "persistence_load_request": null,
+  "persistence_load_result": null,
+  "persistence_commit_request": null,
+  "persistence_commit_result": null,
+  "turn_index": 0
+}

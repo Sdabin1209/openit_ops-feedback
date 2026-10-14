@@ -1,0 +1,14 @@
+# CR-001 비식별 TurnTrace의 형태를 계약으로 정해 달라
+
+- 요청자: ops-feedback
+- 대상: `INTERFACES.md` I7 `get_trace`, `CONVENTIONS.md` 8절 ("FailureCase의 비식별 Trace는 JSON")
+- 상태: 헤드 결정 필요
+
+## 부족한 점
+I7은 `get_trace`가 "비식별 TurnTrace"를 돌려준다고만 한다. 비식별을 하면 자유 문자열은 마스킹 토큰(`[MASKED]`)으로 바뀌고, 스키마에 없는 키와 구조가 없는 자유 객체는 제거되며, 정책이 지목한 정의(`Value` 등)는 통째로 마스킹·제거된다. 따라서 결과는 문진 스키마 `TurnTrace`를 **통과하지 않을 수 있다**(최소 길이, 숫자 필드, `Value`의 객체 형태).
+
+## 제안
+1. 소비 영역(synthetic-data, model-lab, 문항 저작)은 `get_trace` 결과를 `TurnTrace` 스키마로 검증하지 않고 **구조 정보**(열거값, 식별자, 개수, 순서)만 쓴다고 계약에 적는다. 또는
+2. 헤드가 `DeidentifiedTurnTrace`(TurnTrace의 완화판: 문자열 최소 길이 없음, `Value`는 문자열 토큰 허용 등) 스키마를 정한다.
+
+소비자가 필요로 하는 비식별 뒤의 내용(예: 합성 데이터가 발화 문장을 필요로 하는지)은 사용자가 정하는 비식별 기준과 직결되므로 사용자 결정이 먼저다. 그때까지 ops-feedback은 보수적 정책(자유 문자열 전부 마스킹)으로 동작한다.

@@ -1,0 +1,79 @@
+{
+  "pipeline_schema_version": "1.0",
+  "release_id": "rel-0002",
+  "runtime_contract_version": 1,
+  "session_id": "s-001",
+  "turn_id": "t-004",
+  "sent_at": "2026-10-14T00:00:00Z",
+  "trace": {
+    "session_id": "s-001",
+    "turn_id": "t-004",
+    "contract_version": 1,
+    "frontend_message": {
+      "session_id": "s-001",
+      "kind": "UTTERANCE",
+      "utterance": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요"
+    },
+    "intervention_decision": null,
+    "orchestrator_input": null,
+    "parser_input": {
+      "utterance": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요",
+      "last_directive": null,
+      "awaiting_questions": [],
+      "question_names": [],
+      "answered_slots": [],
+      "guide_list": []
+    },
+    "parser_output": {
+      "items": [
+        {
+          "item_no": 0,
+          "target": {
+            "question_id": "q1",
+            "repeat_key": "",
+            "slot_id": "sys"
+          },
+          "value": "120",
+          "source_text": "혈압은 120에 80",
+          "intent": "ANSWERED_INTENT",
+          "progress_op": null,
+          "guide_id": null,
+          "evidence": [
+            {
+              "start": 0,
+              "end": 3,
+              "offset_unit": "unicode_code_point",
+              "text": "홍길동"
+            }
+          ]
+        }
+      ]
+    },
+    "normalizer_input": null,
+    "normalizer_output": null,
+    "judge_input": null,
+    "judge_output": null,
+    "record_writer_input": null,
+    "record_writer_output": null,
+    "planner_input": null,
+    "planner_output": null,
+    "generator_input": null,
+    "generator_output": {
+      "response_text": "홍길동님 알겠습니다",
+      "is_fallback": true
+    },
+    "frontend_input": null,
+    "staff_console_input": null,
+    "dispatch_input": null,
+    "dispatch_output": null,
+    "orchestrator_output": null,
+    "session_before": null,
+    "session_after": null,
+    "log_entry": null,
+    "persistence_load_request": null,
+    "persistence_load_result": null,
+    "persistence_commit_request": null,
+    "persistence_commit_result": null,
+    "turn_index": 0
+  }
+}
