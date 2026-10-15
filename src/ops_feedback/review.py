@@ -29,7 +29,7 @@ class ReviewQueue:
 
     def review(self, case_id: str, decision: str, reviewer_role: str, *, base_version: Optional[int] = None,
                failure_type: Optional[str] = None, expected: Optional[dict] = None, expected_kind: Optional[str] = None, reviewed_input: Optional[dict] = None,
-               note: Optional[str] = None) -> dict:
+               note: Optional[str] = None, reviewed_by: Optional[str] = None) -> dict:
         if decision not in ("CONFIRMED", "DISMISSED", "PENDING"):
             raise BoundaryError("INVALID_RECORD", "decision은 CONFIRMED, DISMISSED, PENDING 중 하나")
         if decision != "CONFIRMED" and (expected is not None or reviewed_input is not None):
@@ -48,6 +48,9 @@ class ReviewQueue:
         new = {k: v for k, v in cur.items() if k != "ext"}
         new["version"] = cur["version"] + 1
         new["pipeline_schema_version"] = PIPELINE_SCHEMA_VERSION
+        # 검토 내용은 요청이 전부 정한다(이전 version의 expected 등을 물려받지 않는다). 멱등 비교가 요청 대 최신 version이 된다.
+        for k in ("expected", "expected_kind", "reviewed_input"):
+            new.pop(k, None)
         new["review_status"] = decision
         if failure_type:
             new["failure_type"] = failure_type
@@ -60,12 +63,15 @@ class ReviewQueue:
         ext = dict(cur.get("ext") or {})                 # 다른 영역의 ext 보존
         mine = dict(ext.get("ops-feedback") or {})
         mine["review"] = {"reviewer_role": reviewer_role, **({"note": note} if note else {})}
+        mine["reviewed_by"] = reviewed_by or reviewer_role      # 사람(X-Openit-User) 또는 토큰 역할
         ext["ops-feedback"] = mine
         new["ext"] = ext
-        # 같은 검토를 다시 보내면(재시도) 새 version을 만들지 않는다.
-        if (cur["review_status"] == decision and cur.get("failure_type") == new["failure_type"]
-                and cur.get("expected") == new.get("expected") and cur.get("expected_kind") == new.get("expected_kind")
-                and cur.get("reviewed_input") == new.get("reviewed_input") and cur.get("ext") == ext):
+        # 같은 검토(review_status·expected·expected_kind·reviewed_input이 최신 version과 모두 같다)를 다시 보내면
+        # 새 version도, reviewed_by 변경도 없이 기존 레코드를 돌려준다. failure_type은 지정했을 때만 비교한다.
+        if (cur["review_status"] == decision and cur.get("expected") == new.get("expected")
+                and cur.get("expected_kind") == new.get("expected_kind")
+                and cur.get("reviewed_input") == new.get("reviewed_input")
+                and (failure_type is None or failure_type == cur["failure_type"])):
             return cur
         new["created_at"] = self._clock()
         return self._store.publish_case(new)

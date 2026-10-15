@@ -126,3 +126,69 @@ def test_reviewed_input_rejections(env):
     assert post(base, cid, {"review_status": "DISMISSED", "expected_kind": "PARSER", "reviewed_input": GOOD_INPUT})[0] == 400
     assert post(base, cid, {"review_status": "CONFIRMED", "reviewed_input": "x", "expected_kind": "PARSER"})[0] == 400
     assert HttpFailureStore(base, "read-tok").get_case(cid)["version"] == 1
+
+
+def post_h(base, cid, body, user=None, token="review-tok"):
+    h = {"Authorization": f"Bearer {token}"}
+    if user is not None:
+        h["X-Openit-User"] = user
+    req = urllib.request.Request(f"{base}/v1/cases/{cid}/review", method="POST", data=json.dumps(body).encode(), headers=h)
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+def test_reviewed_by_header_and_fallback(env):
+    base, cid = env
+    st, r2 = post_h(base, cid, {"review_status": "DISMISSED"}, user="dr.kim")
+    assert st == 201 and r2["ext"]["ops-feedback"]["reviewed_by"] == "dr.kim"
+    st, r3 = post_h(base, cid, {"review_status": "PENDING"})                 # 헤더 없음: 토큰 역할
+    assert st == 201 and r3["ext"]["ops-feedback"]["reviewed_by"] == "reviewer"
+    st, r4 = post_h(base, cid, {"review_status": "DISMISSED"}, user="nurse:lee")
+    assert st == 201 and r4["ext"]["ops-feedback"]["reviewed_by"] == "nurse:lee"
+
+
+@pytest.mark.parametrize("bad", ["a b", "-x", "x" * 129, "a/b", ""])
+def test_invalid_user_header(env, bad):
+    base, cid = env
+    st, e = post_h(base, cid, {"review_status": "DISMISSED"}, user=bad)
+    assert st == 400 and "X-Openit-User" in e["message"]
+    assert HttpFailureStore(base, "read-tok").get_case(cid)["version"] == 1
+
+
+def test_idempotency_criterion(env):
+    base, cid = env
+    body = {"review_status": "CONFIRMED", "expected": GOOD_PARSER, "expected_kind": "PARSER", "reviewed_input": GOOD_INPUT}
+    st, r1 = post_h(base, cid, body, user="dr.kim")
+    assert st == 201
+    # 같은 내용을 다른 사람이 보내도 200, 기존 레코드 그대로(reviewed_by 불변)
+    st, again = post_h(base, cid, body, user="dr.park")
+    assert st == 200 and again == r1 and again["ext"]["ops-feedback"]["reviewed_by"] == "dr.kim"
+    assert HttpFailureStore(base, "read-tok").get_case(cid)["version"] == 2
+    # 네 가지 중 하나라도 다르면 새 version
+    for i, change in enumerate([{"review_status": "DISMISSED"}, {"expected": {"items": []}, "expected_kind": "GENERATOR"} ,
+                                {"reviewed_input": dict(GOOD_INPUT, utterance="다름")}, {"expected": None}]):
+        b = dict(body, **change)
+        if b.get("expected") is None:
+            b.pop("expected")
+        if b["review_status"] == "DISMISSED":
+            b = {"review_status": "DISMISSED"}
+        if change.get("expected_kind") == "GENERATOR":
+            continue                      # 이 사례의 trace에는 generator_input이 없어 별도 400 사례로 이미 확인
+        st, rec = post_h(base, cid, b, user="dr.kim")
+        assert st == 201, (change, rec)
+        assert rec["ext"]["ops-feedback"]["reviewed_by"] == "dr.kim"
+        # 바로 재전송하면 200
+        assert post_h(base, cid, b, user="dr.lee")[0] == 200
+        # 다음 반복이 이전 결과와 다르도록 원래 본문으로 복귀
+        assert post_h(base, cid, body, user="dr.kim")[0] == 201
+
+
+def test_list_response_shape(env):
+    base, _ = env
+    req = urllib.request.Request(base + "/v1/cases", headers={"Authorization": "Bearer read-tok"})
+    with urllib.request.urlopen(req) as r:
+        body = json.loads(r.read())
+    assert set(body) == {"items", "next_cursor"} and isinstance(body["items"], list) and body["next_cursor"] is None

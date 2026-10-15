@@ -1,5 +1,11 @@
 # 변경 이력
 
+## 0.7.0 (2026-10-15)
+
+- 검토 POST(D71): `X-Openit-User`가 있으면 그 값을, 없으면 토큰 역할 이름을 `ext["ops-feedback"].reviewed_by`에 새 version마다 기록. Id 형식이 아니면 400.
+- 멱등 기준 명확화: 최신 version과 review_status·expected·expected_kind·reviewed_input이 모두 같으면 200과 기존 레코드(reviewed_by 불변), 하나라도 다르면 201 새 version. 검토 내용은 요청이 전부 정하며 이전 version의 expected 등을 물려받지 않는다(이전에는 생략하면 물려받았고 검토자 역할도 비교에 들어갔다).
+- `GET /v1/cases`가 `{items, next_cursor}`임을 시험으로 고정.
+
 ## 0.6.0 (2026-10-15)
 
 - boundary-contracts v1.3.0(스키마 1.3, D55): 검토 POST 본문에 `reviewed_input?`를 받는다. `expected_kind`에 맞는 입력 스키마(PARSER=UtteranceParserInput, GENERATOR=ResponseGeneratorInput)로 검증하고 아니면 INVALID_RECORD. FailureCase에 담겨 I7로 나가고 재전송 멱등성 비교에 포함된다. CONFIRMED에만 붙일 수 있고, `expected` 없이 `reviewed_input`만 보내도 된다. 비식별 처리기는 이 필드를 건드리지 않는다(검토자가 개인정보 없는 문장을 직접 쓴다는 전제. 원문을 저장하는 경로는 없다).

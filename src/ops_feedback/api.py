@@ -4,7 +4,7 @@
   GET  /v1/cases/{case_id}?version=                  I7 get_case (읽기 토큰)
   GET  /v1/cases?review_status=&failure_type=&source_release_id=&updated_since=&latest_only=&cursor=&limit=   I7 list_cases
   GET  /v1/deidentified-traces/{ref}                  I7 get_trace (비식별 뒤의 것만 저장되어 있다)
-  POST /v1/cases/{case_id}/review  {review_status, expected?, expected_kind?, reviewed_input?}  검토 게시(검토 토큰, 역할 reviewer). 201 새 version / 200 같은 검토 재전송 / 404
+  POST /v1/cases/{case_id}/review  {review_status, expected?, expected_kind?, reviewed_input?}  검토 게시(검토 토큰, 역할 reviewer; 헤더 X-Openit-User가 있으면 그 값을 ext["ops-feedback"].reviewed_by에, 없으면 역할 이름). 201 새 version / 200 같은 검토 재전송 / 404
   GET  /healthz     살아 있음
   GET  /readyz      저장소가 열려 있고 스키마가 적재됨
 
@@ -20,6 +20,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import sys
 from urllib.parse import parse_qs, unquote, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,6 +40,7 @@ HTTP_STATUS = {"NOT_FOUND": 404, "INVALID_RECORD": 400, "UNSUPPORTED_VERSION": 4
                "INTEGRITY_ERROR": 422, "FAILED_PRECONDITION": 412, "PERMISSION_DENIED": 403, "UNAVAILABLE": 503}
 MAX_BODY = 8 * 1024 * 1024
 MAX_LIMIT = 500
+_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
 
 def parse_read_tokens(spec: str) -> dict[str, str]:
@@ -177,8 +179,11 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                     raise BoundaryError("INVALID_RECORD", "reviewed_input은 객체")
                 if exp is None and ri is None and body.get("expected_kind") is not None:
                     raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
+                user = self.headers.get("X-Openit-User")
+                if user is not None and not _ID.fullmatch(user):
+                    raise BoundaryError("INVALID_RECORD", "X-Openit-User는 Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)이어야 한다")
                 before = failures.get_case(case_id)                       # 없으면 NOT_FOUND(404)
-                rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"), reviewed_input=ri)
+                rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"), reviewed_input=ri, reviewed_by=user)
                 validate_record("FailureCase", rec)
                 self._json(201 if rec["version"] > before["version"] else 200, rec)
             except BoundaryError as e:
