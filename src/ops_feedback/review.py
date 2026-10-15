@@ -14,6 +14,7 @@ from .schemas import trace_schema
 
 
 _INPUT_OF = {"PARSER": ("parser_input", "ParserOutput"), "GENERATOR": ("generator_input", "GeneratorOutput")}
+_INPUT_DEF = {"PARSER": "UtteranceParserInput", "GENERATOR": "ResponseGeneratorInput"}
 
 
 class ReviewQueue:
@@ -27,18 +28,23 @@ class ReviewQueue:
                                       source_release_id=source_release_id, cursor=cursor, limit=limit)
 
     def review(self, case_id: str, decision: str, reviewer_role: str, *, base_version: Optional[int] = None,
-               failure_type: Optional[str] = None, expected: Optional[dict] = None, expected_kind: Optional[str] = None, note: Optional[str] = None) -> dict:
+               failure_type: Optional[str] = None, expected: Optional[dict] = None, expected_kind: Optional[str] = None, reviewed_input: Optional[dict] = None,
+               note: Optional[str] = None) -> dict:
         if decision not in ("CONFIRMED", "DISMISSED", "PENDING"):
             raise BoundaryError("INVALID_RECORD", "decision은 CONFIRMED, DISMISSED, PENDING 중 하나")
-        if decision != "CONFIRMED" and expected is not None:
-            raise BoundaryError("INVALID_RECORD", f"{decision}에는 expected를 둘 수 없다(CONFIRMED에만)")
-        if expected is None and expected_kind is not None:
-            raise BoundaryError("INVALID_RECORD", "expected_kind는 expected와 함께만 쓴다")
+        if decision != "CONFIRMED" and (expected is not None or reviewed_input is not None):
+            raise BoundaryError("INVALID_RECORD", f"{decision}에는 expected, reviewed_input을 둘 수 없다(CONFIRMED에만)")
+        if expected is None and reviewed_input is None and expected_kind is not None:
+            raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
+        if reviewed_input is not None and expected_kind not in _INPUT_DEF:
+            raise BoundaryError("INVALID_RECORD", "reviewed_input을 적을 때는 expected_kind(PARSER|GENERATOR)도 필요하다")
         cur = self._store.get_case(case_id)
         if base_version is not None and base_version != cur["version"]:
             raise BoundaryError("CONFLICT", f"최신 version은 {cur['version']}")
         if expected is not None:
             self.validate_expected(cur, expected, expected_kind)
+        if reviewed_input is not None:
+            self.validate_reviewed_input(cur, reviewed_input, expected_kind)
         new = {k: v for k, v in cur.items() if k != "ext"}
         new["version"] = cur["version"] + 1
         new["pipeline_schema_version"] = PIPELINE_SCHEMA_VERSION
@@ -47,7 +53,10 @@ class ReviewQueue:
             new["failure_type"] = failure_type
         if expected is not None:
             new["expected"] = expected
+        if expected is not None or reviewed_input is not None:
             new["expected_kind"] = expected_kind
+        if reviewed_input is not None:
+            new["reviewed_input"] = reviewed_input     # 검토자가 직접 쓴 개인정보 없는 입력. 비식별 단계는 건드리지 않는다
         ext = dict(cur.get("ext") or {})                 # 다른 영역의 ext 보존
         mine = dict(ext.get("ops-feedback") or {})
         mine["review"] = {"reviewer_role": reviewer_role, **({"note": note} if note else {})}
@@ -55,7 +64,8 @@ class ReviewQueue:
         new["ext"] = ext
         # 같은 검토를 다시 보내면(재시도) 새 version을 만들지 않는다.
         if (cur["review_status"] == decision and cur.get("failure_type") == new["failure_type"]
-                and cur.get("expected") == new.get("expected") and cur.get("expected_kind") == new.get("expected_kind") and cur.get("ext") == ext):
+                and cur.get("expected") == new.get("expected") and cur.get("expected_kind") == new.get("expected_kind")
+                and cur.get("reviewed_input") == new.get("reviewed_input") and cur.get("ext") == ext):
             return cur
         new["created_at"] = self._clock()
         return self._store.publish_case(new)
@@ -73,4 +83,18 @@ class ReviewQueue:
         errs = sorted(v.iter_errors(expected), key=lambda e: list(e.absolute_path))
         if errs:
             raise BoundaryError("INVALID_RECORD", f"expected가 문진 스키마 {out_def}를 위반한다",
+                                {"errors": [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in errs[:5]]})
+
+    def validate_reviewed_input(self, case: dict, reviewed_input: dict, kind: str) -> None:
+        """reviewed_input이 expected_kind에 맞는 문진 스키마 입력(UtteranceParserInput|ResponseGeneratorInput)인지 확인한다."""
+        field, _ = _INPUT_OF[kind]
+        trace = self._store.get_trace(case["deidentified_trace_ref"])
+        if trace.get(field) is None:
+            raise BoundaryError("INVALID_RECORD", f"이 사례의 trace에는 {field}가 없어 expected_kind={kind}를 적을 수 없다")
+        name = _INPUT_DEF[kind]
+        schema = trace_schema(case["runtime_contract_version"])
+        v = Draft202012Validator({"$ref": f"#/$defs/{name}", "$defs": schema["$defs"]})
+        errs = sorted(v.iter_errors(reviewed_input), key=lambda e: list(e.absolute_path))
+        if errs:
+            raise BoundaryError("INVALID_RECORD", f"reviewed_input이 문진 스키마 {name}를 위반한다",
                                 {"errors": [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in errs[:5]]})

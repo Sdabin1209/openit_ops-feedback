@@ -4,7 +4,7 @@
   GET  /v1/cases/{case_id}?version=                  I7 get_case (읽기 토큰)
   GET  /v1/cases?review_status=&failure_type=&source_release_id=&updated_since=&latest_only=&cursor=&limit=   I7 list_cases
   GET  /v1/deidentified-traces/{ref}                  I7 get_trace (비식별 뒤의 것만 저장되어 있다)
-  POST /v1/cases/{case_id}/review  {review_status, expected?, expected_kind?}  검토 게시(검토 토큰, 역할 reviewer). 201 새 version / 200 같은 검토 재전송 / 404
+  POST /v1/cases/{case_id}/review  {review_status, expected?, expected_kind?, reviewed_input?}  검토 게시(검토 토큰, 역할 reviewer). 201 새 version / 200 같은 검토 재전송 / 404
   GET  /healthz     살아 있음
   GET  /readyz      저장소가 열려 있고 스키마가 적재됨
 
@@ -167,15 +167,18 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                     body = json.loads(self.rfile.read(n))
                 except (ValueError, UnicodeDecodeError):
                     raise BoundaryError("INVALID_RECORD", "JSON이 아니다") from None
-                if not isinstance(body, dict) or set(body) - {"review_status", "expected", "expected_kind"} or "review_status" not in body:
+                if not isinstance(body, dict) or set(body) - {"review_status", "expected", "expected_kind", "reviewed_input"} or "review_status" not in body:
                     raise BoundaryError("INVALID_RECORD", "본문은 {review_status, expected?, expected_kind?}")
                 exp = body.get("expected")
                 if exp is not None and not isinstance(exp, dict):
                     raise BoundaryError("INVALID_RECORD", "expected는 객체")
-                if exp is None and body.get("expected_kind") is not None:
-                    raise BoundaryError("INVALID_RECORD", "expected_kind는 expected와 함께만 쓴다")
+                ri = body.get("reviewed_input")
+                if ri is not None and not isinstance(ri, dict):
+                    raise BoundaryError("INVALID_RECORD", "reviewed_input은 객체")
+                if exp is None and ri is None and body.get("expected_kind") is not None:
+                    raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
                 before = failures.get_case(case_id)                       # 없으면 NOT_FOUND(404)
-                rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"))
+                rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"), reviewed_input=ri)
                 validate_record("FailureCase", rec)
                 self._json(201 if rec["version"] > before["version"] else 200, rec)
             except BoundaryError as e:

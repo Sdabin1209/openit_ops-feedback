@@ -90,3 +90,39 @@ def test_token_separation(env):
     with pytest.raises(urllib.error.HTTPError) as x:
         urllib.request.urlopen(req)
     assert x.value.code == 403
+
+
+GOOD_INPUT = {"utterance": "혈압이 높아요", "last_directive": None, "awaiting_questions": [], "question_names": [],
+              "answered_slots": [], "guide_list": []}
+
+
+def test_reviewed_input_stored_idempotent_and_read_back(env):
+    base, cid = env
+    body = {"review_status": "CONFIRMED", "expected": GOOD_PARSER, "expected_kind": "PARSER", "reviewed_input": GOOD_INPUT}
+    st, rec = post(base, cid, body)
+    assert st == 201 and rec["reviewed_input"] == GOOD_INPUT and rec["pipeline_schema_version"] == "1.3"
+    assert post(base, cid, body) == (200, rec)                                  # 재전송은 같은 결과
+    fs = HttpFailureStore(base, "read-tok")
+    assert fs.get_case(cid)["reviewed_input"] == GOOD_INPUT
+    assert fs.get_case(cid, version=1).get("reviewed_input") is None
+    st, rec3 = post(base, cid, dict(body, reviewed_input=dict(GOOD_INPUT, utterance="다른 문장")))
+    assert st == 201 and rec3["version"] == 3                                   # 다른 입력은 새 version
+
+
+def test_reviewed_input_without_expected(env):
+    base, cid = env
+    st, rec = post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "PARSER", "reviewed_input": GOOD_INPUT})
+    assert st == 201 and "expected" not in rec and rec["expected_kind"] == "PARSER"
+
+
+def test_reviewed_input_rejections(env):
+    base, cid = env
+    st, e = post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "PARSER", "reviewed_input": {"utterance": 1}})
+    assert st == 400 and "UtteranceParserInput" in e["message"]
+    st, e = post(base, cid, {"review_status": "CONFIRMED", "reviewed_input": GOOD_INPUT})
+    assert st == 400 and "expected_kind" in e["message"]
+    # GENERATOR용 입력 스키마가 아니다 + 이 사례에는 generator_input이 없다
+    assert post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "GENERATOR", "reviewed_input": GOOD_INPUT})[0] == 400
+    assert post(base, cid, {"review_status": "DISMISSED", "expected_kind": "PARSER", "reviewed_input": GOOD_INPUT})[0] == 400
+    assert post(base, cid, {"review_status": "CONFIRMED", "reviewed_input": "x", "expected_kind": "PARSER"})[0] == 400
+    assert HttpFailureStore(base, "read-tok").get_case(cid)["version"] == 1

@@ -22,7 +22,7 @@ I7 상세(구현이 정한 것):
 - `publish_case`: 스키마 검증 -> `(case_id, version)` 같은 내용이면 기존 것 반환, 다르면 `CONFLICT`. version은 1부터 연속(건너뛰면 `FAILED_PRECONDITION`). `deidentified_trace_ref`의 trace가 먼저 있어야 한다(`FAILED_PRECONDITION`).
 - `list_cases`: 정렬은 게시 순서(append), `next_cursor`는 불투명 문자열. `latest_only=True`면 사례별 최신 version만. `updated_since`는 version의 `created_at` 기준.
 - HTTP(HTTP.md): `GET /v1/cases/{case_id}?version=`, `GET /v1/cases`(필터 + `{items, next_cursor}`, `limit` 기본 100 최대 500), `GET /v1/deidentified-traces/{ref}`. 읽기 토큰은 `OPS_READ_TOKENS`의 역할별 값이고 수집 토큰과 분리된다(서로의 경로 403). 응답은 `FailureCase` 스키마 검증을 거친다. `publish_case`는 열지 않는다.
-- 검토 게시(Protocol 밖, HTTP.md): `POST /v1/cases/{case_id}/review` 쓰기 역할 `reviewer`(`OPS_REVIEW_TOKENS`). `ReviewQueue`를 재사용해 version을 올린 FailureCase(201, 재전송 200, 없으면 404)를 게시하고 스키마로 검증한다. `expected`는 비식별 trace의 입력과 맞는 문진 스키마 출력이어야 한다(검토자가 쓴 값 자체의 개인정보 여부는 저장소가 판별하지 못한다. 검토 화면은 비식별 trace만 보여 줘야 한다).
+- 검토 게시(Protocol 밖, HTTP.md): `POST /v1/cases/{case_id}/review` 쓰기 역할 `reviewer`(`OPS_REVIEW_TOKENS`). `ReviewQueue`를 재사용해 version을 올린 FailureCase(201, 재전송 200, 없으면 404)를 게시하고 스키마로 검증한다. `reviewed_input`(선택, 검토자가 개인정보 없이 직접 쓴 입력)은 `expected_kind`에 맞는 UtteranceParserInput|ResponseGeneratorInput이어야 하고 CONFIRMED에만 붙는다. `expected`는 비식별 trace의 입력과 맞는 문진 스키마 출력이어야 한다(검토자가 쓴 값 자체의 개인정보 여부는 저장소가 판별하지 못한다. 검토 화면은 비식별 trace만 보여 줘야 한다).
 - `get_trace`: 비식별 trace. 결과가 `TurnTrace` 스키마를 통과하지 않을 수 있다(CR-001).
 - 소비자: `review_status == CONFIRMED`이고 `expected`가 있는 것만 정답 있는 회귀 케이스로 쓴다(I7 규정).
 
@@ -37,7 +37,7 @@ I7 상세(구현이 정한 것):
 | I4 ReleaseReader | 활성 포인터, 릴리스 목록 | `boundary_contracts.sdk.ReleaseReader` Protocol |
 | I5 `request_rollback` | 롤백 요청 전달 | `boundary_contracts.sdk.GateService` Protocol |
 
-경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그 v1.2.0, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_schema_sync.py`가 원본과의 일치를 확인한다(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v1.2.0`으로 만든 wheel을 설치한다.
+경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그 v1.3.0, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_schema_sync.py`가 원본과의 일치를 확인한다(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v1.3.0`으로 만든 wheel을 설치한다.
 
 ## 보장하는 것
 

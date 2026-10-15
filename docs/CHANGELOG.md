@@ -1,5 +1,9 @@
 # 변경 이력
 
+## 0.6.0 (2026-10-15)
+
+- boundary-contracts v1.3.0(스키마 1.3, D55): 검토 POST 본문에 `reviewed_input?`를 받는다. `expected_kind`에 맞는 입력 스키마(PARSER=UtteranceParserInput, GENERATOR=ResponseGeneratorInput)로 검증하고 아니면 INVALID_RECORD. FailureCase에 담겨 I7로 나가고 재전송 멱등성 비교에 포함된다. CONFIRMED에만 붙일 수 있고, `expected` 없이 `reviewed_input`만 보내도 된다. 비식별 처리기는 이 필드를 건드리지 않는다(검토자가 개인정보 없는 문장을 직접 쓴다는 전제. 원문을 저장하는 경로는 없다).
+
 ## 0.5.0 (2026-10-15)
 
 - 검토 게시 HTTP 면 `POST /v1/cases/{case_id}/review`(D52): `OPS_REVIEW_TOKENS`, 201/200/404/400, expected 검증(ParserOutput|GeneratorOutput + trace의 입력 존재), 세 종류 토큰 분리. `ReviewQueue`가 PENDING으로 되돌리는 검토도 받는다.
