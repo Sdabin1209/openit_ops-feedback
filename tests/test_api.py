@@ -8,7 +8,7 @@ from boundary_contracts.sdk import TraceIngest
 
 from conftest import envelope, make_trace
 from ops_feedback.api import make_server
-from ops_feedback.client import HttpTraceIngest
+from boundary_contracts.clients import HttpTraceIngest
 from ops_feedback.logstore import LogStore
 
 

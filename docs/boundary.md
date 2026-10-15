@@ -13,7 +13,7 @@
 
 | 인터페이스 | 구현 | 메모리 구현 | 비고 |
 | --- | --- | --- | --- |
-| I6 TraceIngest `send` | `ops_feedback.logstore.LogStore.sqlite(path)`, HTTP 서비스 `ops_feedback.api`(ingest-api), 클라이언트 `ops_feedback.client.HttpTraceIngest` | `LogStore.memory()` | `(session_id, turn_id)` 중복 제거, 먼저 받은 것 유지, DUPLICATE |
+| I6 TraceIngest `send` | `ops_feedback.logstore.LogStore.sqlite(path)`, HTTP 서비스 `ops_feedback.api`(ingest-api), 클라이언트 `boundary_contracts.clients.HttpTraceIngest` | `LogStore.memory()` | `(session_id, turn_id)` 중복 제거, 먼저 받은 것 유지, DUPLICATE |
 | I7 FailureStore | `ops_feedback.failurestore.FailureStoreImpl.sqlite(path)` | `FailureStoreImpl.memory()` | `publish_case`/`get_case`/`list_cases`/`get_trace` |
 
 두 구현은 같은 클래스와 로직 위에 백엔드만 다르고, 같은 적합성 시험을 통과한다(`tests/test_conformance_ingest.py`, `tests/test_conformance_failurestore.py`).
@@ -36,7 +36,7 @@ I7 상세(구현이 정한 것):
 | I4 ReleaseReader | 활성 포인터, 릴리스 목록 | `boundary_contracts.sdk.ReleaseReader` Protocol |
 | I5 `request_rollback` | 롤백 요청 전달 | `boundary_contracts.sdk.GateService` Protocol |
 
-경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그 v1.1.0, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_schema_sync.py`가 원본과의 일치를 확인한다(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v1.1.0`으로 만든 wheel을 설치한다.
+경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그 v1.2.0, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_schema_sync.py`가 원본과의 일치를 확인한다(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v1.2.0`으로 만든 wheel을 설치한다.
 
 ## 보장하는 것
 

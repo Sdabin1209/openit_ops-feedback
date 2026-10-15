@@ -1,3 +1,4 @@
+from boundary_contracts import PIPELINE_SCHEMA_VERSION
 """잡: 멱등성, 비식별 경계, 출처 릴리스, 설정 기반 분류."""
 import json
 
@@ -79,7 +80,7 @@ def test_review_creates_new_version_and_is_idempotent(pipeline):
     q = ReviewQueue(pipeline["store"], clock=lambda: "2026-10-16T00:00:00Z")
     (c,), _ = q.pending()
     r = q.review(c["case_id"], "CONFIRMED", "reviewer", expected={"items": []}, expected_kind="PARSER", failure_type="X")
-    assert r["expected_kind"] == "PARSER" and r["pipeline_schema_version"] == "1.1"
+    assert r["expected_kind"] == "PARSER" and r["pipeline_schema_version"] == PIPELINE_SCHEMA_VERSION
     assert r["version"] == 2 and r["review_status"] == "CONFIRMED" and r["expected"] == {"items": []}
     assert pipeline["store"].get_case(c["case_id"], version=1)["review_status"] == "PENDING"
     assert q.review(c["case_id"], "CONFIRMED", "reviewer", expected={"items": []}, expected_kind="PARSER", failure_type="X")["version"] == 2
@@ -134,7 +135,7 @@ def test_question_set_filled_from_release(pipeline):
     r = _Reader()
     run(pipeline, release_reader=r)
     (c,) = all_cases(pipeline["store"])
-    assert c["question_set"] == QS and c["pipeline_schema_version"] == "1.1"
+    assert c["question_set"] == QS and c["pipeline_schema_version"] == PIPELINE_SCHEMA_VERSION
 
 
 def test_question_set_omitted_when_release_unreadable(pipeline):

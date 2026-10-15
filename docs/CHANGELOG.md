@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.4.0 (2026-10-15)
+
+- boundary-contracts v1.2.0(스키마 1.2): requirements, wheel 태그 갱신. 새 레코드는 `PIPELINE_SCHEMA_VERSION`(1.2).
+- 자체 `HttpTraceIngest`(client.py) 삭제, `boundary_contracts.clients`로 대체.
+- 통합 시험(tests/test_http_clients.py): `HttpReleaseReader`를 설정 팩토리(`{env: ...}` 포함)로 만들어 작은 I4 서버에서 question_set을 읽음. 우리 서버를 `HttpTraceIngest`/`HttpFailureStore`로 호출(ACCEPTED/DUPLICATE, 읽기 토큰 수집 403, 필터·페이지, 비식별 trace).
+- turn-engine·model-runtime에는 코드 의존이 없다(이미지 라벨만 기록).
+
 ## 0.3.0 (2026-10-15)
 
 - I7 HTTP 읽기 면(HTTP.md): 사례 단건, 목록(필터, 페이지), 비식별 trace. 역할별 읽기 토큰(`OPS_READ_TOKENS`), 수집 토큰과 분리. `publish_case`는 HTTP로 열지 않음.
@@ -9,10 +16,10 @@
 
 ## 0.2.0 (2026-10-15)
 
-- boundary-contracts v1.1.0: 새 레코드는 pipeline_schema_version "1.1", 읽기는 1.0·1.1 모두.
+- boundary-contracts v1.2.0: 새 레코드는 pipeline_schema_version "1.1", 읽기는 1.0·1.1 모두.
 - FailureCase.question_set: source_release_id의 ReleaseManifest(I4 get_release)에서 채운다. 릴리스를 읽지 못하면 생략하고 사례는 만든다. 읽기 실패 뒤 성공하면 기존 PENDING 사례와 내용이 달라 skipped_diff로 보고된다.
 - 검토에서 expected를 적을 때 expected_kind(PARSER|GENERATOR)를 함께 요구한다.
-- wheel 스크립트와 requirements의 태그를 v1.1.0으로.
+- wheel 스크립트와 requirements의 태그를 v1.2.0으로.
 
 ## 0.1.1 (2026-10-15)
 

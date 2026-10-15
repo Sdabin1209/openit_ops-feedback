@@ -32,7 +32,7 @@ PY
 post() { curl -sS -X POST -H "Authorization: Bearer smoke-token" -H "Content-Type: application/json" -d "$BODY" http://127.0.0.1:$PORT/v1/traces; }
 R1=$(post); R2=$(post)
 echo "send1: $R1"; echo "send2: $R2"
-echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q '"pipeline_schema_version": "1.1"' || { echo "수집 확인 실패"; exit 1; }
+echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q '"pipeline_schema_version": "1.2"' || { echo "수집 확인 실패"; exit 1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces)
 [ "$code" = "403" ] || { echo "토큰 없는 요청이 거부되지 않음: $code"; exit 1; }
 rd() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -H "Authorization: Bearer $1" "http://127.0.0.1:$PORT$2"; }
