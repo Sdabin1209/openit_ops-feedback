@@ -10,6 +10,32 @@ python3 -m venv .venv
 
 이웃 스키마 사본 갱신: `scripts/sync_vendor.sh` (그 뒤 pytest의 `test_schema_sync`가 통과해야 한다).
 
+## 한눈에: 서비스와 잡이 쓰는 것
+
+| 구분 | ingest-api (`python -m ops_feedback.api`) | 잡 (`python -m ops_feedback.job --config <파일>`) |
+| --- | --- | --- |
+| 쓰는 경로 | `log.db`(원본, `OPS_LOG_DB`) | `log.db`(처리 표시, 보관 기간 지난 원본 삭제), `failures.db`(사례, 비식별 trace, 지표, 롤백 요청) |
+| 읽는 경로 | `failures.db`(읽기 면, `OPS_FAILURE_DB`) | `log.db`(비식별 처리기만), `failures.db` |
+| 환경 변수 | `OPS_INGEST_TOKEN`(필수, 수집 쓰기), `OPS_LOG_DB`, `OPS_PORT`, 읽기 면: `OPS_FAILURE_DB`+`OPS_READ_TOKENS=역할=토큰,...` | `OPS_DEID_SALT`(필수, 이름은 `deid.salt_env`), 설정의 `{env: 이름}`이 가리키는 토큰들 |
+| 볼륨 | `/data`에 `log.db`와 `failures.db`를 둔다(이미지 기본 `OPS_LOG_DB=/data/log.db`, `OPS_FAILURE_DB=/data/failures.db`) | 설정 `storage.log_db`, `storage.failure_db`. ingest-api와 **같은 볼륨**을 가리켜야 한다(SQLite WAL, 두 프로세스가 같은 호스트에서 공유) |
+| 네트워크 | 수집 `POST /v1/traces`(수집 토큰), 읽기 `GET /v1/cases`, `/v1/cases/{id}`, `/v1/deidentified-traces/{ref}`(읽기 토큰, 역할별) | I4 읽기와 I5 롤백 호출을 쓰면 release-gate 주소와 토큰 |
+
+읽기 토큰으로 `/v1/traces`를, 수집 토큰으로 읽기 경로를 호출하면 403이다. `publish_case`는 HTTP로 열려 있지 않다(잡만 쓴다).
+
+## 잡 설정 파일 키 (YAML, `config/job.example.yaml` 참고)
+
+| 키 | 필수 | 뜻 |
+| --- | --- | --- |
+| `storage.log_db`, `storage.failure_db` | 예 | SQLite 파일 경로 |
+| `deid.policy_id`, `deid.keep_string_keys`, `deid.unlisted_string_action`(mask\|drop) | 예 | 비식별 정책의 필수 부분. 기본값 없음 |
+| `deid.salt_env` | 아니오(기본 `OPS_DEID_SALT`) | salt를 담은 환경 변수 이름 |
+| `deid.pseudonymize_keys`, `scrub_string_keys`, `scrub_patterns`, `mask_defs`, `drop_defs`, `mask_number_keys`, `residual_patterns` | 아니오 | 4절 처리 방식의 정책 값 |
+| `detection.detectors[]` | 예 | `{type: rule, rules: [{id, enabled, params}]}` 또는 `{factory: "모듈:함수", args}` |
+| `classification.default_failure_type` | 예 | 나머지(`rule_to_type`, `priority`)는 선택 |
+| `retention.raw_days` | 예 | 숫자 또는 null(삭제 안 함) |
+| `rollback.*` | 선택(있으면 모두 필수) | `window_hours, min_turns, max_failure_rate, counted_review_statuses, requested_by_role, auto_submit` |
+| `release_reader`, `gate_service` | 선택 | `{factory: "모듈:함수", args: {...}}`. args 값 `{env: 이름}`은 환경 변수 값으로 바뀐다. `release_reader`가 있으면 사례에 `question_set`도 채운다 |
+
 ## 설정 (사용자 결정 사항 포함)
 
 `config/job.example.yaml`을 복사해 쓴다. 예시의 값은 사용자가 정한 기준이 아니다. 다음은 사용자가 정해야 한다.
@@ -26,6 +52,7 @@ python3 -m venv .venv
 | `OPS_INGEST_TOKEN` | ingest-api | 필수. 서비스 토큰 |
 | `OPS_LOG_DB` | ingest-api | 기본 `/data/log.db` |
 | `OPS_PORT` | ingest-api | 기본 8080 |
+| `OPS_FAILURE_DB`, `OPS_READ_TOKENS` | ingest-api | 둘 다 있을 때만 I7 읽기 면을 켠다. 토큰은 `역할=토큰,역할=토큰` |
 | `OPS_DEID_SALT` | 잡 | 필수. 의사 식별자 salt. 바꾸면 case_id와 trace ref가 모두 바뀌므로 운영 중 바꾸지 않는다 |
 
 ## ingest-api 실행

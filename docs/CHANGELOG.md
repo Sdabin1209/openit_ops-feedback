@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.3.0 (2026-10-15)
+
+- I7 HTTP 읽기 면(HTTP.md): 사례 단건, 목록(필터, 페이지), 비식별 trace. 역할별 읽기 토큰(`OPS_READ_TOKENS`), 수집 토큰과 분리. `publish_case`는 HTTP로 열지 않음.
+- 팩토리 args의 `{env: 이름}` 해석(토큰을 설정 파일에 두지 않음). `release_reader`를 `boundary_contracts.clients:HttpReleaseReader`로 고를 수 있는 형태.
+- 이미지 라벨을 io.openit.{service,revision,contracts.boundary,contracts.survey-schema,turn-engine,model-runtime}로 통일.
+- 스모크에 읽기 호출, 토큰 분리, 라벨 확인 추가. runbook에 서비스·잡의 경로·변수·설정 키를 한 곳으로 정리.
+
 ## 0.2.0 (2026-10-15)
 
 - boundary-contracts v1.1.0: 새 레코드는 pipeline_schema_version "1.1", 읽기는 1.0·1.1 모두.

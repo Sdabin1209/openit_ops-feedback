@@ -16,6 +16,11 @@
 - 헤드 회신 후속(0.1.1) 반영 후 재실행 결과는 CHANGELOG 0.1.1과 최신 커밋 기준.
 - `scripts/smoke.sh`: `SMOKE OK`.
 
+## 제거 계획
+
+- `ops_feedback.client.HttpTraceIngest`: `boundary_contracts.clients`(v1.1.1)에 I6 클라이언트가 나오면 그것으로 대체하고 `client.py`와 `tests/test_api.py`의 클라이언트 시험을 삭제한다(서버 `api.py`는 유지, 서버 쪽 시험은 새 클라이언트로 돌린다).
+- 대역 `tests/fakes.py`의 ReleaseReader는 `HttpReleaseReader`가 나온 뒤에도 단위 시험용으로 남기고, 연결 시험은 release-gate 서버나 그 메모리 구현으로 한다.
+
 ## 남은 일
 
 - 사용자 결정 대기: 비식별 기준(O 번호 없음, 브리프 5절), 보관 기간, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치.

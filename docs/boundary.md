@@ -21,6 +21,7 @@
 I7 상세(구현이 정한 것):
 - `publish_case`: 스키마 검증 -> `(case_id, version)` 같은 내용이면 기존 것 반환, 다르면 `CONFLICT`. version은 1부터 연속(건너뛰면 `FAILED_PRECONDITION`). `deidentified_trace_ref`의 trace가 먼저 있어야 한다(`FAILED_PRECONDITION`).
 - `list_cases`: 정렬은 게시 순서(append), `next_cursor`는 불투명 문자열. `latest_only=True`면 사례별 최신 version만. `updated_since`는 version의 `created_at` 기준.
+- HTTP(HTTP.md): `GET /v1/cases/{case_id}?version=`, `GET /v1/cases`(필터 + `{items, next_cursor}`, `limit` 기본 100 최대 500), `GET /v1/deidentified-traces/{ref}`. 읽기 토큰은 `OPS_READ_TOKENS`의 역할별 값이고 수집 토큰과 분리된다(서로의 경로 403). 응답은 `FailureCase` 스키마 검증을 거친다. `publish_case`는 열지 않는다.
 - `get_trace`: 비식별 trace. 결과가 `TurnTrace` 스키마를 통과하지 않을 수 있다(CR-001).
 - 소비자: `review_status == CONFIRMED`이고 `expected`가 있는 것만 정답 있는 회귀 케이스로 쓴다(I7 규정).
 

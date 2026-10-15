@@ -50,5 +50,9 @@ retention:
 #   counted_review_statuses: [PENDING, CONFIRMED]
 #   requested_by_role: ops-feedback
 #   auto_submit: false
-# release_reader: {factory: "모듈:함수"}
-# gate_service: {factory: "모듈:함수"}
+# release_reader:                       # I4 읽기. 클라이언트가 나오면(boundary-contracts v1.1.1) 아래처럼 HTTP로 고른다.
+#   factory: "boundary_contracts.clients:HttpReleaseReader"
+#   args: {base_url: "http://release-gate:8080", token: {env: OPS_GATE_READ_TOKEN}}   # {env: 이름}은 환경 변수 값으로 바뀐다
+# gate_service:                         # I5 request_rollback (auto_submit일 때)
+#   factory: "모듈:함수"
+#   args: {base_url: "...", token: {env: OPS_GATE_TOKEN}}
