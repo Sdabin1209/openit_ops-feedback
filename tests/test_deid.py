@@ -100,3 +100,13 @@ def test_unlisted_drop_action():
     cfg["deid"]["unlisted_string_action"] = "drop"
     t = deid(cfg).deidentify(envelope(pii_trace())).trace
     assert "utterance" not in t["frontend_message"]
+
+
+def test_pseudonyms_not_flagged_as_residual_pii():
+    """의사 식별자(16진)의 숫자열이 우연히 전화번호 패턴에 걸려도 비식별이 실패하지 않는다."""
+    import re
+    d = deid()
+    rx = re.compile(base_config()["deid"]["residual_patterns"]["phone_kr"])
+    sid = next(f"s-{i}" for i in range(200000) if rx.search(d.pseudonym("session_id", f"s-{i}")))
+    r = d.deidentify(envelope(make_trace(sid, "t-1")))
+    assert rx.search(r.trace["session_id"])      # 패턴에는 걸리지만

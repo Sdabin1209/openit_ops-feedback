@@ -23,6 +23,7 @@ from .schemas import trace_schema
 MASK = "[MASKED]"
 DROPPED = "[DROPPED]"
 _DROP = object()
+_PSEUDONYM = re.compile(r"p-[0-9a-f]{32}")
 
 
 class DeidError(Exception):
@@ -257,8 +258,8 @@ class Deidentifier:
         if not isinstance(out, dict):
             raise DeidError("trace 전체가 제거되었다")
         for s in _leaf_strings(out):
-            if s in (MASK, DROPPED):
-                continue
+            if s in (MASK, DROPPED) or _PSEUDONYM.fullmatch(s):
+                continue          # 의사 식별자는 16진 해시라 숫자열이 우연히 전화번호 패턴에 걸릴 수 있다
             for name, rx in self._residual.items():
                 if rx.search(s):
                     raise DeidError(f"비식별 결과에 잔존 패턴({name})이 있다")

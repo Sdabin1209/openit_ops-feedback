@@ -12,7 +12,7 @@ CV=$(cat build/wheels/BOUNDARY_TAG)
 $DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" \
   --build-arg SURVEY_SCHEMA_VERSION="$(cat src/ops_feedback/_schemas/survey/v1/CONTRACT_VERSION)" .
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
-$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -e OPS_INGEST_TOKEN=smoke-token -e OPS_READ_TOKENS=synthetic-data=read-token $IMG >/dev/null
+$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -e OPS_INGEST_TOKEN=smoke-token -e OPS_READ_TOKENS=synthetic-data=read-token -e OPS_REVIEW_TOKENS=reviewer=review-token $IMG >/dev/null
 PORT=$($DOCKER port $NAME 8080/tcp | head -1 | tr -d '\r' | sed 's/.*://')
 echo "host port: $PORT"
 for i in $(seq 1 30); do
@@ -45,4 +45,18 @@ rm -f /tmp/smoke-$$.out
 for k in service revision contracts.boundary contracts.survey-schema turn-engine model-runtime; do
   $DOCKER image inspect $IMG --format "{{ index .Config.Labels \"io.openit.$k\" }}" | tr -d '\r' | grep -q . || { echo "라벨 io.openit.$k 없음"; exit 1; }
 done
+# 검토 게시: 실패 턴을 보내고 컨테이너 안에서 잡을 한 번 돌려 사례를 만든 뒤 HTTP로 검토한다
+FAIL=$(echo "$BODY" | python3 -c 'import json,sys
+b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"]["generator_output"]={"response_text":"x","is_fallback":True}; print(json.dumps(b))')
+curl -fsS -X POST -H "Authorization: Bearer smoke-token" -d "$FAIL" http://127.0.0.1:$PORT/v1/traces >/dev/null
+sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/job.example.yaml > /tmp/smoke-job-$$.yaml
+$DOCKER cp /tmp/smoke-job-$$.yaml $NAME:/tmp/job.yaml; rm -f /tmp/smoke-job-$$.yaml
+$DOCKER exec -e OPS_DEID_SALT=smoke-salt $NAME python -m ops_feedback.job --config /tmp/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
+CID=$(curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases?review_status=PENDING" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["case_id"])')
+rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Authorization: Bearer $1" -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
+[ "$(rv read-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "읽기 토큰으로 검토가 거부되지 않음"; exit 1; }
+[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "201" ] || { echo "검토 게시 실패"; exit 1; }
+[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "200" ] || { echo "검토 재전송이 멱등이 아님"; exit 1; }
+curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases/$CID" | grep -q '"version": 2' || { echo "새 version이 읽히지 않음"; exit 1; }
+rm -f /tmp/smoke-$$.out /tmp/smoke-job-$$.out
 echo "SMOKE OK"

@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.5.0 (2026-10-15)
+
+- 검토 게시 HTTP 면 `POST /v1/cases/{case_id}/review`(D52): `OPS_REVIEW_TOKENS`, 201/200/404/400, expected 검증(ParserOutput|GeneratorOutput + trace의 입력 존재), 세 종류 토큰 분리. `ReviewQueue`가 PENDING으로 되돌리는 검토도 받는다.
+- 시험 tests/test_api_review.py, 스모크에 잡 실행 후 검토 게시·멱등·읽기 확인 추가.
+
 ## 0.4.0 (2026-10-15)
 
 - boundary-contracts v1.2.0(스키마 1.2): requirements, wheel 태그 갱신. 새 레코드는 `PIPELINE_SCHEMA_VERSION`(1.2).

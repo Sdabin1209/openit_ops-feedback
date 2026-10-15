@@ -16,6 +16,10 @@
 - 헤드 회신 후속(0.1.1) 반영 후 재실행 결과는 CHANGELOG 0.1.1과 최신 커밋 기준.
 - `scripts/smoke.sh`: `SMOKE OK`.
 
+## 검토 면
+
+- `POST /v1/cases/{id}/review` 구현됨(0.5.0). 검토 화면(UI)은 아직 없고 이 면의 클라이언트로 붙인다. 아직 없는 것: `boundary_contracts.clients`의 검토 클라이언트.
+
 ## 정리 완료
 
 - 자체 `HttpTraceIngest`(`client.py`)는 삭제했다. 사용처는 `boundary_contracts.clients.HttpTraceIngest`(v1.2.0)다. I4 읽기도 `boundary_contracts.clients:HttpReleaseReader`를 설정의 팩토리로 고른다(tests/test_http_clients.py로 확인).

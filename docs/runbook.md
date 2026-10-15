@@ -53,6 +53,7 @@ python3 -m venv .venv
 | `OPS_LOG_DB` | ingest-api | 기본 `/data/log.db` |
 | `OPS_PORT` | ingest-api | 기본 8080 |
 | `OPS_FAILURE_DB`, `OPS_READ_TOKENS` | ingest-api | 둘 다 있을 때만 I7 읽기 면을 켠다. 토큰은 `역할=토큰,역할=토큰` |
+| `OPS_REVIEW_TOKENS` | ingest-api | 검토 게시(`POST /v1/cases/{id}/review`)용 쓰기 토큰, 역할은 보통 `reviewer`. 읽기 면과 같이 켜진다. 수집·읽기·검토 토큰은 서로 달라야 하고 서로의 경로는 403 |
 | `OPS_DEID_SALT` | 잡 | 필수. 의사 식별자 salt. 바꾸면 case_id와 trace ref가 모두 바뀌므로 운영 중 바꾸지 않는다 |
 
 ## ingest-api 실행
@@ -84,7 +85,7 @@ OPS_DEID_SALT=... python -m ops_feedback.job --config config/job.yaml
 
 ## 검토
 
-`ReviewQueue(store).pending()`으로 목록, `review(case_id, "CONFIRMED"|"DISMISSED", role, expected=..., base_version=...)`로 결과 게시(새 version). 검토 화면(UI)은 아직 없다.
+HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMISSED|PENDING, expected?, expected_kind?}`, `Authorization: Bearer <검토 토큰>`. 201이면 새 version, 같은 검토 재전송은 200과 같은 결과, 없는 사례는 404. `expected`는 CONFIRMED에만 붙일 수 있고 `expected_kind`(PARSER|GENERATOR)가 필수이며, 비식별 trace의 `parser_input`/`generator_input`이 있고 문진 스키마 `ParserOutput`/`GeneratorOutput`을 지켜야 한다(아니면 400과 사유). 검토자는 읽기 면으로 비식별 trace를 보고 쓴다. 내부 호출은 `ReviewQueue(store).pending()`으로 목록, `review(case_id, "CONFIRMED"|"DISMISSED", role, expected=..., base_version=...)`로 결과 게시(새 version). 검토 화면(UI)은 아직 없다.
 
 ## 롤백 요청
 

@@ -4,11 +4,13 @@
   GET  /v1/cases/{case_id}?version=                  I7 get_case (읽기 토큰)
   GET  /v1/cases?review_status=&failure_type=&source_release_id=&updated_since=&latest_only=&cursor=&limit=   I7 list_cases
   GET  /v1/deidentified-traces/{ref}                  I7 get_trace (비식별 뒤의 것만 저장되어 있다)
+  POST /v1/cases/{case_id}/review  {review_status, expected?, expected_kind?}  검토 게시(검토 토큰, 역할 reviewer). 201 새 version / 200 같은 검토 재전송 / 404
   GET  /healthz     살아 있음
   GET  /readyz      저장소가 열려 있고 스키마가 적재됨
 
 설정은 환경 변수로만 받는다(진입점에서만 읽는다). OPS_INGEST_TOKEN(수집 쓰기), OPS_LOG_DB, OPS_PORT(기본 8080),
 읽기 면: OPS_FAILURE_DB와 OPS_READ_TOKENS=역할=토큰,역할=토큰 (둘 다 있을 때만 켠다). 수집 토큰과 읽기 토큰은 서로의 경로를 호출할 수 없다(403).
+검토 면: OPS_REVIEW_TOKENS=역할=토큰,…(읽기 면과 같이 켜진다). 세 종류 토큰은 서로의 경로를 호출할 수 없다.
 publish_case는 HTTP로 열지 않는다(내부 잡).
 로그는 표준 출력으로 낸다. 본문(개인정보 가능)은 로그에 남기지 않는다.
 """
@@ -28,6 +30,7 @@ from boundary_contracts.errors import BoundaryError
 from .clock import parse_ts
 from .failurestore import FailureStoreImpl
 from .logstore import LogStore
+from .review import ReviewQueue
 from .schemas import validate_record
 from .schemas import supported_trace_versions
 
@@ -50,12 +53,15 @@ def parse_read_tokens(spec: str) -> dict[str, str]:
 
 
 def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 8080, *,
-                failures: Optional[FailureStoreImpl] = None, read_tokens: Optional[dict[str, str]] = None) -> ThreadingHTTPServer:
+                failures: Optional[FailureStoreImpl] = None, read_tokens: Optional[dict[str, str]] = None,
+                review_tokens: Optional[dict[str, str]] = None) -> ThreadingHTTPServer:
     if not token:
         raise ValueError("인증 토큰이 비어 있다")
     read_tokens = read_tokens or {}
-    if token in read_tokens:
-        raise ValueError("수집 토큰과 읽기 토큰이 같다")
+    review_tokens = review_tokens or {}
+    if token in read_tokens or token in review_tokens or set(read_tokens) & set(review_tokens):
+        raise ValueError("수집·읽기·검토 토큰은 서로 달라야 한다")
+    queue = ReviewQueue(failures) if failures is not None else None
 
     class H(BaseHTTPRequestHandler):
         server_version = "ops-feedback-ingest"
@@ -142,7 +148,46 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 return self._json(200, {"status": "ready", "supported_runtime_contract_versions": supported_trace_versions()})
             self._json(404, {"error": "not found"})
 
+        def _review(self, path: str) -> None:
+            try:
+                auth = self.headers.get("Authorization", "")
+                role = next((r for t, r in review_tokens.items() if auth.startswith("Bearer ") and hmac.compare_digest(auth[7:], t)), None)
+                if role is None:
+                    raise BoundaryError("PERMISSION_DENIED", "검토 토큰이 맞지 않는다")
+                if queue is None:
+                    raise BoundaryError("NOT_FOUND", "검토 면이 꺼져 있다")
+                case_id = unquote(path[len("/v1/cases/"):-len("/review")])
+                try:
+                    n = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    n = -1
+                if n <= 0 or n > MAX_BODY:
+                    raise BoundaryError("INVALID_RECORD", "본문 크기가 맞지 않는다")
+                try:
+                    body = json.loads(self.rfile.read(n))
+                except (ValueError, UnicodeDecodeError):
+                    raise BoundaryError("INVALID_RECORD", "JSON이 아니다") from None
+                if not isinstance(body, dict) or set(body) - {"review_status", "expected", "expected_kind"} or "review_status" not in body:
+                    raise BoundaryError("INVALID_RECORD", "본문은 {review_status, expected?, expected_kind?}")
+                exp = body.get("expected")
+                if exp is not None and not isinstance(exp, dict):
+                    raise BoundaryError("INVALID_RECORD", "expected는 객체")
+                if exp is None and body.get("expected_kind") is not None:
+                    raise BoundaryError("INVALID_RECORD", "expected_kind는 expected와 함께만 쓴다")
+                before = failures.get_case(case_id)                       # 없으면 NOT_FOUND(404)
+                rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"))
+                validate_record("FailureCase", rec)
+                self._json(201 if rec["version"] > before["version"] else 200, rec)
+            except BoundaryError as e:
+                self._err(e)
+            except Exception:
+                log.exception("검토 중 예외")
+                self._err(BoundaryError("UNAVAILABLE", "내부 오류"))
+
         def do_POST(self):
+            u = urlsplit(self.path)
+            if u.path.startswith("/v1/cases/") and u.path.endswith("/review"):
+                return self._review(u.path)
             if self.path != "/v1/traces":
                 return self._json(404, {"error": "not found"})
             auth = self.headers.get("Authorization", "")
@@ -180,7 +225,8 @@ def main() -> int:
     if os.environ.get("OPS_FAILURE_DB") and os.environ.get("OPS_READ_TOKENS"):
         failures = FailureStoreImpl.sqlite(os.environ["OPS_FAILURE_DB"])
         rtoks = parse_read_tokens(os.environ["OPS_READ_TOKENS"])
-    srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks)
+    vtoks = parse_read_tokens(os.environ.get("OPS_REVIEW_TOKENS", ""))
+    srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks, review_tokens=vtoks)
     log.info("listening on %s", srv.server_address[1])
     try:
         srv.serve_forever()

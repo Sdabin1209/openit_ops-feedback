@@ -169,8 +169,13 @@ def test_expected_requires_kind(pipeline):
     (c,), _ = q.pending()
     with pytest.raises(BoundaryError):
         q.review(c["case_id"], "CONFIRMED", "r", expected={"items": []})
-    r = q.review(c["case_id"], "CONFIRMED", "r", expected={"response_text": "x", "is_fallback": False}, expected_kind="GENERATOR")
-    assert r["expected_kind"] == "GENERATOR" and r.get("question_set") == c.get("question_set")
+    with pytest.raises(BoundaryError) as x:        # 이 사례의 trace에는 generator_input이 없다
+        q.review(c["case_id"], "CONFIRMED", "r", expected={"response_text": "x", "is_fallback": False}, expected_kind="GENERATOR")
+    assert "generator_input" in x.value.message
+    with pytest.raises(BoundaryError):             # 문진 스키마 위반
+        q.review(c["case_id"], "CONFIRMED", "r", expected={"items": "bad"}, expected_kind="PARSER")
+    r = q.review(c["case_id"], "CONFIRMED", "r", expected={"items": []}, expected_kind="PARSER")
+    assert r["expected_kind"] == "PARSER" and r.get("question_set") == c.get("question_set")
 
 
 def test_factory_args_resolve_env():
