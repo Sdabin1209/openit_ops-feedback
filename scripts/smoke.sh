@@ -9,9 +9,10 @@ NAME=ops-feedback-smoke-$$
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 bash scripts/build_wheels.sh >/dev/null
 CV=$(cat build/wheels/BOUNDARY_TAG)
-$DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" .
+$DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" \
+  --build-arg SURVEY_SCHEMA_VERSION="$(cat src/ops_feedback/_schemas/survey/v1/CONTRACT_VERSION)" .
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
-$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -e OPS_INGEST_TOKEN=smoke-token $IMG >/dev/null
+$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -e OPS_INGEST_TOKEN=smoke-token -e OPS_READ_TOKENS=synthetic-data=read-token $IMG >/dev/null
 PORT=$($DOCKER port $NAME 8080/tcp | head -1 | tr -d '\r' | sed 's/.*://')
 echo "host port: $PORT"
 for i in $(seq 1 30); do
@@ -34,4 +35,14 @@ echo "send1: $R1"; echo "send2: $R2"
 echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q '"pipeline_schema_version": "1.1"' || { echo "수집 확인 실패"; exit 1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces)
 [ "$code" = "403" ] || { echo "토큰 없는 요청이 거부되지 않음: $code"; exit 1; }
+rd() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -H "Authorization: Bearer $1" "http://127.0.0.1:$PORT$2"; }
+[ "$(rd read-token '/v1/cases?latest_only=true&limit=5')" = "200" ] && grep -q '"items": \[\]' /tmp/smoke-$$.out || { echo "읽기 호출 실패"; exit 1; }
+[ "$(rd read-token /v1/cases/nope)" = "404" ] || { echo "없는 사례가 404가 아님"; exit 1; }
+[ "$(rd smoke-token /v1/cases)" = "403" ] || { echo "수집 토큰으로 읽기가 거부되지 않음"; exit 1; }
+c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer read-token" -d "$BODY" http://127.0.0.1:$PORT/v1/traces)
+[ "$c" = "403" ] || { echo "읽기 토큰으로 수집이 거부되지 않음: $c"; exit 1; }
+rm -f /tmp/smoke-$$.out
+for k in service revision contracts.boundary contracts.survey-schema turn-engine model-runtime; do
+  $DOCKER image inspect $IMG --format "{{ index .Config.Labels \"io.openit.$k\" }}" | tr -d '\r' | grep -q . || { echo "라벨 io.openit.$k 없음"; exit 1; }
+done
 echo "SMOKE OK"

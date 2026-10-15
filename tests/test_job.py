@@ -170,3 +170,11 @@ def test_expected_requires_kind(pipeline):
         q.review(c["case_id"], "CONFIRMED", "r", expected={"items": []})
     r = q.review(c["case_id"], "CONFIRMED", "r", expected={"response_text": "x", "is_fallback": False}, expected_kind="GENERATOR")
     assert r["expected_kind"] == "GENERATOR" and r.get("question_set") == c.get("question_set")
+
+
+def test_factory_args_resolve_env():
+    from ops_feedback.job import _resolve_args
+    assert _resolve_args({"base_url": "http://x", "token": {"env": "T"}}, {"T": "s"}) == {"base_url": "http://x", "token": "s"}
+    import pytest
+    with pytest.raises(ValueError):
+        _resolve_args({"token": {"env": "MISSING"}}, {})

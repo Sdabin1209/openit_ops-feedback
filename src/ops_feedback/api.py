@@ -1,10 +1,15 @@
 """ingest-api: TraceEnvelope 수집 HTTP 서비스(I6). 표준 라이브러리만 쓴다.
 
   POST /v1/traces   본문 TraceEnvelope(JSON), Authorization: Bearer <토큰>  -> 200 IngestResult | 오류 BoundaryError 레코드
+  GET  /v1/cases/{case_id}?version=                  I7 get_case (읽기 토큰)
+  GET  /v1/cases?review_status=&failure_type=&source_release_id=&updated_since=&latest_only=&cursor=&limit=   I7 list_cases
+  GET  /v1/deidentified-traces/{ref}                  I7 get_trace (비식별 뒤의 것만 저장되어 있다)
   GET  /healthz     살아 있음
   GET  /readyz      저장소가 열려 있고 스키마가 적재됨
 
-설정은 환경 변수로만 받는다(진입점에서만 읽는다). OPS_INGEST_TOKEN, OPS_LOG_DB, OPS_PORT(기본 8080).
+설정은 환경 변수로만 받는다(진입점에서만 읽는다). OPS_INGEST_TOKEN(수집 쓰기), OPS_LOG_DB, OPS_PORT(기본 8080),
+읽기 면: OPS_FAILURE_DB와 OPS_READ_TOKENS=역할=토큰,역할=토큰 (둘 다 있을 때만 켠다). 수집 토큰과 읽기 토큰은 서로의 경로를 호출할 수 없다(403).
+publish_case는 HTTP로 열지 않는다(내부 잡).
 로그는 표준 출력으로 낸다. 본문(개인정보 가능)은 로그에 남기지 않는다.
 """
 from __future__ import annotations
@@ -14,23 +19,43 @@ import json
 import logging
 import os
 import sys
+from urllib.parse import parse_qs, unquote, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
 
 from boundary_contracts.errors import BoundaryError
 
+from .clock import parse_ts
+from .failurestore import FailureStoreImpl
 from .logstore import LogStore
+from .schemas import validate_record
 from .schemas import supported_trace_versions
 
 log = logging.getLogger("ingest-api")
 HTTP_STATUS = {"NOT_FOUND": 404, "INVALID_RECORD": 400, "UNSUPPORTED_VERSION": 422, "CONFLICT": 409,
                "INTEGRITY_ERROR": 422, "FAILED_PRECONDITION": 412, "PERMISSION_DENIED": 403, "UNAVAILABLE": 503}
 MAX_BODY = 8 * 1024 * 1024
+MAX_LIMIT = 500
 
 
-def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 8080) -> ThreadingHTTPServer:
+def parse_read_tokens(spec: str) -> dict[str, str]:
+    """'역할=토큰,역할=토큰' -> {토큰: 역할}"""
+    out: dict[str, str] = {}
+    for part in filter(None, (x.strip() for x in spec.split(","))):
+        role, sep, tok = part.partition("=")
+        if not sep or not role or not tok:
+            raise ValueError("OPS_READ_TOKENS 형식은 역할=토큰,역할=토큰")
+        out[tok] = role
+    return out
+
+
+def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 8080, *,
+                failures: Optional[FailureStoreImpl] = None, read_tokens: Optional[dict[str, str]] = None) -> ThreadingHTTPServer:
     if not token:
         raise ValueError("인증 토큰이 비어 있다")
+    read_tokens = read_tokens or {}
+    if token in read_tokens:
+        raise ValueError("수집 토큰과 읽기 토큰이 같다")
 
     class H(BaseHTTPRequestHandler):
         server_version = "ops-feedback-ingest"
@@ -49,12 +74,67 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
         def _err(self, e: BoundaryError) -> None:
             self._json(HTTP_STATUS[e.code], e.to_record())
 
+        def _read_auth(self) -> None:
+            auth = self.headers.get("Authorization", "")
+            ok = auth.startswith("Bearer ") and any(hmac.compare_digest(auth[7:], t) for t in read_tokens)
+            if not ok:
+                raise BoundaryError("PERMISSION_DENIED", "읽기 토큰이 맞지 않는다")
+
+        def _read_api(self, path: str, q: dict) -> None:
+            try:
+                self._read_auth()
+                if failures is None:
+                    raise BoundaryError("NOT_FOUND", "읽기 면이 꺼져 있다")
+                if path.startswith("/v1/cases/"):
+                    ver = q.get("version", [None])[0]
+                    try:
+                        v = int(ver) if ver is not None else None
+                    except ValueError:
+                        raise BoundaryError("INVALID_RECORD", "version은 정수") from None
+                    rec = failures.get_case(unquote(path[len("/v1/cases/"):]), version=v)
+                    validate_record("FailureCase", rec)
+                    return self._json(200, rec)
+                if path == "/v1/cases":
+                    def one(k):
+                        return q.get(k, [None])[0] or None
+                    try:
+                        limit = int(one("limit") or 100)
+                    except ValueError:
+                        raise BoundaryError("INVALID_RECORD", "limit은 정수") from None
+                    if not 1 <= limit <= MAX_LIMIT:
+                        raise BoundaryError("INVALID_RECORD", f"limit은 1~{MAX_LIMIT}")
+                    since = None
+                    if one("updated_since"):
+                        try:
+                            since = parse_ts(one("updated_since").replace(" ", "+"))
+                        except ValueError:
+                            raise BoundaryError("INVALID_RECORD", "updated_since는 RFC 3339") from None
+                    lo = (one("latest_only") or "true").lower()
+                    if lo not in ("true", "false"):
+                        raise BoundaryError("INVALID_RECORD", "latest_only는 true|false")
+                    items, nxt = failures.list_cases(review_status=one("review_status"), failure_type=one("failure_type"),
+                                                     source_release_id=one("source_release_id"), updated_since=since,
+                                                     latest_only=lo == "true", cursor=one("cursor"), limit=limit)
+                    for it in items:
+                        validate_record("FailureCase", it)
+                    return self._json(200, {"items": items, "next_cursor": nxt})
+                if path.startswith("/v1/deidentified-traces/"):
+                    return self._json(200, failures.get_trace(unquote(path[len("/v1/deidentified-traces/"):])))
+                raise BoundaryError("NOT_FOUND", "경로 없음")
+            except BoundaryError as e:
+                self._err(e)
+
         def do_GET(self):
+            u = urlsplit(self.path)
+            if u.path.startswith("/v1/"):
+                return self._read_api(u.path, parse_qs(u.query))
             if self.path == "/healthz":
                 return self._json(200, {"status": "ok"})
             if self.path == "/readyz":
                 try:
                     store.ping()
+                    if failures is not None:
+                        failures.ping()
                     if not supported_trace_versions():
                         raise BoundaryError("UNAVAILABLE", "문진 스키마가 없다")
                 except BoundaryError as e:
@@ -96,7 +176,11 @@ def main() -> int:
         log.error("OPS_INGEST_TOKEN이 필요하다")
         return 2
     store = LogStore.sqlite(os.environ.get("OPS_LOG_DB", "/data/log.db"))
-    srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")))
+    failures, rtoks = None, {}
+    if os.environ.get("OPS_FAILURE_DB") and os.environ.get("OPS_READ_TOKENS"):
+        failures = FailureStoreImpl.sqlite(os.environ["OPS_FAILURE_DB"])
+        rtoks = parse_read_tokens(os.environ["OPS_READ_TOKENS"])
+    srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks)
     log.info("listening on %s", srv.server_address[1])
     try:
         srv.serve_forever()

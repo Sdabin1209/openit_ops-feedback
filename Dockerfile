@@ -10,17 +10,19 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.lock \
 FROM python:3.12-slim
 ARG COMMIT=unknown
 ARG CONTRACTS_VERSION=unknown
+ARG SURVEY_SCHEMA_VERSION=unknown
 ARG TURN_ENGINE_VERSION=none
 ARG MODEL_RUNTIME_VERSION=none
-LABEL org.opencontainers.image.revision=$COMMIT \
+LABEL io.openit.service="ops-feedback" \
+      io.openit.revision=$COMMIT \
       io.openit.contracts.boundary=$CONTRACTS_VERSION \
+      io.openit.contracts.survey-schema=$SURVEY_SCHEMA_VERSION \
       io.openit.turn-engine=$TURN_ENGINE_VERSION \
-      io.openit.model-runtime=$MODEL_RUNTIME_VERSION \
-      io.openit.service=ops-feedback-ingest-api
+      io.openit.model-runtime=$MODEL_RUNTIME_VERSION
 COPY --from=build /install /usr/local
 RUN useradd --system --uid 10001 --no-create-home app && mkdir /data && chown app /data
 USER app
-ENV PYTHONUNBUFFERED=1 OPS_LOG_DB=/data/log.db OPS_PORT=8080
+ENV PYTHONUNBUFFERED=1 OPS_LOG_DB=/data/log.db OPS_FAILURE_DB=/data/failures.db OPS_PORT=8080
 VOLUME /data
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s CMD ["python", "-c", "import urllib.request,os;urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('OPS_PORT','8080')+'/healthz')"]

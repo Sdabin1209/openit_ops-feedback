@@ -157,6 +157,19 @@ def _core(c: dict) -> str:
     return sha256_hash({k: c[k] for k in c if k != "ext"} | {"ext": c.get("ext")})
 
 
+def _resolve_args(args: dict, env: dict) -> dict:
+    """설정의 {env: 변수명}을 환경 변수 값으로 바꾼다(비밀 값을 설정 파일에 두지 않는다)."""
+    out = {}
+    for k, v in (args or {}).items():
+        if isinstance(v, dict) and set(v) == {"env"}:
+            if v["env"] not in env:
+                raise ValueError(f"환경 변수 {v['env']}가 없다")
+            out[k] = env[v["env"]]
+        else:
+            out[k] = v
+    return out
+
+
 def _import(path: str):
     mod, _, fn = path.partition(":")
     return getattr(importlib.import_module(mod), fn)
@@ -175,9 +188,9 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     planner = None
     rb = cfg.get("rollback")
     rr = cfg.get("release_reader")
-    reader = _import(rr["factory"])(**(rr.get("args") or {})) if rr else None
+    reader = _import(rr["factory"])(**_resolve_args(rr.get("args"), env)) if rr else None
     if rb and rr:
-        gate = _import(cfg["gate_service"]["factory"])(**(cfg["gate_service"].get("args") or {})) if cfg.get("gate_service") else None
+        gate = _import(cfg["gate_service"]["factory"])(**_resolve_args(cfg["gate_service"].get("args"), env)) if cfg.get("gate_service") else None
         planner = RollbackPlanner(store=store, log=log, release_reader=reader, gate=gate, policy=rb, clock=clock)
     return log, store, deid, detectors, classifier, planner, reader
 
