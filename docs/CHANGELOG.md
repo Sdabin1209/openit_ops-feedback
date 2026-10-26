@@ -1,5 +1,13 @@
 # 변경 이력
 
+## 0.9.0 (제안, 새 TurnTrace 따라가기: D79, survey-service ce480ab)
+
+- 문진 스키마 사본 `_schemas/survey/v1` 동기화(`scripts/sync_vendor.sh`). 정수 버전은 1 유지(D79). 같은 정수 안의 비호환 변경이므로 survey-service와 같은 잠금으로 함께 배포해야 한다(OPEN_GAPS G11).
+- 비식별: `mask_value_keys` 정책 추가(타입 무관 마스킹), 지목한 `mask_defs`·`drop_defs`가 스키마에 없으면 `DeidError`. 예시 설정: `drop_defs: []`(QuestionBank 없어짐), `mask_value_keys: [value]`, `keep_string_keys`에 `path`, `action`, `next_item` 추가하고 `guide_id`, `pending_id`, `category` 제거. 정책 지문이 바뀐다.
+- 탐지: `GENERATOR_FALLBACK`은 `response_outcome=="fallback"`(이름 유지, 기존 `rule_to_type` 설정 호환). `PARSER_EMPTY`를 `EXTRACT_FAILED`로, `UNRECOGNIZED_STREAK`를 `REASK_STREAK`로 바꿨다. 옛 이름은 오류(대체 이름 안내). 설정을 쓰는 쪽은 `detection.detectors[].rules`와 `classification.rule_to_type`/`priority`의 규칙 ID를 바꿔야 한다.
+- 시험: 새 키 잎 22개의 처분(남김/마스킹/비움)을 하나씩 확인하고 스키마 잎 목록이 바뀌면 실패하는 시험, 세션 문서 안 대화 로그 마스킹, 숫자·불리언 값 누출, 새 FailedStep 6값, 새 규칙들. 시험용 trace가 문진 스키마를 지키는지도 검증.
+- FailureCase 등 경계 계약 레코드의 모양은 바뀌지 않았다.
+
 ## 0.8.0 (제안, boundary-contracts v2.0.0 이전)
 
 - boundary-contracts v2.0.0(스키마 2.0, D74, D75)로 올렸다. requirements, wheel 태그(`build_wheels.sh`), 스모크가 확인하는 `pipeline_schema_version`을 갱신. v1 레코드는 `UNSUPPORTED_VERSION`이다.

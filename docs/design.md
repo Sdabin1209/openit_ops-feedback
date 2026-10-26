@@ -83,15 +83,16 @@ HTTP 형식은 CR-005. 토큰은 `OPS_INGEST_TOKEN`(환경 변수).
 
 `walk(data, schema)`가 스키마 노드마다 다음을 적용한다.
 
-1. 정책 `drop_defs`에 든 정의(예: `QuestionBank`)는 `"[DROPPED]"`, `mask_defs`에 든 정의(예: `Value`)는 `"[MASKED]"`로 통째로 바꾼다. 환자 답변 값은 숫자 객체까지 이 경로로 가린다.
+1. 정책 `drop_defs`에 든 정의(v2 TurnTrace에는 쓸 곳이 없어 예시 설정은 빈 목록)는 `"[DROPPED]"`, `mask_defs`에 든 정의(예: `Value`)는 `"[MASKED]"`로 통째로 바꾼다. 환자 답변 값은 숫자 객체까지 이 경로로 가린다.
 2. `oneOf/anyOf`는 값의 모양(상수, 열거, 타입, 필수 키, 상수 판별 필드)으로 가지를 고른다. **맞는 가지가 없으면 제거**한다(문자열이면 마스킹).
 3. 열거값·상수 문자열은 남긴다(구조 정보: `Action`, `intent`, `status` 등).
 4. 그 밖의 문자열은 키 이름으로 판단한다. `pseudonymize_keys`(`session_id`, `turn_id`)는 `p-` + salt를 넣은 `canonical.sha256_hash`로 바꾼다(같은 입력은 같은 값, salt는 환경 변수). `keep_string_keys`(구조 식별자: `question_id`, `slot_id` 등)는 남긴다. `scrub_string_keys`는 정책이 준 패턴으로 치환해 남긴다. 나머지는 `unlisted_string_action`(`mask` 또는 `drop`)에 따라 `"[MASKED]"` 또는 키 제거. 어느 쪽이든 길이를 남기지 않는다.
-5. 숫자·불리언·null은 남긴다(인덱스, 오프셋, 횟수). 키가 `mask_number_keys`에 있으면 null로 바꾼다.
+5. 키가 `mask_value_keys`에 있으면 타입과 상관없이(숫자·불리언·객체 포함) 값을 `"[MASKED]"`로 바꾼다. v2의 `extract_output.values[].value`는 스키마가 형태를 정하지 않아(모델이 낸 값) 숫자·불리언 환자 답변이 `Value` 정의를 거치지 않고 지나가므로 이 키(`value`)를 지목한다. 정책이 지목한 `mask_defs`·`drop_defs` 정의가 문진 스키마에 없으면 `DeidError`(스키마가 바뀌었는데 정책이 조용히 효력을 잃는 것을 막는다).
+5-1. 숫자·불리언·null은 남긴다(인덱스, 오프셋, 횟수). 키가 `mask_number_keys`에 있으면 null로 바꾼다.
 6. 스키마에 없는 키는 제거한다(키 이름도 값일 수 있어 기록하지 않고 개수만 센다). `properties`가 없는 자유 객체는 `{}`로 비운다.
 7. 마지막으로 결과의 모든 문자열 잎(마스킹 토큰 제외)에 `residual_patterns`(이메일, 전화, 주민번호 등 정책 제공)를 검사한다. 걸리면 `DeidError`로 **실패로 닫는다**: 그 Trace는 FailureCase를 만들지 않고 `DEID_FAILED`로 표시한다(`--retry-deid-failed`로 정책을 고친 뒤 다시).
 
-결과의 통계(`deid_stats`)에는 건수와 **스키마 경로**(예: `parser_output.items[].source_text`)만 담고 값은 담지 않는다. 사용자는 이 경로 목록으로 무엇이 가려졌는지 검토해 정책을 조정한다.
+결과의 통계(`deid_stats`)에는 건수와 **스키마 경로**(예: `extract_input.user_utterance`)만 담고 값은 담지 않는다. 사용자는 이 경로 목록으로 무엇이 가려졌는지 검토해 정책을 조정한다.
 
 한계(**확인**): 이름 같은 자유 서술 속 개인정보는 패턴으로 못 잡는다. 그래서 기본 경로는 "자유 문자열 전부 마스킹"이다. 발화 문장을 남기려면(`keep_string_keys`에 추가) 이름 식별 방법을 사용자가 따로 정해야 한다. 비식별 결과는 `TurnTrace` 스키마를 통과하지 않을 수 있다(CR-001).
 
@@ -109,7 +110,10 @@ class Detector(Protocol):
 
 - 탐지기는 **비식별 뒤 trace만** 입력으로 받는다. 원본이 필요한 탐지기는 만들 수 없는 구조다.
 - `detail`에는 규칙 ID, 열거값, 개수만 담는다(개인정보 없음).
-- 규칙 기반 `RuleDetector`의 규칙(구조 필드만 본다, **확인**): `TURN_FAILURE_SIGNAL`(턴 실패 신호), `TURN_FAILED_STEPS`(`turn_result.failed_steps`), `COMMIT_ERROR`(`persistence_commit_result.status != OK`), `GENERATOR_FALLBACK`, `STAFF_ALERT_DELIVERY_FAILED`, `INTERVENTION_FAILED`, `PARSER_EMPTY`(파서 입력이 있는데 항목이 0개), `UNRECOGNIZED_STREAK`(임계값은 설정, 기본값 없음). 어떤 규칙을 켤지는 설정이 정한다.
+- 규칙 기반 `RuleDetector`의 규칙(구조 필드만 본다, **확인**): `TURN_FAILURE_SIGNAL`(턴 실패 신호), `TURN_FAILED_STEPS`(`turn_result.failed_steps`), `COMMIT_ERROR`(`persistence_commit_result.status != OK`), `GENERATOR_FALLBACK`(`response_outcome == "fallback"`, 옛 이름 유지), `STAFF_ALERT_DELIVERY_FAILED`, `INTERVENTION_FAILED`, `EXTRACT_FAILED`, `REASK_STREAK`(임계값은 설정, 기본값 없음). 어떤 규칙을 켤지는 설정이 정한다.
+  - `EXTRACT_FAILED`(v1 `PARSER_EMPTY` 대체): (1) `extract_status`가 있고 `OK`가 아니다(OUTPUT_INVALID, VIOLATION, ERROR). (2) `OK`인데 `extract_output.values`가 비고 `action`이 `params.empty_values_ok_actions`(기본 `["REDIRECT"]`)에 없다. 근거: survey-service design.md 18절 "첫 값의 문항, 값이 없으면(REDIRECT)"(학습 데이터 5,077행 전수 일치) 즉 REDIRECT만 값이 비는 것이 정상이다 **[확인: 그 문서. 데이터는 직접 보지 않았다]**. HOLD·SKIP이 값 없이 나올 수 있는지는 확인하지 못했다(나오면 허용 목록에 더한다). `action`은 비식별에서 남겨야 하므로 `keep_string_keys`에 있어야 한다.
+  - `REASK_STREAK`(v1 `UNRECOGNIZED_STREAK` 대체, planner가 없어짐): 이번 턴의 `extract_output.action`이 `params.actions`(기본 `["REASK"]`)에 있고, `session_before.dialogue_log`를 뒤에서부터 같은 action·같은 `next_item`인 항목을 세어 이번 턴 포함 `params.threshold` 이상이면 걸린다. 추출 출력이 없는 턴은 연속을 끊는다. `next_item`이 REASK가 되묻는 문항을 가리키는지는 문서로 확인하지 못했다(**미확인**). 같은 값끼리 비교하므로 규칙은 그와 무관하게 일관된다. 임계값은 사용자 결정 전이라 예시 설정에서 꺼 둔다.
+  - 옛 이름 `PARSER_EMPTY`·`UNRECOGNIZED_STREAK`는 뜻이 달라져 받지 않는다(설정에 있으면 대체 이름을 알리는 오류, `enabled:false`여도). `TURN_FAILED_STEPS`는 `phase:step` 문자열을 그대로 남기므로 새 `step` 값(`LoRA-A`, `VALIDATE`, `COMMIT`, `DELIVER_STAFF`, `LoRA-B`, `DELIVER_FRONT`)에서도 그대로 동작한다(시험으로 확인).
 - 교체: 설정의 `detection.detectors`에 `{factory: "모듈:함수", args: {...}}`로 다른 `Detector`(예: 모델 기반, 사람 신고)를 더한다. 반환한 `Detection.method`가 `FailureCase.detection_method`(RULE, MODEL, HUMAN, FEEDBACK)가 된다.
 - 규칙이 놓치는 것(**미정**): 의미적 오류(잘못 이해했지만 구조는 정상인 턴)는 규칙으로 못 잡는다. 사람 신고(FEEDBACK/HUMAN) 경로와 모델 탐지기는 후속 구간이다.
 

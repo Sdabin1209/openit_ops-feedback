@@ -6,7 +6,7 @@
   "source_release_id": "rel-0002",
   "runtime_contract_version": 1,
   "deidentified": true,
-  "deidentified_trace_ref": "tr-e047b26411e08169d04f2cc43c8549e6",
+  "deidentified_trace_ref": "tr-a55262e63a37e3ea8c8a54b49932f403",
   "failure_type": "T-FALLBACK",
   "detection_method": "RULE",
   "review_status": "PENDING",
@@ -22,16 +22,28 @@
       "deid_policy_id": "test-policy",
       "deid_stats": {
         "pseudonymized": 3,
-        "masked_strings": 6,
+        "masked_strings": 10,
+        "dropped_free_objects": 4,
+        "masked_by_key": 1,
         "masked_paths": [
+          "extract_input.current_question",
+          "extract_input.user_utterance",
+          "extract_output.note",
+          "extract_output.reason",
+          "extract_output.values[].key",
+          "extract_output.values[].precision",
+          "extract_output.values[].status",
+          "extract_output.values[].value",
           "frontend_message.utterance",
-          "generator_output.response_text",
-          "parser_input.utterance",
-          "parser_output.items[].evidence[].text",
-          "parser_output.items[].source_text",
-          "parser_output.items[].value"
+          "response_input.topic",
+          "response_output"
         ],
-        "dropped_paths": []
+        "dropped_paths": [
+          "extract_input.state",
+          "extract_protections",
+          "response_input.next",
+          "response_protections"
+        ]
       }
     }
   }

@@ -9,52 +9,41 @@
   },
   "intervention_decision": null,
   "orchestrator_input": null,
-  "parser_input": {
-    "utterance": "[MASKED]",
-    "last_directive": null,
-    "awaiting_questions": [],
-    "question_names": [],
-    "answered_slots": [],
-    "guide_list": []
+  "extract_input": {
+    "question_id": "Q1",
+    "current_question": "[MASKED]",
+    "user_utterance": "[MASKED]",
+    "state": {}
   },
-  "parser_output": {
-    "items": [
+  "extract_output": {
+    "values": [
       {
-        "item_no": 0,
-        "target": {
-          "question_id": "q1",
-          "repeat_key": "",
-          "slot_id": "sys"
-        },
+        "key": "[MASKED]",
         "value": "[MASKED]",
-        "source_text": "[MASKED]",
-        "intent": "ANSWERED_INTENT",
-        "progress_op": null,
-        "guide_id": null,
-        "evidence": [
-          {
-            "start": 0,
-            "end": 3,
-            "offset_unit": "unicode_code_point",
-            "text": "[MASKED]"
-          }
-        ]
+        "precision": "[MASKED]",
+        "status": "[MASKED]",
+        "save": true
       }
-    ]
+    ],
+    "action": "NEXT",
+    "next_item": "Q2",
+    "reason": "[MASKED]",
+    "targets": [],
+    "note": "[MASKED]"
   },
-  "normalizer_input": null,
-  "normalizer_output": null,
-  "judge_input": null,
-  "judge_output": null,
-  "record_writer_input": null,
-  "record_writer_output": null,
-  "planner_input": null,
-  "planner_output": null,
-  "generator_input": null,
-  "generator_output": {
-    "response_text": "[MASKED]",
-    "is_fallback": true
+  "extract_attempts": 1,
+  "extract_status": "OK",
+  "extract_protections": {},
+  "validation_ok": true,
+  "validation_violations": [],
+  "response_input": {
+    "action": "NEXT",
+    "topic": "[MASKED]",
+    "next": {}
   },
+  "response_output": "[MASKED]",
+  "response_outcome": "fallback",
+  "response_protections": {},
   "frontend_input": null,
   "staff_console_input": null,
   "dispatch_input": null,

@@ -27,7 +27,7 @@ echo "readyz:  $(curl -fsS http://127.0.0.1:$PORT/readyz)"
 [ "$($DOCKER exec $NAME id -u)" != "0" ] || { echo "root로 실행 중"; exit 1; }
 BODY=$(python3 - <<'PY'
 import json
-keys="session_id turn_id contract_version frontend_message intervention_decision orchestrator_input parser_input parser_output normalizer_input normalizer_output judge_input judge_output record_writer_input record_writer_output planner_input planner_output generator_input generator_output frontend_input staff_console_input dispatch_input dispatch_output orchestrator_output session_before session_after log_entry persistence_load_request persistence_load_result persistence_commit_request persistence_commit_result".split()
+keys="session_id turn_id contract_version frontend_message intervention_decision orchestrator_input extract_input extract_output extract_attempts extract_status extract_protections validation_ok validation_violations response_input response_output response_outcome response_protections frontend_input staff_console_input dispatch_input dispatch_output orchestrator_output session_before session_after log_entry persistence_load_request persistence_load_result persistence_commit_request persistence_commit_result".split()
 t={k:None for k in keys}; t.update(session_id="s-smoke", turn_id="t-smoke", contract_version=1)
 print(json.dumps({"pipeline_schema_version":"2.0","release_id":"rel-smoke","runtime_contract_version":1,"session_id":"s-smoke","turn_id":"t-smoke","sent_at":"2026-10-15T00:00:00Z","trace":t}))
 PY
@@ -50,7 +50,7 @@ for k in service revision contracts.boundary contracts.survey-schema turn-engine
 done
 # 검토 게시: 실패 턴을 보내고 컨테이너 안에서 잡을 한 번 돌려 사례를 만든 뒤 HTTP로 검토한다
 FAIL=$(echo "$BODY" | python3 -c 'import json,sys
-b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"]["generator_output"]={"response_text":"x","is_fallback":True}; print(json.dumps(b))')
+b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"]["response_output"]="x"; b["trace"]["response_outcome"]="fallback"; print(json.dumps(b))')
 curl -fsS -X POST -H "Authorization: Bearer smoke-token" -d "$FAIL" http://127.0.0.1:$PORT/v1/traces >/dev/null
 sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/job.example.yaml > /tmp/smoke-job-$$.yaml
 $DOCKER cp /tmp/smoke-job-$$.yaml $NAME:/tmp/job.yaml; rm -f /tmp/smoke-job-$$.yaml

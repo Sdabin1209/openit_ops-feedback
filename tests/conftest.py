@@ -24,18 +24,19 @@ def make_trace(session_id="s-1", turn_id="t-1", **over) -> dict:
 
 
 def pii_trace(session_id="s-1", turn_id="t-1") -> dict:
-    """환자 발화에 이름·전화·이메일이 섞인 한 턴. 생성기가 폴백을 낸 실패 턴이다."""
+    """환자 발화에 이름·전화·이메일이 섞인 한 턴. LoRA-B가 서버 대체 문장을 낸 실패 턴이다."""
     utt = f"저는 {FAKE_PII['name']}이고 {FAKE_PII['phone']} 이메일은 {FAKE_PII['email']} 혈압은 120에 80이에요"
     return make_trace(
         session_id, turn_id,
         frontend_message={"session_id": session_id, "kind": "UTTERANCE", "utterance": utt},
-        parser_input={"utterance": utt, "last_directive": None, "awaiting_questions": [], "question_names": [],
-                      "answered_slots": [], "guide_list": []},
-        parser_output={"items": [{"item_no": 0, "target": {"question_id": "q1", "repeat_key": "", "slot_id": "sys"},
-                                  "value": "120", "source_text": "혈압은 120에 80", "intent": "ANSWERED_INTENT",
-                                  "progress_op": None, "guide_id": None,
-                                  "evidence": [{"start": 0, "end": 3, "offset_unit": "unicode_code_point", "text": FAKE_PII["name"]}]}]},
-        generator_output={"response_text": f"{FAKE_PII['name']}님 알겠습니다", "is_fallback": True},
+        extract_input={"question_id": "Q1", "current_question": "혈압이 어떻게 되시나요?", "user_utterance": utt,
+                       "state": {"Q1": {"sys": {"value": 120, "status": "ANSWERED"}}}},
+        extract_output={"values": [{"key": "Q1.sys", "value": 120, "precision": "exact", "status": "ANSWERED", "save": True}],
+                        "action": "NEXT", "next_item": "Q2", "reason": f"{FAKE_PII['name']}님 혈압", "targets": [], "note": utt},
+        extract_attempts=1, extract_status="OK", extract_protections={"R1": 1},
+        validation_ok=True, validation_violations=[],
+        response_input={"action": "NEXT", "topic": "혈압", "next": {"id": "Q2", "text": f"{FAKE_PII['name']}님 다음 질문"}},
+        response_output=f"{FAKE_PII['name']}님 알겠습니다", response_outcome="fallback", response_protections={"R2": 2},
     )
 
 
@@ -49,8 +50,8 @@ def base_config() -> dict:
     return {
         "storage": {"log_db": ":memory:", "failure_db": ":memory:"},
         "deid": {"policy_id": "test-policy", "pseudonymize_keys": ["session_id", "turn_id"],
-                 "keep_string_keys": ["question_id", "slot_id", "repeat_key", "guide_id", "pending_id", "code", "category"],
-                 "unlisted_string_action": "mask", "mask_defs": ["Value"], "drop_defs": ["QuestionBank"],
+                 "keep_string_keys": ["question_id", "slot_id", "repeat_key", "code", "path", "action", "next_item"],
+                 "unlisted_string_action": "mask", "mask_defs": ["Value"], "drop_defs": [], "mask_value_keys": ["value"],
                  "residual_patterns": {"email": r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
                                        "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}"}},
         "detection": {"detectors": [{"type": "rule", "rules": [{"id": "TURN_FAILURE_SIGNAL"}, {"id": "GENERATOR_FALLBACK"},

@@ -9,12 +9,14 @@ deid:
   salt_env: OPS_DEID_SALT               # 의사 식별자 salt. 환경 변수로만 받는다.
   pseudonymize_keys: [session_id, turn_id]
   # 스키마가 열거값으로 정하지 않은 자유 문자열 중 남길 키. 구조 식별자만 둔다.
-  keep_string_keys: [question_id, slot_id, repeat_key, guide_id, pending_id, code, category]
+  # action·next_item은 EXTRACT_FAILED·REASK_STREAK 규칙이 읽는다(모델 출력의 문자열이라 위반 턴에서는 임의 문자열일 수 있고, 잔존 패턴 검사만 거친다).
+  keep_string_keys: [question_id, slot_id, repeat_key, code, path, action, next_item]
   scrub_string_keys: []                 # 패턴 치환 후 남길 키(없음)
   scrub_patterns: {}
   unlisted_string_action: mask          # mask | drop
   mask_defs: [Value]                    # 환자 답변 값(숫자 포함)은 통째로 마스킹
-  drop_defs: [QuestionBank]             # 문항 정의는 릴리스 산출물이라 사례에 싣지 않는다
+  drop_defs: []                         # 지목한 정의가 문진 스키마에 없으면 비식별이 실패로 닫힌다(v2 TurnTrace에는 QuestionBank가 없다)
+  mask_value_keys: [value]              # 추출 출력의 values[].value는 스키마가 형태를 정하지 않아(숫자·불리언 가능) 키로 마스킹
   mask_number_keys: []
   residual_patterns:                    # 결과에 남으면 실패로 닫는 패턴
     email: '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
@@ -28,11 +30,11 @@ detection:
         - {id: TURN_FAILURE_SIGNAL}
         - {id: TURN_FAILED_STEPS}
         - {id: COMMIT_ERROR}
-        - {id: GENERATOR_FALLBACK}
+        - {id: GENERATOR_FALLBACK}          # response_outcome == fallback (옛 이름 유지)
         - {id: STAFF_ALERT_DELIVERY_FAILED}
         - {id: INTERVENTION_FAILED}
-        - {id: PARSER_EMPTY, enabled: false}
-        - {id: UNRECOGNIZED_STREAK, enabled: false, params: {threshold: 3}}
+        - {id: EXTRACT_FAILED, enabled: false}   # params.empty_values_ok_actions 기본 [REDIRECT]
+        - {id: REASK_STREAK, enabled: false, params: {threshold: 3}}   # 임계값은 사용자 결정 전(자리표시자)
 
 classification:                         # 분류체계는 미정(O11). 아래 값은 자리표시자다.
   default_failure_type: UNCLASSIFIED

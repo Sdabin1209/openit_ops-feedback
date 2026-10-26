@@ -39,6 +39,7 @@ class DeidPolicy:
     mask_defs: frozenset
     drop_defs: frozenset
     mask_number_keys: frozenset
+    mask_value_keys: frozenset           # 타입과 상관없이(숫자·불리언·객체·배열 포함) 값을 통째로 마스킹할 키
     unlisted_string_action: str          # "mask" | "drop"
     residual_patterns: dict
     scrub_replacements: dict
@@ -61,6 +62,7 @@ class DeidPolicy:
             mask_defs=frozenset(cfg.get("mask_defs") or []),
             drop_defs=frozenset(cfg.get("drop_defs") or []),
             mask_number_keys=frozenset(cfg.get("mask_number_keys") or []),
+            mask_value_keys=frozenset(cfg.get("mask_value_keys") or []),
             unlisted_string_action=cfg["unlisted_string_action"],
             residual_patterns=dict(pats),
             scrub_replacements=dict(cfg.get("scrub_patterns") or {}),
@@ -70,7 +72,7 @@ class DeidPolicy:
         return sha256_hash({
             "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys), "scrub": sorted(self.scrub_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
-            "num": sorted(self.mask_number_keys), "unlisted": self.unlisted_string_action,
+            "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys), "unlisted": self.unlisted_string_action,
             "residual": self.residual_patterns, "scrub_patterns": self.scrub_replacements})
 
 
@@ -163,6 +165,11 @@ class _Walker:
             return data if self._match(node, data) else self._unknown(data, path)
         if data is None:
             return None
+        if key in self.p.mask_value_keys:
+            # 스키마가 형태를 정하지 않은 값(예: 모델이 낸 추출 값)은 숫자·불리언도 환자 답변일 수 있다
+            self.stats["masked_by_key"] += 1
+            self.stats[f"path_masked:{path}"] += 1
+            return MASK
         if isinstance(data, str):
             return self._string(data, key, path)
         if isinstance(data, bool):
@@ -253,6 +260,10 @@ class Deidentifier:
         ver = envelope["runtime_contract_version"]
         schema = trace_schema(ver)
         defs = schema["$defs"]
+        stale = sorted((self.policy.mask_defs | self.policy.drop_defs) - set(defs))
+        if stale:
+            # 문진 스키마가 바뀌어 정책이 지목한 정의가 사라지면 조용히 가리지 않게 되므로 실패로 닫는다
+            raise DeidError(f"정책이 지목한 정의가 문진 스키마에 없다: {stale}")
         w = _Walker(defs, self.policy, self._salt)
         out = w.walk(envelope["trace"], {"$ref": "#/$defs/TurnTrace"}, "", "")
         if not isinstance(out, dict):
