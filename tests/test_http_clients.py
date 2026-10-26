@@ -21,13 +21,14 @@ QS = {"id": "qs-main", "version": "3", "content_hash": "sha256:" + "1" * 64}
 
 
 def _manifest(rid):
-    m = {"pipeline_schema_version": "1.1", "release_id": rid, "created_at": "2026-10-14T00:00:00Z", "gate_decision_id": "gd-1",
+    m = {"pipeline_schema_version": "2.0", "release_id": rid, "created_at": "2026-10-14T00:00:00Z", "gate_decision_id": "gd-1",
          "question_set": QS,
          "lora_a": {"id": "lora-a", "version": "1", "content_hash": "sha256:" + "2" * 64},
          "lora_b": {"id": "lora-b", "version": "1", "content_hash": "sha256:" + "3" * 64},
          "runtime_contract_version": 1, "turn_engine_version": "0.2.0", "model_runtime_version": "0.4.0",
          "adapters": {r: {"adapter_hash": "sha256:" + "4" * 64, "serving_config": {"k": 1},
-                          "serving_config_hash": sha256_hash({"k": 1})} for r in ("LORA_A", "LORA_B")}}
+                          "serving_config_hash": sha256_hash({"k": 1}),
+                          "system_prompt": {"path": "system_prompt.txt", "sha256": "sha256:" + "5" * 64}} for r in ("LORA_A", "LORA_B")}}
     m["content_hash"] = content_hash(m)
     return m
 
@@ -45,16 +46,16 @@ class MiniReleaseServer:
             def do_GET(self):
                 outer.seen.append(self.headers.get("Authorization"))
                 if self.headers.get("Authorization") != "Bearer " + outer.token:
-                    return self._send(403, {"pipeline_schema_version": "1.1", "code": "PERMISSION_DENIED", "message": "no", "retryable": False})
+                    return self._send(403, {"pipeline_schema_version": "2.0", "code": "PERMISSION_DENIED", "message": "no", "retryable": False})
                 if self.path == "/v1/active-pointer":
-                    return self._send(200, {"item": {"pipeline_schema_version": "1.1", "release_id": "rel-0002", "pointer_version": 1,
+                    return self._send(200, {"item": {"pipeline_schema_version": "2.0", "release_id": "rel-0002", "pointer_version": 1,
                                                      "activated_at": "2026-10-15T00:00:00Z", "cause": "ACTIVATE"}})
                 if self.path.startswith("/v1/releases/"):
                     rid = self.path.rsplit("/", 1)[1]
                     if rid == "rel-missing":
-                        return self._send(404, {"pipeline_schema_version": "1.1", "code": "NOT_FOUND", "message": "x", "retryable": False})
+                        return self._send(404, {"pipeline_schema_version": "2.0", "code": "NOT_FOUND", "message": "x", "retryable": False})
                     return self._send(200, _manifest(rid))
-                self._send(404, {"pipeline_schema_version": "1.1", "code": "NOT_FOUND", "message": "x", "retryable": False})
+                self._send(404, {"pipeline_schema_version": "2.0", "code": "NOT_FOUND", "message": "x", "retryable": False})
 
             def _send(self, code, body):
                 raw = json.dumps(body).encode()

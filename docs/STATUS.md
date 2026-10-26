@@ -36,3 +36,13 @@
 ## 막힌 것
 
 없음. 확정이 필요한 경계 사항은 CR-001~005.
+
+## 2026-10-27 boundary-contracts v2.0.0 이전 (브랜치 migrate-contracts-2.0.0)
+
+정규화·판정 결합 확인(코드로 읽은 것):
+- 비식별 처리기(`deid.py`)는 TurnTrace 정의를 걷는 범용 허용 목록 방식이라 정규화·판정 단계 코드에 묶여 있지 않다. 단, 설정 예시의 `mask_defs: [Value]`, `drop_defs: [QuestionBank]`, `keep_string_keys`는 v1 문진 스키마(`_schemas/survey/v1/TurnTrace.json`)의 정의·키 이름이다. 새 TurnTrace가 오면 정책 설정을 다시 맞춰야 한다.
+- 실패 유형 분류(`Classifier`)는 규칙 ID -> failure_type 설정 대응이고 코드에 유형 값이 없다. 정규화·판정과 무관하다.
+- 탐지 규칙(`detect.py`) 중 v1 trace 필드를 읽는 것: `GENERATOR_FALLBACK`(`generator_output.is_fallback`), `PARSER_EMPTY`(`parser_input`, `parser_output.items`), `UNRECOGNIZED_STREAK`(`planner_output.planner_record_update.unrecognized_streak`), `TURN_FAILED_STEPS`·`STAFF_ALERT_DELIVERY_FAILED`(`log_entry`), `INTERVENTION_FAILED`(`orchestrator_output`). 앞의 세 규칙이 정규화·판정·Plan 쪽 v1 필드에 직접 묶여 있다. 나머지는 구조·전달 필드다.
+- 확인하지 못한 것: v2 TurnTrace의 키. `survey-service/schema`의 `CONTRACT_VERSION`은 아직 1이고 TurnTrace도 v1 형태라 v2 trace 키를 읽을 수 없었다. 그래서 규칙과 비식별 사본은 손대지 않았다(survey-service 이전 뒤 변경 필요).
+
+시험: `.venv/bin/python -m pytest -q` 133 통과, 0 실패. `scripts/smoke.sh` SMOKE OK (v2.0.0 wheel, 이 WSL 한 환경에서만 확인).

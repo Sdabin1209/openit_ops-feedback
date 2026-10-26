@@ -172,8 +172,8 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 if not isinstance(body, dict) or set(body) - {"review_status", "expected", "expected_kind", "reviewed_input"} or "review_status" not in body:
                     raise BoundaryError("INVALID_RECORD", "본문은 {review_status, expected?, expected_kind?}")
                 exp = body.get("expected")
-                if exp is not None and not isinstance(exp, dict):
-                    raise BoundaryError("INVALID_RECORD", "expected는 객체")
+                if exp is not None and not isinstance(exp, (dict, str)):
+                    raise BoundaryError("INVALID_RECORD", "expected는 객체(LORA_A) 또는 문자열(LORA_B)")
                 ri = body.get("reviewed_input")
                 if ri is not None and not isinstance(ri, dict):
                     raise BoundaryError("INVALID_RECORD", "reviewed_input은 객체")

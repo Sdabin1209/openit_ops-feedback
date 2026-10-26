@@ -61,7 +61,7 @@ python3 -m venv .venv
 ```
 OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api
 # 컨테이너
-scripts/build_wheels.sh   # git archive v1.3.0 -> wheel (build/wheels)
+scripts/build_wheels.sh   # git archive v2.0.0 -> wheel (build/wheels)
 docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short HEAD) .
 docker run -p 8080:8080 -v ops-log:/data -e OPS_INGEST_TOKEN=... ops-feedback-ingest
 ```
@@ -85,7 +85,7 @@ OPS_DEID_SALT=... python -m ops_feedback.job --config config/job.yaml
 
 ## 검토
 
-HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMISSED|PENDING, expected?, expected_kind?, reviewed_input?}`(`reviewed_input`은 개인정보를 뺀 문장으로 검토자가 직접 쓴 입력이며 expected_kind에 맞는 UtteranceParserInput|ResponseGeneratorInput), `Authorization: Bearer <검토 토큰>`. 201이면 새 version, 같은 검토 재전송은 200과 같은 결과, 없는 사례는 404. `expected`는 CONFIRMED에만 붙일 수 있고 `expected_kind`(PARSER|GENERATOR)가 필수이며, 비식별 trace의 `parser_input`/`generator_input`이 있고 문진 스키마 `ParserOutput`/`GeneratorOutput`을 지켜야 한다(아니면 400과 사유). `X-Openit-User: <Id 형식>` 헤더가 있으면 그 값이, 없으면 토큰 역할 이름이 `ext["ops-feedback"].reviewed_by`에 새 version마다 기록된다. 같은 검토(review_status·expected·expected_kind·reviewed_input이 최신 version과 같음)의 재전송은 200과 기존 레코드(reviewed_by 불변), 하나라도 다르면 201 새 version이다. 검토자는 읽기 면으로 비식별 trace를 보고 쓴다. 내부 호출은 `ReviewQueue(store).pending()`으로 목록, `review(case_id, "CONFIRMED"|"DISMISSED", role, expected=..., base_version=...)`로 결과 게시(새 version). 검토 화면(UI)은 아직 없다.
+HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMISSED|PENDING, expected?, expected_kind?, reviewed_input?}`(`reviewed_input`은 개인정보를 뺀 문장으로 검토자가 직접 쓴 입력이며 expected_kind에 맞는 ActionExtractionInput(LORA_A)|ResponseRequest(LORA_B)), `Authorization: Bearer <검토 토큰>`. 201이면 새 version, 같은 검토 재전송은 200과 같은 결과, 없는 사례는 404. `expected`는 CONFIRMED에만 붙일 수 있고 `expected_kind`(LORA_A|LORA_B)가 필수이며, LORA_A면 `ActionExtraction`(객체), LORA_B면 `ResponseText`(문자열)를 지켜야 한다(아니면 400과 사유). 2.0.0부터 비식별 trace에 입력 필드가 있는지는 보지 않는다. `X-Openit-User: <Id 형식>` 헤더가 있으면 그 값이, 없으면 토큰 역할 이름이 `ext["ops-feedback"].reviewed_by`에 새 version마다 기록된다. 같은 검토(review_status·expected·expected_kind·reviewed_input이 최신 version과 같음)의 재전송은 200과 기존 레코드(reviewed_by 불변), 하나라도 다르면 201 새 version이다. 검토자는 읽기 면으로 비식별 trace를 보고 쓴다. 내부 호출은 `ReviewQueue(store).pending()`으로 목록, `review(case_id, "CONFIRMED"|"DISMISSED", role, expected=..., base_version=...)`로 결과 게시(새 version). 검토 화면(UI)은 아직 없다.
 
 ## 롤백 요청
 

@@ -29,13 +29,13 @@ BODY=$(python3 - <<'PY'
 import json
 keys="session_id turn_id contract_version frontend_message intervention_decision orchestrator_input parser_input parser_output normalizer_input normalizer_output judge_input judge_output record_writer_input record_writer_output planner_input planner_output generator_input generator_output frontend_input staff_console_input dispatch_input dispatch_output orchestrator_output session_before session_after log_entry persistence_load_request persistence_load_result persistence_commit_request persistence_commit_result".split()
 t={k:None for k in keys}; t.update(session_id="s-smoke", turn_id="t-smoke", contract_version=1)
-print(json.dumps({"pipeline_schema_version":"1.0","release_id":"rel-smoke","runtime_contract_version":1,"session_id":"s-smoke","turn_id":"t-smoke","sent_at":"2026-10-15T00:00:00Z","trace":t}))
+print(json.dumps({"pipeline_schema_version":"2.0","release_id":"rel-smoke","runtime_contract_version":1,"session_id":"s-smoke","turn_id":"t-smoke","sent_at":"2026-10-15T00:00:00Z","trace":t}))
 PY
 )
 post() { curl -sS -X POST -H "Authorization: Bearer smoke-token" -H "Content-Type: application/json" -d "$BODY" http://127.0.0.1:$PORT/v1/traces; }
 R1=$(post); R2=$(post)
 echo "send1: $R1"; echo "send2: $R2"
-echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q '"pipeline_schema_version": "1.3"' || { echo "수집 확인 실패"; exit 1; }
+echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q '"pipeline_schema_version": "2.0"' || { echo "수집 확인 실패"; exit 1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces)
 [ "$code" = "403" ] || { echo "토큰 없는 요청이 거부되지 않음: $code"; exit 1; }
 rd() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -H "Authorization: Bearer $1" "http://127.0.0.1:$PORT$2"; }

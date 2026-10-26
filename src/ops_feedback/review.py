@@ -4,17 +4,17 @@ from __future__ import annotations
 from typing import Optional
 
 from boundary_contracts.errors import BoundaryError
-from jsonschema import Draft202012Validator
 
 from boundary_contracts import PIPELINE_SCHEMA_VERSION
 
 from .clock import Clock, utc_now
 from .failurestore import FailureStoreImpl
-from .schemas import trace_schema
+from .schemas import validate_record
 
-
-_INPUT_OF = {"PARSER": ("parser_input", "ParserOutput"), "GENERATOR": ("generator_input", "GeneratorOutput")}
-_INPUT_DEF = {"PARSER": "UtteranceParserInput", "GENERATOR": "ResponseGeneratorInput"}
+# 2.0.0: expected_kind는 LORA_A|LORA_B. 정답과 검토 입력은 경계 계약의 스키마로 검증한다(문진 스키마의 v1 타입이 아니다).
+_OUTPUT_DEF = {"LORA_A": "ActionExtraction", "LORA_B": "ResponseText"}      # expected: 객체 | 문자열
+_INPUT_DEF = {"LORA_A": "ActionExtractionInput", "LORA_B": "ResponseRequest"}
+_KINDS = "LORA_A|LORA_B"
 
 
 class ReviewQueue:
@@ -37,7 +37,7 @@ class ReviewQueue:
         if expected is None and reviewed_input is None and expected_kind is not None:
             raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
         if reviewed_input is not None and expected_kind not in _INPUT_DEF:
-            raise BoundaryError("INVALID_RECORD", "reviewed_input을 적을 때는 expected_kind(PARSER|GENERATOR)도 필요하다")
+            raise BoundaryError("INVALID_RECORD", "reviewed_input을 적을 때는 expected_kind(LORA_A|LORA_B)도 필요하다")
         cur = self._store.get_case(case_id)
         if base_version is not None and base_version != cur["version"]:
             raise BoundaryError("CONFLICT", f"최신 version은 {cur['version']}")
@@ -76,31 +76,19 @@ class ReviewQueue:
         new["created_at"] = self._clock()
         return self._store.publish_case(new)
 
-    def validate_expected(self, case: dict, expected: dict, kind: Optional[str]) -> None:
-        """expected가 비식별 trace의 해당 입력(parser_input|generator_input)에 대한 문진 스키마 출력인지 확인한다."""
-        if kind not in _INPUT_OF:
-            raise BoundaryError("INVALID_RECORD", "expected를 적을 때는 expected_kind(PARSER|GENERATOR)도 필요하다")
-        field, out_def = _INPUT_OF[kind]
-        trace = self._store.get_trace(case["deidentified_trace_ref"])
-        if trace.get(field) is None:
-            raise BoundaryError("INVALID_RECORD", f"이 사례의 trace에는 {field}가 없어 expected_kind={kind}를 적을 수 없다")
-        schema = trace_schema(case["runtime_contract_version"])
-        v = Draft202012Validator({"$ref": f"#/$defs/{out_def}", "$defs": schema["$defs"]})
-        errs = sorted(v.iter_errors(expected), key=lambda e: list(e.absolute_path))
-        if errs:
-            raise BoundaryError("INVALID_RECORD", f"expected가 문진 스키마 {out_def}를 위반한다",
-                                {"errors": [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in errs[:5]]})
+    def validate_expected(self, case: dict, expected, kind: Optional[str]) -> None:
+        """expected가 expected_kind의 출력 스키마(LORA_A: ActionExtraction 객체, LORA_B: ResponseText 문자열)를 지키는지 확인한다."""
+        if kind not in _OUTPUT_DEF:
+            raise BoundaryError("INVALID_RECORD", f"expected를 적을 때는 expected_kind({_KINDS})도 필요하다")
+        self._check(_OUTPUT_DEF[kind], expected, "expected")
 
     def validate_reviewed_input(self, case: dict, reviewed_input: dict, kind: str) -> None:
-        """reviewed_input이 expected_kind에 맞는 문진 스키마 입력(UtteranceParserInput|ResponseGeneratorInput)인지 확인한다."""
-        field, _ = _INPUT_OF[kind]
-        trace = self._store.get_trace(case["deidentified_trace_ref"])
-        if trace.get(field) is None:
-            raise BoundaryError("INVALID_RECORD", f"이 사례의 trace에는 {field}가 없어 expected_kind={kind}를 적을 수 없다")
-        name = _INPUT_DEF[kind]
-        schema = trace_schema(case["runtime_contract_version"])
-        v = Draft202012Validator({"$ref": f"#/$defs/{name}", "$defs": schema["$defs"]})
-        errs = sorted(v.iter_errors(reviewed_input), key=lambda e: list(e.absolute_path))
-        if errs:
-            raise BoundaryError("INVALID_RECORD", f"reviewed_input이 문진 스키마 {name}를 위반한다",
-                                {"errors": [f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in errs[:5]]})
+        """reviewed_input이 expected_kind의 입력 스키마(LORA_A: ActionExtractionInput, LORA_B: ResponseRequest)를 지키는지 확인한다."""
+        self._check(_INPUT_DEF[kind], reviewed_input, "reviewed_input")
+
+    @staticmethod
+    def _check(name: str, value, what: str) -> None:
+        try:
+            validate_record(name, value)
+        except BoundaryError as e:
+            raise BoundaryError("INVALID_RECORD", f"{what}가 경계 계약 {name}을 위반한다", e.details) from None

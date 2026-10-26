@@ -79,11 +79,11 @@ def test_review_creates_new_version_and_is_idempotent(pipeline):
     run(pipeline)
     q = ReviewQueue(pipeline["store"], clock=lambda: "2026-10-16T00:00:00Z")
     (c,), _ = q.pending()
-    r = q.review(c["case_id"], "CONFIRMED", "reviewer", expected={"items": []}, expected_kind="PARSER", failure_type="X")
-    assert r["expected_kind"] == "PARSER" and r["pipeline_schema_version"] == PIPELINE_SCHEMA_VERSION
-    assert r["version"] == 2 and r["review_status"] == "CONFIRMED" and r["expected"] == {"items": []}
+    r = q.review(c["case_id"], "CONFIRMED", "reviewer", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A", failure_type="X")
+    assert r["expected_kind"] == "LORA_A" and r["pipeline_schema_version"] == PIPELINE_SCHEMA_VERSION
+    assert r["version"] == 2 and r["review_status"] == "CONFIRMED" and r["expected"] == {"action": "NEXT", "next_item": "END", "values": []}
     assert pipeline["store"].get_case(c["case_id"], version=1)["review_status"] == "PENDING"
-    assert q.review(c["case_id"], "CONFIRMED", "reviewer", expected={"items": []}, expected_kind="PARSER", failure_type="X")["version"] == 2
+    assert q.review(c["case_id"], "CONFIRMED", "reviewer", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A", failure_type="X")["version"] == 2
     assert q.pending()[0] == []
 
 
@@ -154,10 +154,10 @@ def test_question_set_omitted_without_reader(pipeline):
 def test_reads_both_schema_versions(failure_store):
     from test_conformance_failurestore import case
     failure_store.put_trace("tr-1", {})
-    failure_store.publish_case(case("fc-a"))                                   # 1.0
-    failure_store.publish_case(case("fc-b", pipeline_schema_version="1.1", question_set=QS))
+    failure_store.publish_case(case("fc-a"))                                   # 2.0
+    failure_store.publish_case(case("fc-b", pipeline_schema_version="2.0", question_set=QS))
     got = {c["case_id"]: c for c in failure_store.list_cases()[0]}
-    assert got["fc-a"]["pipeline_schema_version"] == "1.0" and got["fc-b"]["question_set"] == QS
+    assert got["fc-a"]["pipeline_schema_version"] == "2.0" and got["fc-b"]["question_set"] == QS
 
 
 def test_expected_requires_kind(pipeline):
@@ -169,13 +169,14 @@ def test_expected_requires_kind(pipeline):
     (c,), _ = q.pending()
     with pytest.raises(BoundaryError):
         q.review(c["case_id"], "CONFIRMED", "r", expected={"items": []})
-    with pytest.raises(BoundaryError) as x:        # 이 사례의 trace에는 generator_input이 없다
-        q.review(c["case_id"], "CONFIRMED", "r", expected={"response_text": "x", "is_fallback": False}, expected_kind="GENERATOR")
-    assert "generator_input" in x.value.message
-    with pytest.raises(BoundaryError):             # 문진 스키마 위반
-        q.review(c["case_id"], "CONFIRMED", "r", expected={"items": "bad"}, expected_kind="PARSER")
-    r = q.review(c["case_id"], "CONFIRMED", "r", expected={"items": []}, expected_kind="PARSER")
-    assert r["expected_kind"] == "PARSER" and r.get("question_set") == c.get("question_set")
+    with pytest.raises(BoundaryError):             # LORA_B의 정답은 문자열이다
+        q.review(c["case_id"], "CONFIRMED", "r", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_B")
+    with pytest.raises(BoundaryError):             # v1 값은 거부
+        q.review(c["case_id"], "CONFIRMED", "r", expected="문장", expected_kind="GENERATOR")
+    with pytest.raises(BoundaryError):             # ActionExtraction 위반
+        q.review(c["case_id"], "CONFIRMED", "r", expected={"items": "bad"}, expected_kind="LORA_A")
+    r = q.review(c["case_id"], "CONFIRMED", "r", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A")
+    assert r["expected_kind"] == "LORA_A" and r.get("question_set") == c.get("question_set")
 
 
 def test_factory_args_resolve_env():

@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.8.0 (제안, boundary-contracts v2.0.0 이전)
+
+- boundary-contracts v2.0.0(스키마 2.0, D74, D75)로 올렸다. requirements, wheel 태그(`build_wheels.sh`), 스모크가 확인하는 `pipeline_schema_version`을 갱신. v1 레코드는 `UNSUPPORTED_VERSION`이다.
+- 검토(`ReviewQueue.review`, `POST /v1/cases/{id}/review`): `expected_kind`는 `LORA_A`|`LORA_B`. 옛 값 `PARSER`/`GENERATOR`는 400. `expected`는 LORA_A면 `ActionExtraction`(객체), LORA_B면 `ResponseText`(문자열)로, `reviewed_input`은 `ActionExtractionInput`|`ResponseRequest`로 경계 계약 스키마(`validate_record`)에서 검증한다. 문진 스키마의 `ParserOutput` 등으로 검증하던 경로와, 사례 trace에 `parser_input`/`generator_input`이 있어야 한다는 조건은 없앴다(v2 입력이 v1 TurnTrace 필드에서 나오지 않는다).
+- 시험: LORA_B 문자열 정답과 `ResponseRequest` 왕복, 종류와 형태가 어긋나는 거부(객체-LORA_B, 문자열-LORA_A, v1 값, 숫자, 빈 문자열) 추가.
+- 바꾸지 않은 것(survey-service가 TurnTrace를 바꿀 때까지): 비식별 처리기, 탐지 규칙, 분류. 아래 STATUS의 "정규화·판정 결합 확인" 참조.
+
 ## 0.7.0 (2026-10-15)
 
 - 검토 POST(D71): `X-Openit-User`가 있으면 그 값을, 없으면 토큰 역할 이름을 `ext["ops-feedback"].reviewed_by`에 새 version마다 기록. Id 형식이 아니면 400.

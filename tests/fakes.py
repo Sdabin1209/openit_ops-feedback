@@ -13,7 +13,7 @@ class FakeReleaseReader:
     def get_active_pointer(self):
         if self._active is None:
             return None
-        return {"pipeline_schema_version": "1.0", "release_id": self._active, "pointer_version": self._pv,
+        return {"pipeline_schema_version": "2.0", "release_id": self._active, "pointer_version": self._pv,
                 "activated_at": "2026-10-15T00:00:00Z", "cause": "ACTIVATE"}
 
     def get_release(self, release_id):
@@ -55,7 +55,7 @@ class FakeGate:
         if self.fail_times:
             self.fail_times -= 1
             raise BoundaryError("UNAVAILABLE", "게이트 일시 장애")
-        return {"pipeline_schema_version": "1.0", "request_id": request["request_id"], "status": "APPLIED",
+        return {"pipeline_schema_version": "2.0", "request_id": request["request_id"], "status": "APPLIED",
                 "decided_at": "2026-10-15T01:00:00Z",
-                "active_pointer": {"pipeline_schema_version": "1.0", "release_id": request["to_release_id"],
+                "active_pointer": {"pipeline_schema_version": "2.0", "release_id": request["to_release_id"],
                                    "pointer_version": 2, "activated_at": "2026-10-15T01:00:00Z", "cause": "ROLLBACK"}}
