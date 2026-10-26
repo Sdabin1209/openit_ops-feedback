@@ -66,7 +66,7 @@ docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short H
 docker run -p 8080:8080 -v ops-log:/data -e OPS_INGEST_TOKEN=... ops-feedback-ingest
 ```
 
-확인: `curl localhost:8080/healthz`, `/readyz`. 스모크 시험(호스트 포트는 Docker가 배정, 이미지 빌드, 기동, 수집, 중복, 인증): `scripts/smoke.sh` (WSL에서 docker가 없으면 `docker.exe`를 쓴다).
+확인: `curl localhost:8080/healthz`, `/readyz`. 스모크 시험(호스트 포트는 Docker가 배정, 이미지 빌드, 기동, 수집, 중복, 인증): `scripts/smoke.sh` (표준 `docker`만 쓴다. 실행 파일 이름은 `DOCKER` 환경 변수로만 바꾼다. 데몬에 닿지 않으면 오류로 중단한다).
 
 ## 잡 실행 (주기는 cron 등 외부에서)
 
