@@ -1,0 +1,102 @@
+# ops-feedback (운영 관측·피드백)
+
+문진 서비스가 운영 중 남긴 기록(trace)을 받아 개인정보를 지우고, 잘못된 턴(실패 사례)을 가려내 다른 영역에 돌려주는 영역이다.
+
+운영 중인 문진 서비스는 매 턴의 입출력 기록을 이 영역의 수집 서비스(ingest-api)로 보낸다. 이 영역은 원본을 `log.db`에 쌓고, 주기 잡이 비식별 처리기로만 원본을 읽어 지운 사본에서 실패 규칙을 찾아 `FailureCase`로 `failures.db`에 게시한다. 이웃 영역(합성 데이터, model-lab, 문항 저작)은 읽기 인터페이스(I7)로 이 사례를 받아 간다. 사람 검토 결과는 새 version으로 게시한다. 실패율이 기준을 넘으면 릴리스 게이트에 롤백을 "요청"한다.
+
+하지 않는 것: 롤백을 직접 수행하지 않는다(활성 포인터는 게이트만 바꾼다). 실패의 원인을 고치지 않는다. 경계 계약과 문진 스키마를 고치지 않는다(필요하면 `docs/change-requests/`). 지표 대시보드, 피드백 배포기, 검토 화면(UI)은 아직 없다(docs/STATUS.md).
+
+## 1. 전체 속의 위치
+
+| 방향 | 이웃 영역 | 인터페이스 | 내용 |
+| --- | --- | --- | --- |
+| 입력 | survey-service | I6 TraceIngest, `POST /v1/traces` | `TraceEnvelope`(한 턴의 기록). 같은 (session_id, turn_id)는 DUPLICATE |
+| 입력 | release-gate | I4 ReleaseReader (읽기) | 활성 포인터, 릴리스 목록. 사례의 `question_set` 채움 |
+| 출력 | release-gate | I5 `request_rollback` | `RollbackRequest`(근거 지표 참조 포함) |
+| 출력 | synthetic-data, model-lab, 문항 저작 | I7 FailureStore, `GET /v1/cases`, `/v1/cases/{id}`, `/v1/deidentified-traces/{ref}` | `FailureCase`(비식별 뒤), 비식별 trace |
+| 입력 | 검토자 | `POST /v1/cases/{id}/review` | 검토 결과(새 version 게시) |
+
+출처: docs/brief.md, docs/boundary.md. I4/I5의 실제 SDK 연결은 release-gate 배포 뒤라 아직 시험 대역만 쓴다(docs/STATUS.md).
+
+## 2. 구조
+
+| 경로 | 역할 |
+| --- | --- |
+| `src/ops_feedback/logstore.py` | 로그 저장소와 I6 수집. 원본을 비식별 처리기에만 보여 준다 |
+| `src/ops_feedback/api.py` | ingest-api(HTTP), `/healthz`, `/readyz`, I7 읽기, 검토 게시 |
+| `src/ops_feedback/deid.py` | 비식별 처리기(허용 목록 방식). 원본을 읽는 유일한 부분 |
+| `src/ops_feedback/detect.py` | 실패 탐지 규칙과 분류 |
+| `src/ops_feedback/review.py` | 사람 검토 큐 |
+| `src/ops_feedback/failurestore.py` | 실패 사례 저장소(I7), SQLite와 메모리 구현 |
+| `src/ops_feedback/rollback.py` | 지표 집계와 롤백 요청 생성 |
+| `src/ops_feedback/job.py` | 주기 잡 1회 실행 명령 |
+| `config/job.example.yaml` | 잡 설정 예시(값은 사용자가 정한 기준이 아님) |
+| `tests/` | 수용 시험과 적합성 시험(`tests/fakes.py`는 이웃 대역) |
+| `examples/` | 입출력 예시 JSON |
+| `scripts/` | `smoke.sh`(이미지 스모크), `build_wheels.sh`, `sync_vendor.sh`, `make_examples.py` |
+| `Dockerfile` | ingest-api 이미지 |
+| `docs/` | 설계, 경계, 런북, 상태, 변경 이력, 변경 요청 |
+
+```
+survey-service --I6--> ingest-api --> log.db (원본)
+                                          | 비식별 처리기만 읽음
+                                          v
+              주기 잡: 비식별 -> 탐지 -> 분류 -> 게시 --> failures.db --I7--> 이웃 영역
+                                          |
+                          롤백 평가 --I4 읽기 / I5 요청--> release-gate
+```
+
+## 3. 실행 방법
+
+전제: Python 3.10 이상(`pyproject.toml`), git. 스모크와 이미지에는 Docker. `../boundary-contracts`가 이웃 폴더에 있어야 한다(런북의 설치 명령).
+
+```
+python3 -m venv .venv
+.venv/bin/pip install -e ../boundary-contracts -e '.[dev]'     # 설치 (docs/runbook.md)
+.venv/bin/python -m pytest -q                                   # 시험
+scripts/smoke.sh                                                # 이미지 빌드, 기동, 수집, 인증 확인 (Docker 필요)
+```
+
+- ingest-api: `OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api` (개발용 환경 변수 직접 지정).
+- 잡 1회: `OPS_DEID_SALT=... python -m ops_feedback.job --config config/job.yaml` (`config/job.example.yaml`을 복사해 사용. 옵션 `--limit --reprocess --retry-deid-failed --no-rollback`).
+- 비밀(D84): 운영에서는 토큰과 salt를 파일에 두고 경로만 `OPS_INGEST_TOKEN_FILE`, `OPS_READ_TOKENS_FILE`, `OPS_REVIEW_TOKENS_FILE`, `OPS_DEID_SALT_FILE`로 준다. 잡 설정 파일에 비밀 값을 적으면 잡이 시작을 거부한다. 상세는 docs/runbook.md.
+
+이 문서를 쓰는 세션에서 실제로 돌린 것: `.venv/bin/python -m pytest --collect-only -q`(195건 수집), `.venv/bin/python -m ops_feedback.job --help`(옵션 목록 출력). 돌리지 않은 것: pytest 실행 전체, `scripts/smoke.sh`, 이미지 빌드, ingest-api 기동, 잡 실행, `pip install`.
+
+## 4. 현재 상태
+
+확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
+- docs/STATUS.md 마지막 기록: `pytest -q` 133 통과 0 실패, `scripts/smoke.sh` SMOKE OK(boundary-contracts v2.0.0 wheel, WSL 한 환경에서만).
+- docs/CHANGELOG.md 최신은 0.10.1(boundary-contracts v2.0.2, 비밀 NAME_FILE). 이 세션의 수집 건수는 195건으로, STATUS의 133과 다르다(아래 어긋남 참고).
+- 구현됨: I6/I7 SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
+
+확인하지 못한 것:
+- v2 TurnTrace 전체 키에 대한 규칙 동작(STATUS: 당시 v2 trace 키를 읽을 수 없었다고 기록. 이후 0.9.0에서 따라갔다는 기록은 있으나 이 세션에서 시험을 돌리지 않았다).
+- 두 번째 깨끗한 환경에서의 시험·스모크. I4/I5 실제 SDK와의 연결. CI 이미지 게시와 digest 제출(D24).
+- `REASK_STREAK`의 `next_item`이 되묻는 문항을 가리키는지(docs/design.md 5절 미확인).
+
+## 5. 이 영역의 열린 항목
+
+출처: `head/docs/OPEN_GAPS.md`(읽기 전용으로 읽음). 이 영역 이름이 직접 적힌 것만 골랐다.
+
+| ID | 요약 | 막고 있는 것 |
+| --- | --- | --- |
+| G14 | `REASK_STREAK` 임계값은 자리표시자, `EXTRACT_FAILED`가 값 없는 HOLD·SKIP을 실패로 볼지, `extract_protections` 건수를 비식별에서 남길지 미정 | 사용자 결정(G12와 함께) |
+| G11 | 문진 스키마 정수 버전 1 안의 비호환 변경. survey-service와 ops-feedback은 같은 잠금으로 함께 배포해야 한다(D79) | 다른 영역 의존(survey-service), 운영 데이터 전에 TurnTrace 버전 필드 검토 |
+| D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
+| D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
+
+GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인).
+
+## 6. 더 자세한 문서
+
+| 문서 | 내용 |
+| --- | --- |
+| `docs/brief.md` | 영역의 목적, 소유·제공·소비, 수용 기준 |
+| `docs/design.md` | 내부 설계: 저장소, 수집, 비식별, 탐지, 분류, 롤백 요청, 잡 |
+| `docs/boundary.md` | 소유 저장소, 제공 인터페이스, 지원 버전, 장애 영향, 비밀 전달 |
+| `docs/runbook.md` | 설치·실행, 환경 변수, 잡 설정 키, 비밀 NAME_FILE, 장애 대응 |
+| `docs/STATUS.md` | 한 일, 시험 결과, 남은 일 |
+| `docs/CHANGELOG.md` | 변경 이력 |
+| `docs/change-requests/` | 헤드에게 낸 변경 요청 CR-001~005 |
+| `CLAUDE.md` | 이 영역 에이전트용 지침 |
