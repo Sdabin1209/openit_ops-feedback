@@ -147,7 +147,10 @@ class RuleDetector:
                 raise ValueError(f"없어진 규칙: {rid}. 대체: {RETIRED_RULES[rid]}")
             if rid not in RULES:
                 raise ValueError(f"알 수 없는 규칙: {rid}")
-            if r.get("enabled", True):
+            en = r.get("enabled", True)
+            if not isinstance(en, bool):         # 문자열 "false"는 참으로 평가되어 끈 규칙이 켜진다
+                raise ValueError(f"규칙 {rid}의 enabled는 true 또는 false(불리언)여야 한다")
+            if en:
                 self._rules.append((rid, r.get("params") or {}))
         # 설정 오류를 조기에 드러낸다
         for rid, params in self._rules:

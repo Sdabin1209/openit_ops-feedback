@@ -18,35 +18,63 @@ _INPUT_DEF = {"LORA_A": "ActionExtractionInput", "LORA_B": "ResponseRequest"}
 _KINDS = "LORA_A|LORA_B"
 
 
-# 검토자가 직접 쓰는 expected·reviewed_input은 비식별 처리기를 거치지 않으므로, 잔존 패턴(이메일·전화·주민번호)이 든 값은 받지 않는다.
+# 검토자가 직접 쓰는 expected·reviewed_input은 비식별 처리기를 거치지 않으므로, 개인정보 패턴(이메일·전화·주민번호)이 든 값은 받지 않는다.
 # 이름·주소 같은 것은 패턴으로 알 수 없다: 검토 화면 안내와 사람 책임이다(docs/boundary.md). 값은 오류에 싣지 않는다.
+# 시간: 전화·주민번호 패턴은 한도가 정해진 반복만 있어 입력 길이에 선형이다. 이메일은 '@'가 없으면 정규식 자체를 돌리지 않고, '@' 하나마다
+# 앞뒤 고정 길이 창만 본다(점검 round2 M2: 앞쪽 무제한 문자 클래스 정규식은 '@' 없는 긴 문자열에서 제곱 시간이었다).
+# 문자열 하나의 길이는 MAX_FIELD_CHARS로 막는다(검토자가 쓰는 문장·JSON 값으로 충분한 임의 상한, 측정 안 함, docs/adr/0008).
+MAX_FIELD_CHARS = 20_000
+_EMAIL_LOCAL = re.compile(r"[A-Za-z0-9._%+-]")
+_EMAIL_TAIL = re.compile(r"[A-Za-z0-9.-]{0,254}")
 DEFAULT_REVIEW_PATTERNS = {
-    "email": r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
     "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}",
     "rrn_kr": r"\d{6}[- ]?[1-4]\d{6}",
 }
 
 
-def _strings(v):
+def _has_email(s: str) -> bool:
+    """local@domain.tld 모양이 있는가. '@' 위치마다 앞 문자 하나와 뒤 최대 254자만 본다(선형)."""
+    i = s.find("@")
+    while i != -1:
+        if i > 0 and _EMAIL_LOCAL.match(s[i - 1]):
+            dom = _EMAIL_TAIL.match(s, i + 1).group(0)
+            k = dom.rfind(".")
+            # 마지막 '.' 뒤가 영문 2자 이상이면 정규식 `\.[A-Za-z]{2,}`와 같은 뜻(그 앞 도메인 부분은 길이 제한 없는 `[A-Za-z0-9.-]*`)
+            while k != -1:
+                if k >= 1 and dom[k + 1:k + 3].isalpha() and dom[k + 1:k + 3].isascii() and len(dom[k + 1:k + 3]) == 2:
+                    return True
+                k = dom.rfind(".", 0, k)
+        i = s.find("@", i + 1)
+    return False
+
+
+def _strings(v, depth=0):
+    if depth > 64:
+        raise BoundaryError("INVALID_RECORD", "검토 입력의 중첩이 너무 깊다")
     if isinstance(v, str):
         yield v
     elif isinstance(v, list):
         for x in v:
-            yield from _strings(x)
+            yield from _strings(x, depth + 1)
     elif isinstance(v, dict):
         for k, x in v.items():
             yield str(k)
-            yield from _strings(x)
+            yield from _strings(x, depth + 1)
 
 
 class ReviewQueue:
     def __init__(self, store: FailureStoreImpl, *, clock: Clock = utc_now, residual_patterns: Optional[dict] = None) -> None:
         self._store = store
         self._clock = clock
-        self._pii = {n: re.compile(p) for n, p in (residual_patterns if residual_patterns is not None else DEFAULT_REVIEW_PATTERNS).items()}
+        # 호출자가 준 패턴은 `email`이라는 이름이면 위의 선형 탐지로 대신하고, 나머지는 정규식 그대로 쓴다(길이는 MAX_FIELD_CHARS로 이미 묶였다).
+        self._pii = {n: re.compile(p) for n, p in (residual_patterns if residual_patterns is not None else DEFAULT_REVIEW_PATTERNS).items() if n != "email"}
 
     def _reject_pii(self, value, what: str) -> None:
         for s_ in _strings(value):
+            if len(s_) > MAX_FIELD_CHARS:
+                raise BoundaryError("INVALID_RECORD", f"{what}의 문자열이 {MAX_FIELD_CHARS}자를 넘는다")
+            if _has_email(s_):
+                raise BoundaryError("INVALID_RECORD", f"{what}에 개인정보로 보이는 패턴(email)이 있다. 개인정보 없이 다시 쓴다")
             for name, rx in self._pii.items():
                 if rx.search(s_):
                     raise BoundaryError("INVALID_RECORD", f"{what}에 개인정보로 보이는 패턴({name})이 있다. 개인정보 없이 다시 쓴다")

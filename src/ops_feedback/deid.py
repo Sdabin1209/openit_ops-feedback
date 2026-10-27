@@ -20,6 +20,7 @@ from boundary_contracts.canonical import sha256_hash
 from .logstore import DeidentifierView
 from .schemas import trace_schema
 
+MAX_LEAF_CHARS = 4096     # 임의 상한, 측정 안 함(docs/adr/0008). 허용 목록을 통과한 문자열은 패턴 검사(최대 160자)나 스키마 열거값이다.
 MASK = "[MASKED]"
 DROPPED = "[DROPPED]"
 _DROP = object()
@@ -302,6 +303,10 @@ class Deidentifier:
         if not isinstance(out, dict):
             raise DeidError("trace 전체가 제거되었다")
         for s in _leaf_strings(out):
+            if len(s) > MAX_LEAF_CHARS:
+                # 잔존 패턴은 설정의 정규식이라 입력 길이에 선형이라는 보장이 없다(점검 round2 M2). 비식별 뒤에 이렇게 긴 문자열이 남는 것은
+                # 비정상이므로(식별자·열거값·마스크만 남는다) 정규식을 돌리지 않고 닫는다.
+                raise DeidError("비식별 결과에 비정상적으로 긴 문자열이 남았다")
             if s in (MASK, DROPPED) or _PSEUDONYM.fullmatch(s):
                 continue          # 의사 식별자는 16진 해시라 숫자열이 우연히 전화번호 패턴에 걸릴 수 있다
             for name, rx in self._residual.items():

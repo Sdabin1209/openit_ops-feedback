@@ -28,7 +28,8 @@ def check_inline_secrets(value: Any, path: str = "config") -> None:
 
 FOREVER = "forever"
 # 출처: D88/U4 최소 보존 잠정 기본값(원본 30일, 사례 180일, 기록 1년). docs/adr/0007-retention-defaults.md
-RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
+# failed_raw_days: 재시도 대상(DEID_FAILED, PUBLISH_FAILED) 원본의 기한. D88에 없는 값이라 근거 기록 없음(raw_days의 3배인 임의값, 사용자 결정 대상)
+RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365, "failed_raw_days": 90}
 REQUIRED_TOP = ("storage", "deid", "detection", "classification", "retention")
 
 
@@ -61,9 +62,10 @@ def load_config(path: str | Path) -> dict:
             raise ValueError(f"retention.{key}는 0보다 큰 일 수 또는 \"forever\"")
     if ret.get("raw_after_processing", "keep") not in ("keep", "minimize"):
         raise ValueError("retention.raw_after_processing은 keep 또는 minimize")
-    for flag in ("purge_unprocessed",):
+    for flag in ("purge_unprocessed", "cases_purge_confirmed"):
+        # 문자열 "false"는 참으로 평가되어 보호를 끄거나(확정 사례 삭제) 켜 버린다: 불리언만 받는다
         if flag in ret and not isinstance(ret[flag], bool):
-            raise ValueError(f"retention.{flag}는 true 또는 false(문자열 불가)")
+            raise ValueError(f"retention.{flag}는 true 또는 false(YAML 불리언)여야 한다. 문자열·숫자는 거부한다")
     bs = (cfg.get("job") or {}).get("batch_size", 1)
     if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
         raise ValueError("job.batch_size는 1 이상의 정수")

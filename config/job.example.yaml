@@ -19,7 +19,7 @@ deid:
   mask_value_keys: [value]              # 추출 출력의 values[].value는 스키마가 형태를 정하지 않아(숫자·불리언 가능) 키로 마스킹
   mask_number_keys: []
   residual_patterns:                    # 결과에 남으면 실패로 닫는 패턴
-    email: '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    email: '[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}'     # 길이를 묶어 입력 길이에 선형(점검 round2 M2)
     phone_kr: '0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}'
     rrn_kr: '\d{6}[- ]?[1-4]\d{6}'
 
@@ -45,6 +45,8 @@ retention:                              # D88/U4 최소 보존 잠정 기본값(
   raw_days: 30                          # 처리 끝난 원본 Trace(처리 표시가 없는 원본은 지우지 않는다)
   cases_days: 180                       # 비식별 실패 사례(모든 version)와 고아 trace
   metrics_days: 365                     # 지표 스냅샷·롤백 요청·영수증
+  failed_raw_days: 90                   # 재시도 대상(DEID_FAILED, PUBLISH_FAILED) 원본: raw_days의 3배, 근거 기록 없는 임의값(사용자 결정 대상)
+  # cases_purge_confirmed: true         # 불리언만(문자열 "false"는 시작 거부). 기본 true = 잡은 확정(CONFIRMED) 사례도 cases_days 뒤 지운다. admin purge는 반대로 --include-confirmed가 있어야 지운다
   raw_after_processing: keep            # keep | minimize(처리가 끝나면 봉투 내용을 즉시 지우고 중복 판별 키·해시·시각만 남김)
 
 # rollback 항목을 두면 롤백 평가를 한다. release_reader가 없으면 평가를 건너뛴다.

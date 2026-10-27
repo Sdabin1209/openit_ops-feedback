@@ -125,6 +125,7 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 ## 보존·삭제·스키마 (0.12.0)
 
 - 기본 보존: 원본 30일(처리 끝난 것만), 사례 180일, 지표·롤백 기록 365일(`retention.*`, docs/adr/0007). `null`은 거부, 무기한은 `"forever"`(경고). 보고서 `warnings`에 `RETENTION_FOREVER`, `UNPROCESSED_RAW_PAST_RETENTION`이 나오면 확인한다.
+- 기본값 차이: 잡은 확정 사례도 `cases_days` 뒤 지운다(`cases_purge_confirmed: true`), `admin purge`는 `--include-confirmed` 없이는 보존한다. 재시도 대상 원본은 `failed_raw_days`(기본 90일)에 지운다. `delete-session`이 종료 코드 3이면 지울 것을 찾지 못한 것이다(salt·정책 확인).
 - 요청 시 삭제: `OPS_DEID_SALT_FILE=... python -m ops_feedback.admin delete-session --session-id <ID> [--dry-run]`(저장소는 서버와 같은 `OPS_*_DATABASE_URL[_FILE]`). 출력은 건수만. 지표·롤백 기록(aux)은 세션 정보가 없어 지우지 않는다.
 - 수동 정리: `admin purge --raw-days N --cases-days M --metrics-days K [--include-confirmed] [--include-unprocessed]`, `admin minimize-raw`.
 - DDL 없는 앱 계정: 소유자 계정으로 `admin migrate`를 실행한 뒤 서버·잡을 `OPS_DB_SCHEMA=verify`로 띄운다. 앱 계정에는 스키마 USAGE, 표 SELECT/INSERT/UPDATE/DELETE, 시퀀스 USAGE/SELECT만 준다(`tests/test_audit_fixes.py::test_verify_mode_needs_no_ddl_privilege`가 이 권한으로 시작·수집을 확인).

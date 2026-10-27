@@ -1,5 +1,14 @@
 # 변경 이력
 
+## 0.12.1 (제안, 독립 재점검 round2)
+
+- M2 검토 게시 이메일 패턴이 제곱 시간이던 것: 검토 입력의 이메일 탐지를 `@` 위치마다 고정 길이 창만 보는 선형 코드로 바꾸고, 전화·주민번호는 한도 있는 정규식 그대로(선형 시험). 문자열 필드 20,000자 상한(초과 400), 검토 본문 1 MiB 상한(수집은 8 MiB 그대로), 중첩 깊이 64. 비식별 결과의 문자열이 4,096자를 넘으면 설정의 잔존 정규식을 돌리지 않고 `DeidError`로 닫는다. 예시 설정의 이메일 잔존 패턴은 길이를 묶었다(deploy 설정도 같게 요청). 이 영역의 모든 정규식을 같은 입력 군(긴 문자열, `@`/`.`/숫자 반복)으로 시험한다.
+- M3 `retention.cases_purge_confirmed`(와 `purge_unprocessed`)에 문자열·숫자를 주면 시작을 거부한다(불리언만). 같은 이유로 탐지 규칙의 `enabled`도 불리언만.
+- 처리 기한 삭제는 DEID_FAILED·PUBLISH_FAILED(재시도 대상) 원본을 지우지 않는다. 별도 기한 `retention.failed_raw_days`(기본 90일, 임의값)에 지운다.
+- `admin delete-session`: 지울 것이 0건이면 이유를 출력하고 종료 코드 3. 비식별 정책에 session_id 의사화가 없어 원래 ID가 남아 있어도 찾는다.
+- 잡이 게시할 때 trace가 그 사이 정리되었으면(admin purge의 고아 trace 정리와 겹침) trace를 다시 저장하고 한 번 재시도한다.
+- `OPS_REVIEW_REQUIRE_USER=0`이면 `/readyz` `warnings`에 `REVIEW_IDENTITY_NOT_REQUIRED`, 시작 로그에 경고.
+
 ## 0.12.0 (제안, 전수 점검 반영 + D88 + D89)
 
 - 비식별(C4/M-3): `keep_string_keys`의 값은 키별 전체 일치 패턴(`deid.DEFAULT_KEEP_PATTERNS`, 설정 `deid.keep_string_patterns`로 변경)에 맞을 때만 남고 아니면 `[MASKED]`. 패턴 없는 keep 키는 잡 보고서 경고. 검토자가 쓰는 `expected`·`reviewed_input`·`note`에 이메일·전화·주민번호 패턴이 있으면 INVALID_RECORD로 거부(M-4).

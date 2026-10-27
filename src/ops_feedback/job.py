@@ -45,6 +45,7 @@ class JobReport:
     errors: list = field(default_factory=list)
     minimized_raw: int = 0
     purged_cases: int = 0
+    purged_failed_raw: int = 0
     purged_aux: int = 0
     warnings: list = field(default_factory=list)       # 사용자 결정 전의 기본값이 켜져 있다는 알림(오류 아님, 종료 코드에 영향 없음)
 
@@ -167,7 +168,14 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
         try:
             existing = _existing(store, case["case_id"])
             if existing is None:
-                store.publish_case(case)
+                try:
+                    store.publish_case(case)
+                except BoundaryError as e:
+                    if e.code != "FAILED_PRECONDITION":
+                        raise
+                    # 방금 저장한 trace를 같은 시각에 도는 admin purge(고아 trace 정리)가 지웠을 수 있다. trace를 다시 저장하고 한 번만 다시 시도한다.
+                    store.put_trace(trace_ref, res.trace)
+                    store.publish_case(case)
                 rep.cases_published += 1
             elif existing["version"] == 1 and _core(existing) == _core(case):
                 rep.cases_existing += 1
@@ -198,6 +206,9 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
         old = deid.pending(1)
         if old and old[0]["received_at"] < raw_cut and not ret.get("purge_unprocessed", False):
             rep.warnings.append("UNPROCESSED_RAW_PAST_RETENTION: 보관 기한을 넘긴 원본이 아직 처리되지 않았다(지우지 않았다). 잡이 멈췄거나 처리가 막혔는지 확인한다")
+    failed_cut = cutoff_of("failed_raw_days")
+    if failed_cut is not None:
+        rep.purged_failed_raw = log.purge_failed_before(failed_cut)      # 재시도 대상은 별도 기한 뒤에만 지운다
     if ret.get("raw_after_processing", "keep") == "minimize":
         rep.minimized_raw = log.minimize_processed()
     cases_cut, metrics_cut = cutoff_of("cases_days"), cutoff_of("metrics_days")

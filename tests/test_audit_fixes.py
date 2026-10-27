@@ -140,7 +140,7 @@ def _write(tmp_path, mutate):
 
 
 def test_retention_defaults_applied_when_omitted(tmp_path):
-    assert _write(tmp_path, lambda c: None)["retention"] == {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
+    assert _write(tmp_path, lambda c: None)["retention"] == {"raw_days": 30, "cases_days": 180, "metrics_days": 365, "failed_raw_days": 90}
 
 
 @pytest.mark.parametrize("key", ["raw_days", "cases_days", "metrics_days"])
@@ -422,3 +422,243 @@ def test_verify_mode_needs_no_ddl_privilege(request, tmp_path):
     finally:
         os.environ.clear()
         os.environ.update(monkey_env)
+
+
+# ---------- round2 M2: 제곱 시간 정규식(ReDoS) ----------
+
+def _timed(fn, arg):
+    t = time.perf_counter()
+    try:
+        fn(arg)
+    except BoundaryError:
+        pass                    # 거부는 정상 결과다. 시간만 본다
+    return time.perf_counter() - t
+
+
+HOSTILE = {
+    "no_at": lambda n: "a" * n,
+    "all_at": lambda n: "@" * n,
+    "dots": lambda n: "." * n,
+    "at_then_labels": lambda n: "a@" + "b." * (n // 2),
+    "digits": lambda n: "1" * n,
+    "zero_digits": lambda n: "0" * n,
+    "zero_space": lambda n: "0 " * (n // 2),
+    "local_chars": lambda n: "a." * (n // 2),
+    "hangul": lambda n: "가" * n,
+}
+
+
+def test_review_pii_scan_is_linear_for_hostile_inputs():
+    from ops_feedback.review import MAX_FIELD_CHARS, ReviewQueue
+    q = ReviewQueue(FailureStoreImpl.memory())
+    for name, mk in HOSTILE.items():
+        small, big = mk(MAX_FIELD_CHARS // 4)[:MAX_FIELD_CHARS // 4], mk(MAX_FIELD_CHARS)[:MAX_FIELD_CHARS]
+        t_small = max(_timed(lambda v: q._reject_pii(v, "expected"), small), 5e-3)      # 잡음 하한: 아주 짧은 시간끼리의 비율은 의미가 없다
+        t_big = _timed(lambda v: q._reject_pii(v, "expected"), big)
+        assert t_big < 0.5, (name, t_big)
+        assert t_big / t_small < 12, (name, t_small, t_big)             # 길이 4배에 제곱이면 16배 이상
+
+
+def test_review_field_length_cap_and_nesting():
+    from ops_feedback.review import MAX_FIELD_CHARS, ReviewQueue
+    q = ReviewQueue(FailureStoreImpl.memory())
+    q._reject_pii("a" * MAX_FIELD_CHARS, "expected")
+    with pytest.raises(BoundaryError) as e:
+        q._reject_pii("a" * (MAX_FIELD_CHARS + 1), "expected")
+    assert e.value.code == "INVALID_RECORD"
+    deep = cur = []
+    for _ in range(200):
+        nxt = []
+        cur.append(nxt)
+        cur = nxt
+    with pytest.raises(BoundaryError):
+        q._reject_pii(deep, "expected")
+
+
+def test_review_email_detector_matches_the_old_regex_on_normal_input():
+    import re
+    from ops_feedback.review import _has_email
+    old = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+    for t in ["a@b.co", "a@b.c", "@b.co", "x a@b.com y", "a@.co", "연락 hong.gd+x@mail.example.org 주세요", "no at sign", "a@b", "a@b.c0", "john@x.io."]:
+        assert bool(old.search(t)) == _has_email(t), t
+
+
+def test_review_http_rejects_huge_and_slow_bodies_quickly(pipeline):
+    pipeline["log"].send(envelope(pii_trace("s-1", "t-1"), release_id="rel-0002"))
+    run(pipeline)
+    (c,), _ = pipeline["store"].list_cases()
+    s = make_server(LogStore.memory(), "ing", "127.0.0.1", 0, failures=pipeline["store"], read_tokens=parse_read_tokens("r=rt"),
+                    review_tokens=parse_read_tokens("reviewer=vt"), require_reviewer_identity=False)
+    threading.Thread(target=s.serve_forever, daemon=True).start()
+    port = s.server_address[1]
+
+    def post(body):
+        cn = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+        t = time.perf_counter()
+        try:
+            cn.request("POST", f"/v1/cases/{c['case_id']}/review", body=body, headers={"Authorization": "Bearer vt", "Content-Type": "application/json"})
+            return cn.getresponse().status, time.perf_counter() - t
+        except (BrokenPipeError, ConnectionResetError):          # 서버가 본문을 읽기 전에 거부하고 닫았다(큰 본문): 빠른 거부로 본다
+            return 400, time.perf_counter() - t
+    try:
+        big = json.dumps({"review_status": "CONFIRMED", "expected_kind": "LORA_B", "expected": "a" * (8 * 1024 * 1024 - 100)}).encode()
+        st, dt = post(big)
+        assert st == 400 and dt < 3                                         # 8 MiB: 본문 상한(1 MiB)에서 바로 거부
+        mid = json.dumps({"review_status": "CONFIRMED", "expected_kind": "LORA_B", "expected": "a" * 900_000}).encode()
+        st, dt = post(mid)
+        assert st == 400 and dt < 3                                         # 필드 20,000자 상한
+        ok = json.dumps({"review_status": "CONFIRMED", "expected_kind": "LORA_B", "expected": "혈압약은 지금도 드시나요?"}).encode()
+        assert post(ok)[0] == 201
+    finally:
+        s.shutdown()
+
+
+def test_all_other_regexes_are_linear_on_the_same_inputs():
+    """비식별 기본 패턴·예시 정책의 잔존 패턴·전화·주민번호를 같은 입력 군으로 시험한다(20,000자와 80,000자)."""
+    import re
+    from ops_feedback.deid import DEFAULT_KEEP_PATTERNS
+    cfg = yaml.safe_load(open(os.path.join(os.path.dirname(__file__), "..", "config", "job.example.yaml")))
+    pats = {f"keep:{k}": re.compile(v) for k, v in DEFAULT_KEEP_PATTERNS.items()}
+    pats.update({f"residual:{k}": re.compile(v) for k, v in cfg["deid"]["residual_patterns"].items()})
+    for name, rx in pats.items():
+        is_keep = name.startswith("keep:")
+        for hn, mk in HOSTILE.items():
+            for n in (20_000, 80_000):
+                s_ = mk(n)
+                t = time.perf_counter()
+                rx.fullmatch(s_) if is_keep else rx.search(s_)
+                dt = time.perf_counter() - t
+                assert dt < 0.5, (name, hn, n, dt)
+
+
+def test_deid_closes_on_oversized_leaf_strings_before_running_config_regexes():
+    from ops_feedback.deid import DeidError, MAX_LEAF_CHARS
+    cfg = base_config()
+    cfg["deid"]["keep_string_patterns"] = {"next_item": r".*"}                 # 값 검증을 느슨하게 둔 정책
+    t = _trace_with(next_item="a" * (MAX_LEAF_CHARS + 1))
+    t0 = time.perf_counter()
+    with pytest.raises(DeidError):
+        _deid(cfg).deidentify(envelope(t))
+    assert time.perf_counter() - t0 < 1
+
+
+def test_ingest_of_a_huge_free_text_field_is_fast(log_store):
+    t = make_trace("s-big", "t-big")
+    t["frontend_message"] = {**t.get("frontend_message", {}), "utterance": "a" * (7 * 1024 * 1024)} if isinstance(t.get("frontend_message"), dict) else t.get("frontend_message")
+    t0 = time.perf_counter()
+    try:
+        log_store.send(envelope(t))
+    except BoundaryError:
+        pass
+    assert time.perf_counter() - t0 < 10
+
+
+# ---------- round2 M3: 보존 불리언 엄격 ----------
+
+@pytest.mark.parametrize("key", ["cases_purge_confirmed", "purge_unprocessed"])
+@pytest.mark.parametrize("bad", ["false", "False", "no", "0", 0, 1, None, "true"])
+def test_retention_boolean_keys_reject_non_booleans(tmp_path, key, bad):
+    with pytest.raises(ValueError):
+        _write(tmp_path, lambda c: c["retention"].update({key: bad}))
+
+
+def test_retention_boolean_keys_accept_real_booleans(tmp_path):
+    cfg = _write(tmp_path, lambda c: c["retention"].update({"cases_purge_confirmed": False, "purge_unprocessed": True}))
+    assert cfg["retention"]["cases_purge_confirmed"] is False
+
+
+def test_rule_enabled_must_be_boolean():
+    from ops_feedback.detect import build_detectors
+    with pytest.raises(ValueError):
+        build_detectors([{"type": "rule", "rules": [{"id": "COMMIT_ERROR", "enabled": "false"}]}])
+
+
+def test_job_default_deletes_confirmed_but_admin_purge_keeps_them_without_flag(tmp_path):
+    from test_conformance_failurestore import TRACE, case
+    ldb, fdb = str(tmp_path / "l.db"), str(tmp_path / "f.db")
+    LogStore.sqlite(ldb)
+    fail = FailureStoreImpl.sqlite(fdb)
+    fail.put_trace("tr-1", TRACE)
+    fail.publish_case(case("fc-c", created_at="2026-01-01T00:00:00Z"))
+    fail.publish_case(case("fc-c", version=2, review_status="CONFIRMED", expected={"items": []}, created_at="2026-10-01T00:00:00Z"))
+    base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb]
+    r = subprocess.run(base + ["purge", "--cases-days", "30"], capture_output=True, text=True, env=os.environ)
+    assert r.returncode == 0 and json.loads(r.stdout)["cases"]["cases"] == 0               # 확정 사례는 플래그 없이는 보존
+    r = subprocess.run(base + ["purge", "--cases-days", "30", "--include-confirmed"], capture_output=True, text=True, env=os.environ)
+    assert json.loads(r.stdout)["cases"]["cases"] == 2
+    # 잡의 기본(cases_purge_confirmed 생략)은 확정도 지운다: 두 기본값의 차이는 docs/boundary.md에 적혀 있다
+
+
+# ---------- L: 재시도 대상 원본, delete-session 0건, 겹침, readyz 경고 ----------
+
+def test_failed_rows_are_not_removed_by_regular_retention_but_by_their_own_deadline(pipeline):
+    log = pipeline["log"]
+    log._clock = lambda: "2026-01-01T00:00:00Z"
+    for t in ("a", "b", "c"):
+        log.send(envelope(make_trace("s", t), release_id="rel-0002"))
+    log.mark("s", "a", "DEID_FAILED", "h", "2026-01-01T00:00:00Z")
+    log.mark("s", "b", "PUBLISH_FAILED", "h", "2026-01-01T00:00:00Z")
+    log.mark("s", "c", "DONE_CASE", "h", "2026-01-01T00:00:00Z")
+    assert log.purge_received_before("2026-06-01T00:00:00Z", processed_only=True) == 1                 # DONE_CASE만
+    assert log.purge_failed_before("2026-06-01T00:00:00Z") == 2
+    assert log.counts_by_release() == {}
+
+
+def test_job_uses_separate_failed_deadline(pipeline):
+    log = pipeline["log"]
+    log._clock = lambda: "2026-06-20T00:00:00Z"
+    log.send(envelope(make_trace("s", "a"), release_id="rel-0002"))
+    log.mark("s", "a", "DEID_FAILED", "h", NOW)
+    pipeline["cfg"]["retention"] = {"raw_days": 30, "failed_raw_days": 90, "cases_days": "forever", "metrics_days": "forever"}
+    assert run(pipeline, now="2026-08-20T00:00:00Z").purged_failed_raw == 0         # 61일: 일반 기한(30일)은 지났지만 별도 기한(90일) 전
+    assert run(pipeline, now="2026-10-14T00:00:00Z").purged_failed_raw == 1
+
+
+def test_delete_session_reports_nothing_found_with_exit_3(tmp_path):
+    ldb, fdb = str(tmp_path / "l.db"), str(tmp_path / "f.db")
+    LogStore.sqlite(ldb)
+    FailureStoreImpl.sqlite(fdb)
+    env = {**os.environ, "OPS_DEID_SALT": "x"}
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "none"],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 3 and "NOTHING_FOUND" in r.stdout
+
+
+def test_delete_session_finds_raw_session_id_when_policy_does_not_pseudonymize(tmp_path):
+    ldb, fdb = str(tmp_path / "l.db"), str(tmp_path / "f.db")
+    log, fail = LogStore.sqlite(ldb), FailureStoreImpl.sqlite(fdb)
+    t = make_trace("s-raw", "t-1")
+    fail.put_trace("tr-x", {"session_id": "s-raw", "turn_id": "p-1"})
+    from test_conformance_failurestore import case
+    fail.publish_case(case("fc-raw", deidentified_trace_ref="tr-x"))
+    log.send(envelope(t))
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "s-raw"],
+                       env={**os.environ, "OPS_DEID_SALT": "x"}, capture_output=True, text=True)
+    assert r.returncode == 0 and json.loads(r.stdout)["cases"] == 1 and json.loads(r.stdout)["raw_rows"] == 1
+
+
+def test_job_retries_publish_once_when_trace_was_purged_in_between(pipeline):
+    pipeline["log"].send(envelope(pii_trace("s-1", "t-1"), release_id="rel-0002"))
+    store = pipeline["store"]
+    orig_put = store.put_trace
+    orig_pub = store.publish_case
+    calls = {"n": 0}
+
+    def put(ref, tr):
+        orig_put(ref, tr)
+        if calls["n"] == 0:                       # 저장 직후 admin purge가 고아 trace를 지웠다고 가정
+            calls["n"] += 1
+            store._b.delete_traces([ref])
+    store.put_trace = put
+    rep = run(pipeline)
+    store.put_trace, store.publish_case = orig_put, orig_pub
+    assert rep.cases_published == 1 and not rep.errors
+
+
+def test_readyz_warns_when_reviewer_identity_not_required():
+    s, port = _server(require_reviewer_identity=False)
+    try:
+        body = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/readyz").read())
+        assert "REVIEW_IDENTITY_NOT_REQUIRED" in body["warnings"]
+    finally:
+        s.shutdown()

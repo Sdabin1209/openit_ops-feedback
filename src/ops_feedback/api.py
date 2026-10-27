@@ -45,6 +45,7 @@ log = logging.getLogger("ingest-api")
 HTTP_STATUS = {"NOT_FOUND": 404, "INVALID_RECORD": 400, "UNSUPPORTED_VERSION": 422, "CONFLICT": 409,
                "INTEGRITY_ERROR": 422, "FAILED_PRECONDITION": 412, "PERMISSION_DENIED": 403, "UNAVAILABLE": 503}
 MAX_BODY = 8 * 1024 * 1024
+MAX_REVIEW_BODY = 1024 * 1024     # 검토 게시 본문: 검토자가 쓰는 짧은 JSON이라 수집(8 MiB)보다 작게 둔다. 임의 상한, 측정 안 함(ADR 0008)
 MAX_LIMIT = 500
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
@@ -230,8 +231,13 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 body = {"status": "ready", "log_store": store.backend_kind(),
                         "failure_store": failures.backend_kind() if failures is not None else None,
                         "supported_runtime_contract_versions": supported_trace_versions(), "counters": dict(counters)}
+                warns = []
                 if not retention_declared:
-                    body["warnings"] = ["RAW_RETENTION_UNSET"]      # 원본 보관 기간이 정해져 있지 않다(무기한 보관). 보관 기간은 사용자 결정이다
+                    warns.append("RAW_RETENTION_UNSET")             # 원본 보관 기간이 정해져 있지 않다(무기한 보관). 보관 기간은 사용자 결정이다
+                if not require_reviewer_identity:
+                    warns.append("REVIEW_IDENTITY_NOT_REQUIRED")    # OPS_REVIEW_REQUIRE_USER=0: 검토 게시가 개인 식별 없이 들어올 수 있다(D88/U7 기본은 필수)
+                if warns:
+                    body["warnings"] = warns
                 return self._json(200, body)
             self._json(404, {"error": "not found"})
 
@@ -248,7 +254,7 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                     n = int(self.headers.get("Content-Length", "0"))
                 except ValueError:
                     n = -1
-                if n <= 0 or n > MAX_BODY:
+                if n <= 0 or n > MAX_REVIEW_BODY:
                     raise BoundaryError("INVALID_RECORD", "본문 크기가 맞지 않는다")
                 try:
                     body = json.loads(self.rfile.read(n))
@@ -349,6 +355,8 @@ def main() -> int:
     declared = (os.environ.get("OPS_RAW_RETENTION_DAYS") or "").strip() != ""
     if not declared:
         log.warning("보관 기간 미설정: 원본이 무기한 보관된다(RAW_RETENTION_UNSET). 보관 기간은 사용자 결정이며, 정해지면 잡 retention.raw_days와 OPS_RAW_RETENTION_DAYS에 같은 값을 둔다")
+    if os.environ.get("OPS_REVIEW_REQUIRE_USER", "1").strip().lower() in ("0", "false", "no"):
+        log.warning("검토자 신원 필수가 꺼져 있다(REVIEW_IDENTITY_NOT_REQUIRED): 검토 게시가 개인 식별 없이 기록될 수 있다")
     srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks, review_tokens=vtoks,
                       max_connections=max_conn, readyz_cache_seconds=cache_s, retention_declared=declared,
                       require_reviewer_identity=os.environ.get("OPS_REVIEW_REQUIRE_USER", "1").strip().lower() not in ("0", "false", "no"))

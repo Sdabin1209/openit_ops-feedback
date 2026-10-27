@@ -44,7 +44,7 @@ class _RawBackend(ABC):
     @abstractmethod
     def counts_by_release(self, since: Optional[str]) -> dict[str, int]: ...
     @abstractmethod
-    def purge_received_before(self, cutoff: str, processed_only: bool = False) -> int: ...
+    def purge_received_before(self, cutoff: str, statuses: Optional[tuple] = None) -> int: ...
     @abstractmethod
     def ping(self) -> None: ...
     @abstractmethod
@@ -109,9 +109,9 @@ class MemoryBackend(_RawBackend):
                     out[r["release_id"]] = out.get(r["release_id"], 0) + 1
             return out
 
-    def purge_received_before(self, cutoff, processed_only=False):
+    def purge_received_before(self, cutoff, statuses=None):
         with self._lock:
-            old = [k for k, r in self._rows.items() if r["received_at"] < cutoff and (not processed_only or r["status"] is not None)]
+            old = [k for k, r in self._rows.items() if r["received_at"] < cutoff and (statuses is None or r["status"] in statuses)]
             for k in old:
                 del self._rows[k]
             return len(old)
@@ -202,9 +202,9 @@ class SqliteBackend(_RawBackend):
             return {r: n for r, n in rows}
         return self._x(f)
 
-    def purge_received_before(self, cutoff, processed_only=False):
-        q = "DELETE FROM raw_traces WHERE received_at<?" + (" AND status IS NOT NULL" if processed_only else "")
-        return self._x(lambda: self._db.execute(q, (cutoff,)).rowcount)
+    def purge_received_before(self, cutoff, statuses=None):
+        q = "DELETE FROM raw_traces WHERE received_at<?" + ("" if statuses is None else " AND status IN (" + ",".join([ "?"] * len(statuses)) + ")")
+        return self._x(lambda: self._db.execute(q, (cutoff, *(statuses or ()))).rowcount)
 
     def ping(self):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
@@ -281,9 +281,9 @@ class PostgresRawBackend(PgBase, _RawBackend):
             return {r: int(n) for r, n in rows.fetchall()}
         return self._x(f)
 
-    def purge_received_before(self, cutoff, processed_only=False):
-        q = "DELETE FROM raw_traces WHERE received_at<%s" + (" AND status IS NOT NULL" if processed_only else "")
-        return self._x(lambda: self._db.execute(q, (cutoff,)).rowcount)
+    def purge_received_before(self, cutoff, statuses=None):
+        q = "DELETE FROM raw_traces WHERE received_at<%s" + ("" if statuses is None else " AND status IN (" + ",".join([ "%s"] * len(statuses)) + ")")
+        return self._x(lambda: self._db.execute(q, (cutoff, *(statuses or ()))).rowcount)
 
     def received_at(self, session_id, turn_id):
         row = self._x(lambda: self._db.execute("SELECT received_at FROM raw_traces WHERE session_id=%s AND turn_id=%s",
@@ -359,9 +359,16 @@ class LogStore:
     def reset_processing(self, only_status: Optional[str] = None) -> int:
         return self._backend.reset_processing(only_status)
 
+    FAILED_STATUSES = ("DEID_FAILED", "PUBLISH_FAILED")      # 재시도 대상: 일반 보존 삭제에서 제외하고 별도 기한(retention.failed_raw_days)을 쓴다
+
     def purge_received_before(self, cutoff: str, processed_only: bool = False) -> int:
-        """cutoff보다 먼저 받은 원본을 지운다. processed_only이면 처리 표시가 있는 것만(미처리 원본은 남긴다)."""
-        return self._backend.purge_received_before(cutoff, processed_only)
+        """cutoff보다 먼저 받은 원본을 지운다. processed_only이면 처리가 끝난 것(DONE_CASE, NO_FAILURE)만:
+        미처리 원본과 재시도 대상(DEID_FAILED, PUBLISH_FAILED)은 남긴다."""
+        return self._backend.purge_received_before(cutoff, MINIMIZABLE if processed_only else None)
+
+    def purge_failed_before(self, cutoff: str) -> int:
+        """재시도 대상(DEID_FAILED, PUBLISH_FAILED) 원본 중 cutoff보다 먼저 받은 것을 지운다."""
+        return self._backend.purge_received_before(cutoff, self.FAILED_STATUSES)
 
     def minimize_processed(self, received_before: Optional[str] = None) -> int:
         """처리가 끝난(DONE_CASE, NO_FAILURE) 원본의 봉투 내용을 지운다. (session_id, turn_id)·해시·시각·릴리스·처리 표시는 남아

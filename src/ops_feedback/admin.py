@@ -11,7 +11,7 @@
       스키마를 만든다. 서버·잡을 OPS_DB_SCHEMA=verify로 띄우면 앱 계정에 DDL 권한이 필요 없다(docs/runbook.md).
 
 저장소는 서버·잡과 같은 환경 변수(OPS_LOG_DATABASE_URL[_FILE], OPS_FAILURE_DATABASE_URL[_FILE], 없으면 --log-db/--failure-db SQLite 경로)로 고른다.
-종료 코드: 0 성공, 2 사용 오류·접속 실패. 출력은 건수만이며 세션 ID·내용은 출력하지 않는다.
+종료 코드: 0 성공, 2 사용 오류·접속 실패, 3 지울 것을 찾지 못함(delete-session; salt·정책 확인). 출력은 건수만이며 세션 ID·내용은 출력하지 않는다.
 """
 from __future__ import annotations
 
@@ -44,7 +44,8 @@ def session_pseudonym(salt: str, session_id: str) -> str:
 
 def delete_session(log, fail, salt: str, session_id: str, dry_run: bool) -> dict:
     out = {"raw_rows": 0, "cases": 0, "traces": 0, "dry_run": dry_run}
-    refs = fail.traces_of_session(session_pseudonym(salt, session_id)) if fail is not None else []
+    # 비식별 정책에 session_id 의사화가 없으면 trace에 원래 session_id가 남아 있다: 두 값을 모두 찾는다
+    refs = sorted(set(fail.traces_of_session(session_pseudonym(salt, session_id)) + fail.traces_of_session(session_id))) if fail is not None else []
     if dry_run:
         out["traces"] = len(refs)
         return out
@@ -86,7 +87,14 @@ def main(argv=None) -> int:
             if not salt:
                 print("오류: OPS_DEID_SALT_FILE(또는 OPS_DEID_SALT)이 필요하다", file=sys.stderr)
                 return 2
-            print(json.dumps(delete_session(log, fail, salt, a.session_id, a.dry_run), sort_keys=True))
+            out = delete_session(log, fail, salt, a.session_id, a.dry_run)
+            found = out["raw_rows"] + out["traces"] + out["cases"]
+            if not a.dry_run and found == 0 or a.dry_run and out["traces"] == 0:
+                # 오류 없이 0건이면 잘못된 salt·정책(session_id 의사화 키가 다름)·이미 지워짐을 구별할 수 없으므로 종료 코드로 알린다
+                out["note"] = "NOTHING_FOUND: 해당 세션의 비식별 trace를 찾지 못했다. salt와 비식별 정책(pseudonymize_keys의 session_id)을 확인한다"
+                print(json.dumps(out, ensure_ascii=False, sort_keys=True))
+                return 3
+            print(json.dumps(out, sort_keys=True))
             return 0
         if a.cmd == "purge":
             if a.raw_days is None and a.cases_days is None and a.metrics_days is None:

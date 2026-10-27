@@ -52,7 +52,7 @@ def base_config() -> dict:
         "deid": {"policy_id": "test-policy", "pseudonymize_keys": ["session_id", "turn_id"],
                  "keep_string_keys": ["question_id", "slot_id", "repeat_key", "code", "path", "action", "next_item"],
                  "unlisted_string_action": "mask", "mask_defs": ["Value"], "drop_defs": [], "mask_value_keys": ["value"],
-                 "residual_patterns": {"email": r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+                 "residual_patterns": {"email": r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}",
                                        "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}"}},
         "detection": {"detectors": [{"type": "rule", "rules": [{"id": "TURN_FAILURE_SIGNAL"}, {"id": "GENERATOR_FALLBACK"},
                                                                 {"id": "COMMIT_ERROR"}]}]},
