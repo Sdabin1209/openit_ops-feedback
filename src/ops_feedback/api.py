@@ -86,8 +86,8 @@ class BoundedServer(ThreadingHTTPServer):
             self._slots.release()
 
 
-REQUEST_TIMEOUT = 30.0        # 소켓 읽기·쓰기 상한(초). 본문을 덜 보내고 멈춘 연결이 스레드를 영구 점유하지 못하게 한다
-READYZ_CACHE_SECONDS = 1.5    # 인증 없는 /readyz가 호출마다 DB 연결을 열지 못하게 결과를 짧게 공유한다(0이면 끈다)
+REQUEST_TIMEOUT = 30.0        # 근거: 임의 보수값, 측정 안 함(ADR 0008).        # 소켓 읽기·쓰기 상한(초). 본문을 덜 보내고 멈춘 연결이 스레드를 영구 점유하지 못하게 한다
+READYZ_CACHE_SECONDS = 1.5    # 근거: probe 상한 2초(FAULT_POLICY 5)보다 짧게 두어 장애 감지를 크게 늦추지 않으면서 반복 호출을 흡수하는 임의값, 측정 안 함(ADR 0008).    # 인증 없는 /readyz가 호출마다 DB 연결을 열지 못하게 결과를 짧게 공유한다(0이면 끈다)
 
 
 def parse_read_tokens(spec: str) -> dict[str, str]:

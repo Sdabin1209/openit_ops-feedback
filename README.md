@@ -53,7 +53,8 @@ survey-service --I6--> ingest-api --> log.db (원본)
 ```
 python3 -m venv .venv
 .venv/bin/pip install -e ../boundary-contracts -e '.[dev]'     # 설치 (docs/runbook.md)
-.venv/bin/python -m pytest -q                                   # 시험
+.venv/bin/python -m pytest -q                                   # 시험 (PostgreSQL 시험은 건너뜀으로 표시된다)
+scripts/dev-postgres.sh                                         # 일회용 PostgreSQL 컨테이너 위에서 전체 시험 (make test-pg)
 scripts/smoke.sh                                                # 이미지 빌드, 기동, 수집, 인증 확인 (Docker 필요)
 ```
 
@@ -96,12 +97,30 @@ scripts/smoke.sh                                                # 이미지 빌�
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
-## 6. 더 자세한 문서
+## 6. 설계 결정 기록 (ADR, D89)
+
+구조·기본값·한도를 고른 이유는 `docs/adr/`에 있다. 측정하지 않은 값과 근거를 찾지 못한 값은 각 ADR에 그렇게 적었다.
+
+| ADR | 결정 |
+| --- | --- |
+| [0001](docs/adr/0001-sqlite-dev-postgres-prod.md) | 개발·시험은 SQLite, 운영은 PostgreSQL |
+| [0002](docs/adr/0002-separate-raw-and-failure-stores.md) | 원본 저장소와 실패 사례 저장소 분리 |
+| [0003](docs/adr/0003-ingest-and-job-split.md) | 수집 서버와 주기 잡 분리 |
+| [0004](docs/adr/0004-deid-allowlist.md) | 비식별 허용 목록 방식, 필드별 처리, 값 검증 |
+| [0005](docs/adr/0005-detection-rules.md) | 실패 탐지 규칙과 임계값(자리표시자 표시) |
+| [0006](docs/adr/0006-rollback-request-auto-submit.md) | 롤백은 요청만, auto_submit 기본 false |
+| [0007](docs/adr/0007-retention-defaults.md) | 보존 기본값(D88/U4) |
+| [0008](docs/adr/0008-db-timeouts.md) | DB 접속·문장·probe 상한과 그 밖의 한도 |
+| [0009](docs/adr/0009-idempotency-key.md) | 수집 멱등 키 (session_id, turn_id) |
+| [0010](docs/adr/0010-stdlib-http-server.md) | 표준 라이브러리 HTTP 서버 |
+
+## 7. 더 자세한 문서
 
 | 문서 | 내용 |
 | --- | --- |
 | `docs/brief.md` | 영역의 목적, 소유·제공·소비, 수용 기준 |
 | `docs/design.md` | 내부 설계: 저장소, 수집, 비식별, 탐지, 분류, 롤백 요청, 잡 |
+| `docs/adr/` | 설계 결정 기록 |
 | `docs/boundary.md` | 소유 저장소, 제공 인터페이스, 지원 버전, 장애 영향, 비밀 전달 |
 | `docs/runbook.md` | 설치·실행, 환경 변수, 잡 설정 키, 비밀 NAME_FILE, 장애 대응 |
 | `docs/STATUS.md` | 한 일, 시험 결과, 남은 일 |

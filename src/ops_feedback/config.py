@@ -27,6 +27,7 @@ def check_inline_secrets(value: Any, path: str = "config") -> None:
 
 
 FOREVER = "forever"
+# 출처: D88/U4 최소 보존 잠정 기본값(원본 30일, 사례 180일, 기록 1년). docs/adr/0007-retention-defaults.md
 RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
 REQUIRED_TOP = ("storage", "deid", "detection", "classification", "retention")
 

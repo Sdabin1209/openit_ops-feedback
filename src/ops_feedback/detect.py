@@ -67,6 +67,7 @@ def _intervention_failed(t: dict, params: dict) -> Optional[dict]:
     return {} if _get(t, "orchestrator_output", "intervention_result", "result") == "FAILED" else None
 
 
+# 출처: survey-service design.md 18절(값이 없으면 REDIRECT)과 그 문서의 학습 데이터 전수 일치 기록. 이 영역은 데이터를 직접 보지 않았다. docs/adr/0005-detection-rules.md, README G14
 DEFAULT_EMPTY_VALUES_OK_ACTIONS = ["REDIRECT"]
 
 

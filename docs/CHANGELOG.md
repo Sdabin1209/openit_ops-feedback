@@ -1,5 +1,18 @@
 # 변경 이력
 
+## 0.12.0 (제안, 전수 점검 반영 + D88 + D89)
+
+- 비식별(C4/M-3): `keep_string_keys`의 값은 키별 전체 일치 패턴(`deid.DEFAULT_KEEP_PATTERNS`, 설정 `deid.keep_string_patterns`로 변경)에 맞을 때만 남고 아니면 `[MASKED]`. 패턴 없는 keep 키는 잡 보고서 경고. 검토자가 쓰는 `expected`·`reviewed_input`·`note`에 이메일·전화·주민번호 패턴이 있으면 INVALID_RECORD로 거부(M-4).
+- 보존(C3, D88/U4): `retention.raw_days` 30, `cases_days` 180, `metrics_days` 365가 기본. null·0·문자열은 시작 거부, `"forever"`는 경고와 함께 허용. 처리 표시 없는 원본은 지우지 않고 기한을 넘기면 보고서 경보(`UNPROCESSED_RAW_PAST_RETENTION`). `raw_after_processing: minimize`로 처리가 끝난 봉투 내용을 지움(중복 판별 키 유지). 잡이 사례·고아 trace·지표/롤백 기록도 기한 뒤 지운다.
+- 삭제 도구 `python -m ops_feedback.admin`: `delete-session`(원본·비식별 trace·사례), `purge`, `minimize-raw`, `migrate`. 서버 API로는 열지 않았다(비밀 소유가 인증).
+- 서버(A9/B10/A4/B4/B5/E2): 동시 연결 상한(`OPS_MAX_CONNECTIONS` 64)과 소켓 timeout 30초, `/readyz` 결과 1.5초 공유(`OPS_READYZ_CACHE_SECONDS`)와 카운터(`auth_rejected` 등)·보관 경고, SIGTERM 정상 종료, JSON 로그 이스케이프, 깊은 JSON·비ASCII 토큰 헤더 처리.
+- 잡(G3): 미처리 원본을 `job.batch_size`(500)씩 seq 순으로 읽는다.
+- 검토 게시(U7): `X-Openit-User`가 없으면 거부가 기본(`OPS_REVIEW_REQUIRE_USER=0`으로 끔). 있으면 `reviewed_by`에 기록, 토큰 역할은 변함없이 기본값.
+- 설정(U11/S5): `rollback.auto_submit`은 불리언만(문자열 거부). 롤백 기준 값은 채우지 않음. 위조 Trace 위험은 CR-006.
+- DDL 분리(B12/C8): `OPS_DB_SCHEMA=verify`이면 앱이 DDL을 실행하지 않고 표 존재만 확인(DDL 권한 없는 계정으로 시험). 스키마는 `admin migrate`.
+- 시험 실행(H3): `scripts/dev-postgres.sh`, `make test-pg`.
+- ADR 10건(`docs/adr/`, D89).
+
 ## 0.11.3 (제안, FAULT_MATRIX D2·D3·D5·D6·A6)
 
 - 롤백 평가(잡): I4 읽기·I5 전달 실패를 잡아 보고서 `rollback`에 `{"action":"ERROR","error":코드}`로 남기고 `errors`에 넣는다(종료 코드 1). 이전에는 I4 실패가 잡 전체를 예외로 끝내(이미 게시한 사례의 보고서 없이) 종료 코드 2였고, I5 `submit_error`(401/403 포함)는 보고서에만 있고 종료 코드 0이었다. 평가 전체에 상한(`rollback.deadline_seconds`, 기본 60초, 기준 값이 아님)을 둔다.

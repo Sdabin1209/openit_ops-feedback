@@ -14,7 +14,7 @@ from boundary_contracts.errors import BoundaryError
 
 _LOCK_KEY = 7264001   # 스키마 생성용 advisory lock 키(이 영역 고정값)
 
-# 대기 상한(초). 환경 변수로 바꾼다(비밀이 아니므로 NAME_FILE 없이 값 그대로). 근거는 docs/boundary.md 장애 절:
+# 대기 상한(초). 근거·출처·측정 여부는 docs/adr/0008-db-timeouts.md(probe 2초는 FAULT_POLICY 원칙 5, 나머지는 측정하지 않은 추정). 환경 변수로 바꾼다(비밀이 아니므로 NAME_FILE 없이 값 그대로). 근거는 docs/boundary.md 장애 절:
 # 이 영역의 문장은 인덱스 있는 단건 INSERT/SELECT와 잡의 한 배치 조회로 정상일 때 수 ms~수십 ms이므로 3초면 느린 디스크·잠깐의 잠금은 견딘다.
 # 수집 호출자(survey-service outbox)는 UNAVAILABLE을 재시도하므로 오래 매달리지 않고 빨리 실패하는 편이 안전하다.
 DEFAULTS = {"OPS_DB_CONNECT_TIMEOUT": 3.0,     # 접속 상한. libpq는 정수 초로 올림한다(최소 1)

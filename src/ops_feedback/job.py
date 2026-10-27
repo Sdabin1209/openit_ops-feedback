@@ -74,7 +74,7 @@ def _question_set(reader, release_id: str, cache: dict) -> Optional[dict]:
     return cache[release_id]
 
 
-DEFAULT_BATCH_SIZE = 500     # 한 번에 메모리에 올리는 미처리 원본 수(봉투 하나 최대 8 MiB). 설정 job.batch_size로 바꾼다
+DEFAULT_BATCH_SIZE = 500 # 근거: 봉투 최대 8 MiB를 한 번에 올리는 양을 제한하는 임의값, 측정 안 함(ADR 0008).     # 한 번에 메모리에 올리는 미처리 원본 수(봉투 하나 최대 8 MiB). 설정 job.batch_size로 바꾼다
 
 
 def _pending_rows(deid: Deidentifier, limit: Optional[int], batch_size: int):
@@ -212,7 +212,7 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
     return rep
 
 
-DEFAULT_ROLLBACK_DEADLINE = 60.0     # 롤백 평가 전체(I4 읽기 여러 번 + I5 전달)의 상한(초). 기준 값이 아니라 대기 상한이다(FAULT_POLICY 4)
+DEFAULT_ROLLBACK_DEADLINE = 60.0 # 근거 기록 없음(임의 보수값, ADR 0008).     # 롤백 평가 전체(I4 읽기 여러 번 + I5 전달)의 상한(초). 기준 값이 아니라 대기 상한이다(FAULT_POLICY 4)
 
 
 def _evaluate_rollback(planner: RollbackPlanner, cfg: dict, rep: JobReport) -> dict:

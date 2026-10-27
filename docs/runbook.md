@@ -56,6 +56,7 @@ python3 -m venv .venv
 | `OPS_FAILURE_DB`, `OPS_READ_TOKENS` | ingest-api | 둘 다 있을 때만 I7 읽기 면을 켠다. 토큰은 `역할=토큰,역할=토큰` |
 | `OPS_REVIEW_TOKENS` | ingest-api | 검토 게시(`POST /v1/cases/{id}/review`)용 쓰기 토큰, 역할은 보통 `reviewer`. 읽기 면과 같이 켜진다. 수집·읽기·검토 토큰은 서로 달라야 하고 서로의 경로는 403 |
 | `OPS_DB_CONNECT_TIMEOUT`, `OPS_DB_STATEMENT_TIMEOUT`, `OPS_DB_PROBE_TIMEOUT`, `OPS_DB_DDL_TIMEOUT` | ingest-api, 잡 | PostgreSQL일 때만. 초 단위, 기본 3/3/2/30. 의미와 근거는 docs/boundary.md "DB 대기 상한". 잡은 DB 무응답이면 종료 코드 2 |
+| `OPS_MAX_CONNECTIONS`, `OPS_READYZ_CACHE_SECONDS`, `OPS_RAW_RETENTION_DAYS`, `OPS_REVIEW_REQUIRE_USER`, `OPS_DB_SCHEMA` | ingest-api | 동시 연결 상한(64), `/readyz` 결과 공유 초(1.5), 원본 보관 기간 선언(잡 `retention.raw_days`와 같은 값, 없으면 시작 로그와 `/readyz`에 경고), 검토 게시에 `X-Openit-User` 필수(기본 1), 스키마 `apply`(기본)\|`verify`(DDL 안 함). `OPS_DB_SCHEMA`는 잡도 같다 |
 | `OPS_DEID_SALT` | 잡 | 필수. 의사 식별자 salt. 바꾸면 case_id와 trace ref가 모두 바뀌므로 운영 중 바꾸지 않는다 |
 
 ## 비밀은 NAME_FILE로 (D84)
@@ -120,3 +121,11 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - ingest-api가 죽었을 때: 재시작. 서비스가 버퍼한 것을 재전송하고 중복은 DUPLICATE로 흡수된다.
 - DB 파일 손상: `data/` 볼륨 백업이 정책 밖이다(O16 미정, 대장 번호 없음). 원본(`log.db`) 손실은 복구할 수 없다.
 - 원본 접근: 비식별 처리기 외에는 `log.db`를 열지 않는다. 운영 사고로 직접 열어야 하면 개인정보 접근으로 기록한다.
+
+## 보존·삭제·스키마 (0.12.0)
+
+- 기본 보존: 원본 30일(처리 끝난 것만), 사례 180일, 지표·롤백 기록 365일(`retention.*`, docs/adr/0007). `null`은 거부, 무기한은 `"forever"`(경고). 보고서 `warnings`에 `RETENTION_FOREVER`, `UNPROCESSED_RAW_PAST_RETENTION`이 나오면 확인한다.
+- 요청 시 삭제: `OPS_DEID_SALT_FILE=... python -m ops_feedback.admin delete-session --session-id <ID> [--dry-run]`(저장소는 서버와 같은 `OPS_*_DATABASE_URL[_FILE]`). 출력은 건수만. 지표·롤백 기록(aux)은 세션 정보가 없어 지우지 않는다.
+- 수동 정리: `admin purge --raw-days N --cases-days M --metrics-days K [--include-confirmed] [--include-unprocessed]`, `admin minimize-raw`.
+- DDL 없는 앱 계정: 소유자 계정으로 `admin migrate`를 실행한 뒤 서버·잡을 `OPS_DB_SCHEMA=verify`로 띄운다. 앱 계정에는 스키마 USAGE, 표 SELECT/INSERT/UPDATE/DELETE, 시퀀스 USAGE/SELECT만 준다(`tests/test_audit_fixes.py::test_verify_mode_needs_no_ddl_privilege`가 이 권한으로 시작·수집을 확인).
+- 시험: `scripts/dev-postgres.sh`(또는 `make test-pg`)가 PostgreSQL 컨테이너를 띄워 전체 시험을 돌리고 내린다.

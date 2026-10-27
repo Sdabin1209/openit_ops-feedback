@@ -79,6 +79,18 @@ I7 상세(구현이 정한 것):
 - 잡: DB가 무응답이면 같은 상한으로 `UNAVAILABLE`이 되고 잡은 종료 코드 **2**(스택 트레이스 없이 stderr에 JSON 한 줄). 비식별 실패 등 처리 오류의 종료 코드 1과 구분된다.
 - 측정(이 세션, 호스트의 Docker PostgreSQL 16 컨테이너를 `docker pause`, 기본값): `/readyz` 503까지 2.0초, 수집 POST 503까지 7.0초, 잡 종료 코드 2까지 3.3초. 같은 시험을 수정 전 코드로 돌리면 `/readyz`가 15초 안에 응답하지 못했다(클라이언트 포기, 상한 없음), 잡은 접속 10초 뒤 스택 트레이스와 종료 코드 1. 컨테이너 조합에서의 재측정은 deploy E2E 5p에서 헤드가 한다.
 
+### 보존·삭제·개인정보 위치 (점검 C1·C3, D88/U4)
+
+| 저장 위치 | 내용 | 개인정보 | 보존 |
+| --- | --- | --- | --- |
+| `raw_traces.envelope`(원본 DB) | TraceEnvelope 전체(발화·답변·직원 ID 포함) | 있음, 평문 | 처리 끝난 것 30일(`retention.raw_days`), 처리 전인 것은 지우지 않음. `raw_after_processing: minimize`면 처리 직후 내용만 삭제 |
+| `raw_traces`의 키·해시·시각·릴리스·처리 표시 | 중복 판별과 집계 | session_id·turn_id가 원본 값 그대로 | 위와 같은 행 수명(`purge`가 행째 지움) |
+| `cases.record`, `traces`(사례 DB) | 비식별 뒤 FailureCase·trace | 비식별(ADR 0004). session_id·turn_id는 salt 해시 | 사례 180일(`cases_days`), 고아 trace 함께 |
+| `aux`(지표·롤백 요청·영수증) | 집계, 릴리스 ID | 없음 | 365일(`metrics_days`) |
+| 서버 로그 | 요청 줄(메서드·경로), 거절 경고 | 없음(경로에 ID가 들어갈 수 있으나 이 서비스 경로는 case_id/ref) | 로그 보존은 deploy |
+
+삭제 경로: 잡의 자동 정리, `python -m ops_feedback.admin`(세션 단위 삭제 포함, 비밀 소유가 인증이며 서버 API로는 열지 않았다). 확인하지 못한 것: 디스크·백업의 암호화와 백업 보존(deploy), 운영 잡 설정의 실제 값. 운영 잡 설정(`deploy` 소유)에 `retention: {raw_days: 30, cases_days: 180, metrics_days: 365}`를 두고 서버에 `OPS_RAW_RETENTION_DAYS=30`을 선언하도록 deploy에 요청한다(이 영역은 deploy 파일을 수정하지 않는다).
+
 ### 장애 칸별 현황 (FAULT_MATRIX D2·D3·D5·D6·A6 서버 쪽)
 
 "시험"은 이 세션에서 돌려 통과한 것(가짜 상류는 실제 HTTP 서버와 `boundary_contracts.clients`의 실제 클라이언트, 클라이언트 timeout 1초로 줄임)이다. 이웃 영역의 실제 서비스와는 연결해 보지 않았다.
