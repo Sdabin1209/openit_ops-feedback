@@ -158,18 +158,21 @@ def _core(c: dict) -> str:
     return sha256_hash({k: c[k] for k in c if k != "ext"} | {"ext": c.get("ext")})
 
 
-def _resolve_args(args: dict, env: dict) -> dict:
-    """설정의 {env: 변수명}을 환경 변수 값으로 바꾼다(비밀 값을 설정 파일에 두지 않는다)."""
-    out = {}
-    for k, v in (args or {}).items():
-        if isinstance(v, dict) and set(v) == {"env"}:
-            val = read_secret(v["env"], environ=env)      # NAME_FILE 우선, 없으면 NAME
+def _resolve_args(args, env: dict, path: str = "args"):
+    """설정의 {secret: 이름} 또는 {env: 이름}을 read_secret(이름)으로 푼다(중첩 포함). 비밀 값을 설정 파일에 두지 않는다."""
+    if isinstance(args, dict):
+        if set(args) in ({"secret"}, {"env"}):
+            name = args.get("secret", args.get("env"))
+            if not isinstance(name, str) or not name:
+                raise ValueError(f"설정 {path}: 비밀 이름은 비어 있지 않은 문자열이어야 한다")
+            val = read_secret(name, environ=env)      # NAME_FILE 우선, 없으면 NAME
             if val is None:
-                raise ValueError(f"비밀 {v['env']}가 없다(NAME_FILE 또는 NAME)")
-            out[k] = val
-        else:
-            out[k] = v
-    return out
+                raise ValueError(f"비밀 {name}가 없다(NAME_FILE 또는 NAME)")
+            return val
+        return {k: _resolve_args(v, env, f"{path}.{k}") for k, v in args.items()}
+    if isinstance(args, list):
+        return [_resolve_args(v, env, f"{path}[{i}]") for i, v in enumerate(args)]
+    return args
 
 
 def _import(path: str):
@@ -191,9 +194,9 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     planner = None
     rb = cfg.get("rollback")
     rr = cfg.get("release_reader")
-    reader = _import(rr["factory"])(**_resolve_args(rr.get("args"), env)) if rr else None
+    reader = _import(rr["factory"])(**_resolve_args(rr.get("args") or {}, env, "release_reader.args")) if rr else None
     if rb and rr:
-        gate = _import(cfg["gate_service"]["factory"])(**_resolve_args(cfg["gate_service"].get("args"), env)) if cfg.get("gate_service") else None
+        gate = _import(cfg["gate_service"]["factory"])(**_resolve_args(cfg["gate_service"].get("args") or {}, env, "gate_service.args")) if cfg.get("gate_service") else None
         planner = RollbackPlanner(store=store, log=log, release_reader=reader, gate=gate, policy=rb, clock=clock)
     return log, store, deid, detectors, classifier, planner, reader
 

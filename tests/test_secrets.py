@@ -142,3 +142,49 @@ def test_api_startup_errors_hide_values(tmp_path):
     assert r.returncode == 2 and ING not in r.stdout + r.stderr
     r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=_scrub_env(OPS_PORT=str(_free_port())), capture_output=True, text=True, timeout=30)
     assert r.returncode == 2
+
+
+# ---- 설정에 비밀 값을 직접 적으면 시작을 거부한다 ----
+INLINE = "inline-canary-9d8e"
+
+
+@pytest.mark.parametrize("patch,key", [
+    (lambda c: c.__setitem__("release_reader", {"factory": "x:y", "args": {"token": INLINE}}), "release_reader.args.token"),
+    (lambda c: c.__setitem__("gate_service", {"factory": "x:y", "args": {"headers": [{"Authorization": INLINE}]}}), "gate_service.args.headers[0].Authorization"),
+    (lambda c: c["deid"].__setitem__("api_key", INLINE), "deid.api_key"),
+    (lambda c: c.__setitem__("x", {"nested": {"db_password": INLINE}}), "x.nested.db_password"),
+])
+def test_inline_secret_in_config_is_rejected_without_value(tmp_path, patch, key):
+    from ops_feedback.config import load_config
+    cfg = base_config()
+    patch(cfg)
+    p = tmp_path / "job.yaml"
+    p.write_text(yaml.safe_dump(cfg))
+    with pytest.raises(ValueError) as e:
+        load_config(p)
+    assert key in str(e.value) and "NAME_FILE" in str(e.value)
+    assert INLINE not in str(e.value) and INLINE not in repr(e.value)
+
+
+def test_config_accepts_secret_references_and_env_name_keys(tmp_path):
+    from ops_feedback.config import load_config
+    cfg = base_config()
+    cfg["release_reader"] = {"factory": "x:y", "args": {"token": {"secret": "A"}, "t2": {"env": "B"}, "token_env": "C"}}
+    p = tmp_path / "job.yaml"
+    p.write_text(yaml.safe_dump(cfg))
+    load_config(p)                              # 거부하지 않는다 (deid.salt_env도 이름만)
+
+
+def test_resolve_args_secret_form_and_nesting(tmp_path):
+    from ops_feedback.job import _resolve_args
+    f = _secret_file(tmp_path, "s", "v-canary")
+    out = _resolve_args({"a": {"secret": "S"}, "n": {"h": [{"secret": "S"}]}, "k": 1}, {"S_FILE": f})
+    assert out == {"a": "v-canary", "n": {"h": ["v-canary"]}, "k": 1}
+
+
+def test_cli_rejects_inline_secret_without_printing_it(tmp_path):
+    cfg, p = _cfg(tmp_path)
+    cfg["release_reader"] = {"factory": "x:y", "args": {"token": INLINE}}
+    p.write_text(yaml.safe_dump(cfg))
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(p)], env=_scrub_env(OPS_DEID_SALT="s"), capture_output=True, text=True)
+    assert r.returncode != 0 and INLINE not in r.stdout + r.stderr and "release_reader.args.token" in r.stderr

@@ -74,6 +74,10 @@ docker run ... -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run
 
 파일은 컨테이너 사용자(root 아님)가 읽을 수 있어야 하고, 내용 앞뒤 공백·개행은 잘린다. 파일이 없거나 비어 있으면 값 없이 파일 경로만 담은 오류로 멈춘다(서버는 종료 코드 2). 값은 로그, `/readyz`, 오류 본문, 비식별 산출물에 나오지 않으며 `tests/test_secrets.py`와 `scripts/smoke.sh`(inspect·exec env 검사)가 확인한다.
 
+### 설정 파일에 비밀을 적지 않는다
+
+잡 설정(`config/job.*.yaml`)에서 키 이름에 `token`, `secret`, `password`, `credential`, `api_key`, `authorization`, `private_key`가 들어간 곳에 문자열 값을 직접 적으면 잡이 시작을 거부한다(중첩 dict·list 포함). 오류에는 키 경로(예: `release_reader.args.token`)와 "비밀은 NAME_FILE로" 안내만 나오고 값은 나오지 않는다. 비밀은 `{secret: NAME}` 또는 `{env: NAME}`으로 적으면 `read_secret(NAME)`이 푼다(`NAME_FILE` 우선). 이름만 받는 `*_env` 키(`deid.salt_env` 등)는 그대로 쓴다. ingest-api는 설정 파일 없이 환경 변수만 받으므로 위의 `NAME_FILE` 규칙이 전부다.
+
 ## ingest-api 실행
 
 ```

@@ -54,7 +54,7 @@ retention:
 #   auto_submit: false
 # release_reader:                       # I4 읽기. 클라이언트가 나오면(boundary-contracts v1.2.0) 아래처럼 HTTP로 고른다.
 #   factory: "boundary_contracts.clients:HttpReleaseReader"
-#   args: {base_url: "http://release-gate:8080", token: {env: OPS_GATE_READ_TOKEN}}   # {env: 이름}은 이름_FILE의 파일 내용(없으면 환경 변수 이름)으로 바뀐다
+#   args: {base_url: "http://release-gate:8080", token: {secret: OPS_GATE_READ_TOKEN}}   # {secret: 이름}(또는 {env: 이름})은 이름_FILE의 파일 내용(없으면 환경 변수 이름)으로 바뀐다
 # gate_service:                         # I5 request_rollback (auto_submit일 때)
 #   factory: "모듈:함수"
-#   args: {base_url: "...", token: {env: OPS_GATE_TOKEN}}
+#   args: {base_url: "...", token: {secret: OPS_GATE_WRITE_TOKEN}}
