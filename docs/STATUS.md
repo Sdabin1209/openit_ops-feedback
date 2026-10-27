@@ -1,6 +1,6 @@
 # STATUS
 
-날짜: 2026-10-15. 첫 구간 완료 상태(아래 시험은 이 날짜에 실제로 돌린 것).
+날짜: 2026-10-15. 첫 구간 완료 상태(아래 "한 일"·"시험"은 이 날짜 기준의 이력이다). 현재 시험 수는 맨 아래 "2026-10-27 현재 상태" 절을 본다.
 
 ## 한 일
 
@@ -12,7 +12,7 @@
 
 ## 시험
 
-- `.venv/bin/python -m pytest -q`: 전부 통과(85건).
+- `.venv/bin/python -m pytest -q`: 전부 통과(85건, 2026-10-15 당시. 현재는 195건).
 - 헤드 회신 후속(0.1.1) 반영 후 재실행 결과는 CHANGELOG 0.1.1과 최신 커밋 기준.
 - `scripts/smoke.sh`: `SMOKE OK`.
 
@@ -27,7 +27,7 @@
 
 ## 남은 일
 
-- 사용자 결정 대기: 비식별 기준(O 번호 없음, 브리프 5절), 보관 기간, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치.
+- 사용자 결정 대기: 비식별 기준(대장 번호 없음, 브리프 5절), 보관 기간, 분류체계 O11(대장 번호 없음), 허용 중단 시간 O16(대장 번호 없음), 롤백 기준 수치.
 - 지표 대시보드, 피드백 배포기, 검토 UI, 사람 신고(FEEDBACK/HUMAN) 탐지 경로, 모델 기반 탐지기.
 - I4/I5 실제 SDK 연결(release-gate가 배포하면 `release_reader`/`gate_service` 팩토리 설정).
 - 실패 사례·비식별 trace 보관/삭제 정책.
@@ -35,7 +35,7 @@
 
 ## 막힌 것
 
-없음. 확정이 필요한 경계 사항은 CR-001~005.
+2026-10-15 당시: 없음. 확정이 필요한 경계 사항은 CR-001~005. 이 문장은 현재 상태가 아니다. 현재는 맨 아래 "2026-10-27 현재 상태"를 본다.
 
 ## 2026-10-27 새 TurnTrace 따라가기 (브랜치 follow-turntrace-v2)
 
@@ -53,4 +53,11 @@
 - 탐지 규칙(`detect.py`) 중 v1 trace 필드를 읽는 것: `GENERATOR_FALLBACK`(`generator_output.is_fallback`), `PARSER_EMPTY`(`parser_input`, `parser_output.items`), `UNRECOGNIZED_STREAK`(`planner_output.planner_record_update.unrecognized_streak`), `TURN_FAILED_STEPS`·`STAFF_ALERT_DELIVERY_FAILED`(`log_entry`), `INTERVENTION_FAILED`(`orchestrator_output`). 앞의 세 규칙이 정규화·판정·Plan 쪽 v1 필드에 직접 묶여 있다. 나머지는 구조·전달 필드다.
 - 확인하지 못한 것: v2 TurnTrace의 키. `survey-service/schema`의 `CONTRACT_VERSION`은 아직 1이고 TurnTrace도 v1 형태라 v2 trace 키를 읽을 수 없었다. 그래서 규칙과 비식별 사본은 손대지 않았다(survey-service 이전 뒤 변경 필요).
 
-시험: `.venv/bin/python -m pytest -q` 133 통과, 0 실패. `scripts/smoke.sh` SMOKE OK (v2.0.0 wheel, 이 WSL 한 환경에서만 확인).
+시험(당시): `.venv/bin/python -m pytest -q` 133 통과, 0 실패. `scripts/smoke.sh` SMOKE OK (v2.0.0 wheel, 이 WSL 한 환경에서만 확인).
+
+## 2026-10-27 현재 상태 (main, 0b487a3 기준)
+
+- 시험: `.venv/bin/python -m pytest --collect-only -q`로 195건 수집, `.venv/bin/python -m pytest -q`로 `195 passed, 4 warnings`(이 WSL 한 환경, 2026-10-27에 확인). 위의 85건·133건은 각 시점의 이력이다. `scripts/smoke.sh`는 이번에 돌리지 않았다(미확인).
+- 막힌 것: 이 영역 코드 안에서 막힌 것은 없다. 그러나 "막힌 것 없음"은 아니다. 다른 영역 의존·사용자 결정으로 열려 있는 항목은 README.md 5절(G14, G11, D-A, D-E)과 위 "남은 일"에 있다.
+- G11(문진 스키마 정수 버전 1 안의 비호환 변경, D79): ops-feedback은 사본 `_schemas/survey/v1`을 따라갔고(CHANGELOG 0.9.0), 배포는 survey-service와 같은 잠금으로 함께 해야 한다. 이 항목의 닫힘 여부는 `head/docs/OPEN_GAPS.md`가 정하며 이번 세션에서는 읽지 않았다(미확인). 공동 배포 쪽이 끝나기 전에는 닫힌 것으로 보지 않는다.
+- 대장 번호 없음: O11(분류체계), O16(허용 중단 시간·복구 시점), 비식별 기준은 이 영역 문서(docs/brief.md, docs/design.md)가 붙인 이름이거나 번호가 없고, OPEN_GAPS의 ID와 대응하는 것이 확인되지 않았다.

@@ -53,7 +53,7 @@ SQLite 파일 두 개로 시작한다. 쓰기 경로가 하나뿐이고 용량�
 5. `IngestResult`를 스키마로 검증해 돌려준다. 저장소 오류는 `UNAVAILABLE`(재시도 가능).
 
 수집은 비식별과 탐지를 하지 않는다(턴을 막지 않기 위해 한 번의 INSERT만 한다). 탐지·비식별은 잡이 한다.
-HTTP 형식은 CR-005. 토큰은 `OPS_INGEST_TOKEN`(환경 변수).
+HTTP 형식은 CR-005. 토큰은 `OPS_INGEST_TOKEN_FILE`(파일 경로, D84)이 우선이고 없으면 `OPS_INGEST_TOKEN`(환경 변수, 개발용)이다.
 
 ## 4. 비식별 처리기
 

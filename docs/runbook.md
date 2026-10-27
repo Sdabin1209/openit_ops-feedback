@@ -42,7 +42,7 @@ python3 -m venv .venv
 
 - `deid.*`: 남길 키, 정의별 처리, 잔존 패턴. 정하기 전에는 예시(자유 문자열 전부 마스킹)를 쓴다.
 - `retention.raw_days`: 숫자면 그보다 오래된 원본을 잡이 삭제한다. `null`이면 삭제하지 않는다.
-- `classification`: 분류체계(O11).
+- `classification`: 분류체계(O11, 대장 번호 없음).
 - `rollback.*`: 기준 수치.
 
 환경 변수(값은 이미지·리포지토리에 넣지 않는다):
@@ -81,11 +81,11 @@ docker run ... -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run
 ## ingest-api 실행
 
 ```
-OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api
+OPS_INGEST_TOKEN_FILE=/run/secrets/ingest OPS_LOG_DB=/data/log.db python -m ops_feedback.api   # 값 직접 지정(OPS_INGEST_TOKEN=...)은 개발용
 # 컨테이너
 scripts/build_wheels.sh   # git archive v2.0.2 -> wheel (build/wheels)
 docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short HEAD) .
-docker run -p 8080:8080 -v ops-log:/data -e OPS_INGEST_TOKEN=... ops-feedback-ingest
+docker run -p 8080:8080 -v ops-log:/data -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest ops-feedback-ingest
 ```
 
 확인: `curl localhost:8080/healthz`, `/readyz`. 스모크 시험(호스트 포트는 Docker가 배정, 이미지 빌드, 기동, 수집, 중복, 인증): `scripts/smoke.sh` (표준 `docker`만 쓴다. 실행 파일 이름은 `DOCKER` 환경 변수로만 바꾼다. 데몬에 닿지 않으면 오류로 중단한다).
@@ -116,5 +116,5 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 ## 장애 대응
 
 - ingest-api가 죽었을 때: 재시작. 서비스가 버퍼한 것을 재전송하고 중복은 DUPLICATE로 흡수된다.
-- DB 파일 손상: `data/` 볼륨 백업이 정책 밖이다(O16 미정). 원본(`log.db`) 손실은 복구할 수 없다.
+- DB 파일 손상: `data/` 볼륨 백업이 정책 밖이다(O16 미정, 대장 번호 없음). 원본(`log.db`) 손실은 복구할 수 없다.
 - 원본 접근: 비식별 처리기 외에는 `log.db`를 열지 않는다. 운영 사고로 직접 열어야 하면 개인정보 접근으로 기록한다.

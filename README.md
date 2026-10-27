@@ -57,8 +57,8 @@ python3 -m venv .venv
 scripts/smoke.sh                                                # 이미지 빌드, 기동, 수집, 인증 확인 (Docker 필요)
 ```
 
-- ingest-api: `OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api` (개발용 환경 변수 직접 지정).
-- 잡 1회: `OPS_DEID_SALT=... python -m ops_feedback.job --config config/job.yaml` (`config/job.example.yaml`을 복사해 사용. 옵션 `--limit --reprocess --retry-deid-failed --no-rollback`).
+- ingest-api: `OPS_INGEST_TOKEN_FILE=/run/secrets/ingest OPS_LOG_DB=/data/log.db python -m ops_feedback.api` (토큰은 파일에 두고 경로만 준다, D84. `OPS_INGEST_TOKEN=값` 직접 지정은 개발용으로만 동작한다).
+- 잡 1회: `OPS_DEID_SALT_FILE=/run/secrets/deid_salt python -m ops_feedback.job --config config/job.yaml` (`config/job.example.yaml`을 복사해 사용. 옵션 `--limit --reprocess --retry-deid-failed --no-rollback`).
 - 비밀(D84): 운영에서는 토큰과 salt를 파일에 두고 경로만 `OPS_INGEST_TOKEN_FILE`, `OPS_READ_TOKENS_FILE`, `OPS_REVIEW_TOKENS_FILE`, `OPS_DEID_SALT_FILE`로 준다. 잡 설정 파일에 비밀 값을 적으면 잡이 시작을 거부한다. 상세는 docs/runbook.md.
 
 이 문서를 쓰는 세션에서 실제로 돌린 것: `.venv/bin/python -m pytest --collect-only -q`(195건 수집), `.venv/bin/python -m ops_feedback.job --help`(옵션 목록 출력). 돌리지 않은 것: pytest 실행 전체, `scripts/smoke.sh`, 이미지 빌드, ingest-api 기동, 잡 실행, `pip install`.
@@ -86,7 +86,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인).
+GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16은 이 영역 docs/brief.md·design.md가 붙인 이름이며, 대장의 ID가 아니다).
 
 ## 6. 더 자세한 문서
 
