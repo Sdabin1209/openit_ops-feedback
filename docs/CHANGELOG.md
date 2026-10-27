@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.11.1 (제안)
+
+- PostgreSQL 연결이 끊기면(DB 서버 재시작, 연결 강제 종료) 연결을 다시 열고 같은 호출을 한 번 재시도한다. 연결 끊김 오류만 대상이고 SQL 오류는 재시도하지 않는다. 재접속도 실패하면 UNAVAILABLE(오류에 접속 정보 없음). 서비스 재시작이 필요 없다.
+- 불확실한 쓰기(끊긴 순간 서버가 커밋했을 수 있음)는 멱등이라 재시도해도 데이터가 같다(INSERT는 ON CONFLICT). 달라질 수 있는 것은 반환 건수뿐이다(예: 응답을 못 받은 첫 수신이 재시도에서 DUPLICATE). `insert_case`도 재시도 안전하게 바꿨다. `tests/test_postgres_reconnect.py` 추가.
+
 ## 0.11.0 (제안)
 
 - 운영 저장소로 PostgreSQL 추가(`psycopg[binary]==3.3.6` 고정). `OPS_LOG_DATABASE_URL`, `OPS_FAILURE_DATABASE_URL`(`read_secret`, `_FILE` 우선)이 있으면 PostgreSQL, 없으면 기존 SQLite. 서버와 잡 모두 `storage.py`의 같은 선택 함수를 쓴다. `/readyz`에 저장소 종류만 표시.

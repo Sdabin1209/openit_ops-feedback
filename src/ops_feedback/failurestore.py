@@ -211,10 +211,12 @@ class PostgresFailureBackend(PgBase, _Backend):
 
     def insert_case(self, record):
         return self._x(lambda: self._db.execute(
-            "INSERT INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record)"
-            " VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING seq",
+            "WITH ins AS (INSERT INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record)"
+            " VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(case_id,version) DO NOTHING RETURNING seq)"
+            " SELECT seq FROM ins UNION ALL SELECT seq FROM cases WHERE case_id=%s AND version=%s LIMIT 1",
             (record["case_id"], record["version"], record["review_status"], record["failure_type"],
-             record["source_release_id"], record["created_at"], json.dumps(record, ensure_ascii=False))).fetchone()[0])
+             record["source_release_id"], record["created_at"], json.dumps(record, ensure_ascii=False),
+             record["case_id"], record["version"])).fetchone()[0])   # 끊김 뒤 재시도해도 같은 seq를 낸다
 
     def versions(self, case_id):
         return self._x(lambda: [json.loads(r) for (r,) in self._db.execute(

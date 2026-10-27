@@ -29,6 +29,7 @@ class PgBase:
     DDL = ""
 
     def __init__(self, url: str) -> None:
+        self._url = url                      # 어디에도 출력하지 않는다
         self._lock = threading.RLock()
         self._db = _connect(url, self.WHAT)
         def ddl():
@@ -39,13 +40,29 @@ class PgBase:
                 self._db.execute("SELECT pg_advisory_unlock(%s)", (_LOCK_KEY,))
         self._x(ddl)
 
+    def _alive(self) -> bool:
+        return not (self._db.closed or self._db.broken)
+
     def _x(self, fn):
+        """한 번의 호출. 연결이 끊긴 경우(서버 재시작, 연결 강제 종료)에만 연결을 다시 열고 같은 호출을 한 번 재시도한다.
+
+        재시도의 근거: 모든 호출은 자동 커밋 단일 문장이거나(DDL은 전체가 멱등) 멱등 쓰기다. 끊긴 순간 서버가 이미 커밋했을 수 있는
+        불확실한 쓰기도 재시도하면 같은 상태로 수렴한다(INSERT는 ON CONFLICT, UPDATE·DELETE는 같은 조건). 달라질 수 있는 것은
+        반환 건수뿐이다(예: 이미 들어간 원본을 재시도에서 '이미 있음'으로 보아 DUPLICATE). 데이터는 한 건도 잃거나 늘지 않는다.
+        SQL 오류(제약, 문법 등)는 재시도하지 않는다. 재접속도 실패하면 UNAVAILABLE(retryable)이다.
+        """
         import psycopg
-        try:
-            with self._lock:
-                return fn()
-        except psycopg.Error as e:
-            raise BoundaryError("UNAVAILABLE", f"{self.WHAT} 오류: {type(e).__name__}") from None
+        for attempt in (1, 2):
+            try:
+                with self._lock:
+                    if not self._alive():
+                        self._db = _connect(self._url, self.WHAT)
+                    return fn()
+            except psycopg.Error as e:
+                lost = isinstance(e, (psycopg.OperationalError, psycopg.InterfaceError)) and not self._alive()
+                if lost and attempt == 1:
+                    continue
+                raise BoundaryError("UNAVAILABLE", f"{self.WHAT} 오류: {type(e).__name__}") from None
 
     def ping(self):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
