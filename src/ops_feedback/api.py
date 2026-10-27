@@ -34,6 +34,7 @@ from .clock import parse_ts
 from .failurestore import FailureStoreImpl
 from .logstore import LogStore
 from .review import ReviewQueue
+from .storage import open_failure_store, open_log_store
 from .schemas import validate_record
 from .schemas import supported_trace_versions
 
@@ -149,7 +150,8 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                         raise BoundaryError("UNAVAILABLE", "문진 스키마가 없다")
                 except BoundaryError as e:
                     return self._json(503, {"status": "not-ready", "code": e.code})
-                return self._json(200, {"status": "ready", "supported_runtime_contract_versions": supported_trace_versions()})
+                return self._json(200, {"status": "ready", "log_store": store.backend_kind(),
+                                       "failure_store": failures.backend_kind() if failures is not None else None, "supported_runtime_contract_versions": supported_trace_versions()})
             self._json(404, {"error": "not found"})
 
         def _review(self, path: str) -> None:
@@ -236,11 +238,16 @@ def main() -> int:
     if not token:
         log.error("OPS_INGEST_TOKEN_FILE 또는 OPS_INGEST_TOKEN이 필요하다")
         return 2
-    store = LogStore.sqlite(os.environ.get("OPS_LOG_DB", "/data/log.db"))
-    failures, rtoks = None, {}
-    if os.environ.get("OPS_FAILURE_DB") and read_raw:
-        failures = FailureStoreImpl.sqlite(os.environ["OPS_FAILURE_DB"])
-        rtoks = parse_read_tokens(read_raw)
+    try:
+        store = open_log_store(os.environ, os.environ.get("OPS_LOG_DB", "/data/log.db"))
+        failures, rtoks = None, {}
+        if read_raw:
+            failures = open_failure_store(os.environ, os.environ.get("OPS_FAILURE_DB"))
+            if failures is not None:
+                rtoks = parse_read_tokens(read_raw)
+    except (BoundaryError, SecretError) as e:
+        log.error("저장소를 열지 못했다: %s", getattr(e, "message", None) or type(e).__name__)
+        return 2
     vtoks = parse_read_tokens(review_raw or "")
     srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks, review_tokens=vtoks)
     log.info("listening on %s", srv.server_address[1])

@@ -17,7 +17,8 @@ python3 -m venv .venv
 | 쓰는 경로 | `log.db`(원본, `OPS_LOG_DB`) | `log.db`(처리 표시, 보관 기간 지난 원본 삭제), `failures.db`(사례, 비식별 trace, 지표, 롤백 요청) |
 | 읽는 경로 | `failures.db`(읽기 면, `OPS_FAILURE_DB`) | `log.db`(비식별 처리기만), `failures.db` |
 | 환경 변수(비밀은 `_FILE`, 아래 절) | `OPS_INGEST_TOKEN`(필수, 수집 쓰기), `OPS_LOG_DB`, `OPS_PORT`, 읽기 면: `OPS_FAILURE_DB`+`OPS_READ_TOKENS=역할=토큰,...` | `OPS_DEID_SALT`(필수, 이름은 `deid.salt_env`), 설정의 `{env: 이름}`이 가리키는 토큰들 |
-| 볼륨 | `/data`에 `log.db`와 `failures.db`를 둔다(이미지 기본 `OPS_LOG_DB=/data/log.db`, `OPS_FAILURE_DB=/data/failures.db`) | 설정 `storage.log_db`, `storage.failure_db`. ingest-api와 **같은 볼륨**을 가리켜야 한다(SQLite WAL, 두 프로세스가 같은 호스트에서 공유) |
+| 저장소 선택 | `OPS_LOG_DATABASE_URL`(비밀, `_FILE` 우선)이 있으면 PostgreSQL, 없으면 `OPS_LOG_DB`. 읽기 면은 `OPS_FAILURE_DATABASE_URL` 또는 `OPS_FAILURE_DB`. `/readyz`에는 저장소 종류(`postgresql`\|`sqlite`)만 나오고 접속 문자열은 어디에도 나오지 않는다 | 같은 환경 변수 두 개가 설정의 `storage.*_db`(SQLite 경로)보다 우선한다. 서버와 같은 데이터베이스를 가리키면 볼륨 공유가 필요 없다 |
+| 볼륨(SQLite일 때만) | `/data`에 `log.db`와 `failures.db`를 둔다(이미지 기본 `OPS_LOG_DB=/data/log.db`, `OPS_FAILURE_DB=/data/failures.db`) | 설정 `storage.log_db`, `storage.failure_db`. ingest-api와 **같은 볼륨**을 가리켜야 한다(SQLite WAL, 두 프로세스가 같은 호스트에서 공유) |
 | 네트워크 | 수집 `POST /v1/traces`(수집 토큰), 읽기 `GET /v1/cases`, `/v1/cases/{id}`, `/v1/deidentified-traces/{ref}`(읽기 토큰, 역할별) | I4 읽기와 I5 롤백 호출을 쓰면 release-gate 주소와 토큰 |
 
 읽기 토큰으로 `/v1/traces`를, 수집 토큰으로 읽기 경로를 호출하면 403이다. `publish_case`는 HTTP로 열려 있지 않다(잡만 쓴다).
@@ -26,7 +27,7 @@ python3 -m venv .venv
 
 | 키 | 필수 | 뜻 |
 | --- | --- | --- |
-| `storage.log_db`, `storage.failure_db` | 예 | SQLite 파일 경로 |
+| `storage.log_db`, `storage.failure_db` | 예 | SQLite 파일 경로(PostgreSQL URL 환경 변수가 있으면 무시) |
 | `deid.policy_id`, `deid.keep_string_keys`, `deid.unlisted_string_action`(mask\|drop) | 예 | 비식별 정책의 필수 부분. 기본값 없음 |
 | `deid.salt_env` | 아니오(기본 `OPS_DEID_SALT`) | salt를 담은 환경 변수 이름 |
 | `deid.pseudonymize_keys`, `scrub_string_keys`, `scrub_patterns`, `mask_defs`, `drop_defs`, `mask_number_keys`, `mask_value_keys`, `residual_patterns` | 아니오 | 4절 처리 방식의 정책 값 |

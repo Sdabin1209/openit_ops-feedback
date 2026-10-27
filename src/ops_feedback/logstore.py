@@ -16,6 +16,7 @@ from typing import Iterator, Optional
 from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 
+from .pgbase import PgBase
 from .clock import Clock, utc_now
 from .schemas import supported_trace_versions, validate_record, validate_trace
 
@@ -38,6 +39,8 @@ class _RawBackend(ABC):
     def purge_received_before(self, cutoff: str) -> int: ...
     @abstractmethod
     def ping(self) -> None: ...
+    @abstractmethod
+    def received_at(self, session_id: str, turn_id: str) -> Optional[str]: ...
 
 
 class MemoryBackend(_RawBackend):
@@ -91,6 +94,10 @@ class MemoryBackend(_RawBackend):
 
     def ping(self):
         return None
+
+    def received_at(self, session_id, turn_id):
+        r = self._rows.get((session_id, turn_id))
+        return r["received_at"] if r else None
 
 
 class SqliteBackend(_RawBackend):
@@ -168,8 +175,75 @@ class SqliteBackend(_RawBackend):
     def ping(self):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
 
+    def received_at(self, session_id, turn_id):
+        row = self._x(lambda: self._db.execute("SELECT received_at FROM raw_traces WHERE session_id=? AND turn_id=?",
+                                               (session_id, turn_id)).fetchone())
+        return row[0] if row else None
+
+    KIND = "sqlite"
+
     def close(self) -> None:
         self._db.close()
+
+
+class PostgresRawBackend(PgBase, _RawBackend):
+    WHAT = "로그 저장소"
+    DDL = """
+        CREATE TABLE IF NOT EXISTS raw_traces(
+          seq BIGSERIAL PRIMARY KEY,
+          session_id TEXT NOT NULL, turn_id TEXT NOT NULL, release_id TEXT NOT NULL,
+          received_at TEXT NOT NULL, envelope TEXT NOT NULL, envelope_hash TEXT NOT NULL,
+          status TEXT, config_hash TEXT, processed_at TEXT,
+          UNIQUE(session_id, turn_id));
+        CREATE INDEX IF NOT EXISTS raw_status ON raw_traces(status, seq);
+        CREATE INDEX IF NOT EXISTS raw_release ON raw_traces(release_id, received_at);
+    """
+
+    def insert_if_absent(self, session_id, turn_id, release_id, received_at, envelope, envelope_hash) -> bool:
+        return self._x(lambda: self._db.execute(
+            "INSERT INTO raw_traces(session_id,turn_id,release_id,received_at,envelope,envelope_hash)"
+            " VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT(session_id,turn_id) DO NOTHING",
+            (session_id, turn_id, release_id, received_at, json.dumps(envelope, ensure_ascii=False), envelope_hash)).rowcount == 1)
+
+    def unprocessed(self, limit):
+        def f():
+            q = "SELECT session_id,turn_id,release_id,received_at,envelope,envelope_hash,seq FROM raw_traces WHERE status IS NULL ORDER BY seq"
+            args: tuple = ()
+            if limit:
+                q += " LIMIT %s"
+                args = (limit,)
+            return [{"session_id": a, "turn_id": b, "release_id": c, "received_at": d, "envelope": json.loads(e),
+                     "envelope_hash": h, "seq": s, "status": None} for a, b, c, d, e, h, s in self._db.execute(q, args).fetchall()]
+        return self._x(f)
+
+    def mark(self, session_id, turn_id, status, config_hash, processed_at):
+        self._x(lambda: self._db.execute(
+            "UPDATE raw_traces SET status=%s, config_hash=%s, processed_at=%s WHERE session_id=%s AND turn_id=%s",
+            (status, config_hash, processed_at, session_id, turn_id)))
+
+    def reset_processing(self, only_status):
+        def f():
+            if only_status is None:
+                return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status IS NOT NULL").rowcount
+            return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status=%s", (only_status,)).rowcount
+        return self._x(f)
+
+    def counts_by_release(self, since):
+        def f():
+            if since is None:
+                rows = self._db.execute("SELECT release_id,COUNT(*) FROM raw_traces GROUP BY release_id")
+            else:
+                rows = self._db.execute("SELECT release_id,COUNT(*) FROM raw_traces WHERE received_at>=%s GROUP BY release_id", (since,))
+            return {r: int(n) for r, n in rows.fetchall()}
+        return self._x(f)
+
+    def purge_received_before(self, cutoff):
+        return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE received_at<%s", (cutoff,)).rowcount)
+
+    def received_at(self, session_id, turn_id):
+        row = self._x(lambda: self._db.execute("SELECT received_at FROM raw_traces WHERE session_id=%s AND turn_id=%s",
+                                               (session_id, turn_id)).fetchone())
+        return row[0] if row else None
 
 
 class DeidentifierView:
@@ -197,6 +271,13 @@ class LogStore:
     def sqlite(cls, path: str | Path, *, clock: Clock = utc_now) -> "LogStore":
         return cls(SqliteBackend(path), clock=clock)
 
+    @classmethod
+    def postgres(cls, url: str, *, clock: Clock = utc_now) -> "LogStore":
+        return cls(PostgresRawBackend(url), clock=clock)
+
+    def backend_kind(self) -> str:
+        return getattr(self._backend, "KIND", "sqlite" if isinstance(self._backend, SqliteBackend) else "memory")
+
     # --- I6 ---
     def send(self, envelope: dict) -> dict:
         validate_record("TraceEnvelope", envelope)
@@ -221,12 +302,7 @@ class LogStore:
         return result
 
     def _first_received_at(self, sid: str, tid: str) -> Optional[str]:
-        b = self._backend
-        if isinstance(b, MemoryBackend):
-            r = b._rows.get((sid, tid))
-            return r["received_at"] if r else None
-        row = b._x(lambda: b._db.execute("SELECT received_at FROM raw_traces WHERE session_id=? AND turn_id=?", (sid, tid)).fetchone())
-        return row[0] if row else None
+        return self._backend.received_at(sid, tid)
 
     # --- 원본이 아닌 메타데이터 (읽기 허용) ---
     def counts_by_release(self, since: Optional[str] = None) -> dict[str, int]:

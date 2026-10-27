@@ -27,7 +27,7 @@
 | `src/ops_feedback/deid.py` | 비식별 처리기(허용 목록 방식). 원본을 읽는 유일한 부분 |
 | `src/ops_feedback/detect.py` | 실패 탐지 규칙과 분류 |
 | `src/ops_feedback/review.py` | 사람 검토 큐 |
-| `src/ops_feedback/failurestore.py` | 실패 사례 저장소(I7), SQLite와 메모리 구현 |
+| `src/ops_feedback/failurestore.py` | 실패 사례 저장소(I7), PostgreSQL(운영)·SQLite·메모리 구현 |
 | `src/ops_feedback/rollback.py` | 지표 집계와 롤백 요청 생성 |
 | `src/ops_feedback/job.py` | 주기 잡 1회 실행 명령 |
 | `config/job.example.yaml` | 잡 설정 예시(값은 사용자가 정한 기준이 아님) |
@@ -67,8 +67,8 @@ scripts/smoke.sh                                                # 이미지 빌�
 
 확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
 - docs/STATUS.md 마지막 기록: `pytest -q` 133 통과 0 실패, `scripts/smoke.sh` SMOKE OK(boundary-contracts v2.0.0 wheel, WSL 한 환경에서만).
-- docs/CHANGELOG.md 최신은 0.10.1(boundary-contracts v2.0.2, 비밀 NAME_FILE). 이 세션의 수집 건수는 195건으로, STATUS의 133과 다르다(아래 어긋남 참고).
-- 구현됨: I6/I7 SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
+- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 이 세션의 수집 건수는 195건으로, STATUS의 133과 다르다(아래 어긋남 참고).
+- 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
 
 확인하지 못한 것:
 - v2 TurnTrace 전체 키에 대한 규칙 동작(STATUS: 당시 v2 trace 키를 읽을 수 없었다고 기록. 이후 0.9.0에서 따라갔다는 기록은 있으나 이 세션에서 시험을 돌리지 않았다).

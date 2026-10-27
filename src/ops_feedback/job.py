@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 from boundary_contracts import read_secret
+
+from .storage import open_failure_store, open_log_store
 import argparse
 import importlib
 import json
@@ -186,8 +188,8 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     salt = read_secret(salt_name, environ=env)          # NAME_FILE 우선, 없으면 NAME
     if not salt:
         raise ValueError(f"의사 식별자 salt 비밀({salt_name}_FILE 또는 {salt_name})이 없다")
-    log = LogStore.sqlite(cfg["storage"]["log_db"], clock=clock)
-    store = FailureStoreImpl.sqlite(cfg["storage"]["failure_db"])
+    log = open_log_store(env, cfg["storage"]["log_db"], clock=clock)
+    store = open_failure_store(env, cfg["storage"]["failure_db"])
     deid = Deidentifier(policy, salt, log.grant_deidentifier_view())
     detectors = build_detectors(cfg["detection"]["detectors"])
     classifier = Classifier(cfg["classification"])

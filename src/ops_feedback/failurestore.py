@@ -15,6 +15,7 @@ from typing import Iterator, Optional
 from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 
+from .pgbase import PgBase
 from .clock import fmt_ts, parse_ts
 from .schemas import validate_record
 
@@ -195,6 +196,72 @@ class SqliteBackend(_Backend):
         self._db.close()
 
 
+class PostgresFailureBackend(PgBase, _Backend):
+    WHAT = "실패 사례 저장소"
+    DDL = """
+        CREATE TABLE IF NOT EXISTS cases(
+          seq BIGSERIAL PRIMARY KEY, case_id TEXT NOT NULL, version INTEGER NOT NULL,
+          review_status TEXT NOT NULL, failure_type TEXT NOT NULL, source_release_id TEXT NOT NULL,
+          created_at TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(case_id, version));
+        CREATE INDEX IF NOT EXISTS cases_filter ON cases(review_status, failure_type, source_release_id);
+        CREATE INDEX IF NOT EXISTS cases_release ON cases(source_release_id, created_at);
+        CREATE TABLE IF NOT EXISTS traces(ref TEXT PRIMARY KEY, trace TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS aux(kind TEXT NOT NULL, key TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind, key));
+    """
+
+    def insert_case(self, record):
+        return self._x(lambda: self._db.execute(
+            "INSERT INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record)"
+            " VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING seq",
+            (record["case_id"], record["version"], record["review_status"], record["failure_type"],
+             record["source_release_id"], record["created_at"], json.dumps(record, ensure_ascii=False))).fetchone()[0])
+
+    def versions(self, case_id):
+        return self._x(lambda: [json.loads(r) for (r,) in self._db.execute(
+            "SELECT record FROM cases WHERE case_id=%s ORDER BY version", (case_id,)).fetchall()])
+
+    def scan(self, after_seq):
+        rows = self._x(lambda: self._db.execute("SELECT seq,record FROM cases WHERE seq>%s ORDER BY seq", (after_seq,)).fetchall())
+        for s, r in rows:
+            yield s, json.loads(r)
+
+    def query(self, after_seq, latest_only, review_status, failure_type, source_release_id, since, limit):
+        where, args = ["c.seq>%s"], [after_seq]
+        if latest_only:
+            where.append("NOT EXISTS (SELECT 1 FROM cases d WHERE d.case_id=c.case_id AND d.version>c.version)")
+        for col, v in (("review_status", review_status), ("failure_type", failure_type), ("source_release_id", source_release_id)):
+            if v:
+                where.append(f"c.{col}=%s")
+                args.append(v)
+        if since:
+            where.append("c.created_at>=%s")
+            args.append(since)
+        q = f"SELECT c.seq,c.record FROM cases c WHERE {' AND '.join(where)} ORDER BY c.seq LIMIT %s"
+        rows = self._x(lambda: self._db.execute(q, (*args, limit)).fetchall())
+        return [(s_, json.loads(r)) for s_, r in rows]
+
+    def put_trace(self, ref, trace):
+        self._x(lambda: self._db.execute("INSERT INTO traces(ref,trace) VALUES(%s,%s) ON CONFLICT DO NOTHING",
+                                         (ref, json.dumps(trace, ensure_ascii=False))))
+
+    def get_trace(self, ref):
+        row = self._x(lambda: self._db.execute("SELECT trace FROM traces WHERE ref=%s", (ref,)).fetchone())
+        return json.loads(row[0]) if row else None
+
+    def put_aux(self, kind, key, record):
+        return self._x(lambda: self._db.execute(
+            "INSERT INTO aux(kind,key,record) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
+            (kind, key, json.dumps(record, ensure_ascii=False))).rowcount == 1)
+
+    def get_aux(self, kind, key):
+        row = self._x(lambda: self._db.execute("SELECT record FROM aux WHERE kind=%s AND key=%s", (kind, key)).fetchone())
+        return json.loads(row[0]) if row else None
+
+    def list_aux(self, kind):
+        return self._x(lambda: [json.loads(r) for (r,) in self._db.execute(
+            "SELECT record FROM aux WHERE kind=%s ORDER BY key", (kind,)).fetchall()])
+
+
 def _same(a: dict, b: dict) -> bool:
     return sha256_hash(a) == sha256_hash(b)
 
@@ -213,6 +280,13 @@ class FailureStoreImpl:
     @classmethod
     def sqlite(cls, path: str | Path) -> "FailureStoreImpl":
         return cls(SqliteBackend(path))
+
+    @classmethod
+    def postgres(cls, url: str) -> "FailureStoreImpl":
+        return cls(PostgresFailureBackend(url))
+
+    def backend_kind(self) -> str:
+        return getattr(self._b, "KIND", "sqlite" if isinstance(self._b, SqliteBackend) else "memory")
 
     # --- 쓰기 (이 영역 내부) ---
     def put_trace(self, ref: str, trace: dict) -> None:

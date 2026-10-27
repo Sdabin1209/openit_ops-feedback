@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.11.0 (제안)
+
+- 운영 저장소로 PostgreSQL 추가(`psycopg[binary]==3.3.6` 고정). `OPS_LOG_DATABASE_URL`, `OPS_FAILURE_DATABASE_URL`(`read_secret`, `_FILE` 우선)이 있으면 PostgreSQL, 없으면 기존 SQLite. 서버와 잡 모두 `storage.py`의 같은 선택 함수를 쓴다. `/readyz`에 저장소 종류만 표시.
+- 적합성 시험을 memory·sqlite·postgres로 매개변수화(`TEST_DATABASE_URL`이 없으면 postgres는 SKIP). `tests/test_conformance_rawmeta.py`(처리 표시·집계·보존 삭제), `tests/test_postgres_select.py`(선택, 접속 문자열 비노출, 서버·잡) 추가.
+
 ## 0.10.0 (제안, boundary-contracts v2.0.2, D84)
 
 - 모든 토큰·salt를 `boundary_contracts.read_secret`으로 읽는다(`NAME_FILE` 우선, 없으면 `NAME`). 서버(`api.py`)와 잡(`job.py`, 설정의 `{env: 이름}` 인자 포함). `docker exec env`/`inspect`에 평문이 남지 않는다.

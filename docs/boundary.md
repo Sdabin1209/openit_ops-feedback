@@ -13,8 +13,8 @@
 
 | 인터페이스 | 구현 | 메모리 구현 | 비고 |
 | --- | --- | --- | --- |
-| I6 TraceIngest `send` | `ops_feedback.logstore.LogStore.sqlite(path)`, HTTP 서비스 `ops_feedback.api`(ingest-api), 클라이언트 `boundary_contracts.clients.HttpTraceIngest` | `LogStore.memory()` | `(session_id, turn_id)` 중복 제거, 먼저 받은 것 유지, DUPLICATE |
-| I7 FailureStore | `ops_feedback.failurestore.FailureStoreImpl.sqlite(path)` | `FailureStoreImpl.memory()` | `publish_case`/`get_case`/`list_cases`/`get_trace` |
+| I6 TraceIngest `send` | `ops_feedback.logstore.LogStore.postgres(url)`(운영) 또는 `.sqlite(path)`(개발·시험), HTTP 서비스 `ops_feedback.api`(ingest-api), 클라이언트 `boundary_contracts.clients.HttpTraceIngest` | `LogStore.memory()` | `(session_id, turn_id)` 중복 제거, 먼저 받은 것 유지, DUPLICATE |
+| I7 FailureStore | `ops_feedback.failurestore.FailureStoreImpl.postgres(url)`(운영) 또는 `.sqlite(path)` | `FailureStoreImpl.memory()` | `publish_case`/`get_case`/`list_cases`/`get_trace` |
 
 두 구현은 같은 클래스와 로직 위에 백엔드만 다르고, 같은 적합성 시험을 통과한다(`tests/test_conformance_ingest.py`, `tests/test_conformance_failurestore.py`).
 
