@@ -48,7 +48,7 @@ def _serve(tmp_path, url_log, url_fail):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_PORT=str(port), **LIMITS,
+    env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_REVIEW_TOKENS="reviewer=vt", OPS_PORT=str(port), **LIMITS,
                  OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", url_log), OPS_FAILURE_DATABASE_URL_FILE=_file(tmp_path, "fu", url_fail))
     p = subprocess.Popen([sys.executable, "-m", "ops_feedback.api"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     base = f"http://127.0.0.1:{port}"
@@ -82,6 +82,23 @@ def _post(base, tid):
     except urllib.error.HTTPError as e:
         code = e.code
     return code, time.monotonic() - t0
+
+
+def _post_status(base, tid):
+    rq = urllib.request.Request(base + "/v1/traces", data=json.dumps(envelope(make_trace("s-9", tid))).encode(),
+                                headers={"Authorization": "Bearer tok", "Content-Type": "application/json"})
+    return json.loads(urllib.request.urlopen(rq, timeout=15).read())["status"]
+
+
+def _call(base, method, path, token, body=None):
+    rq = urllib.request.Request(base + path, method=method, data=None if body is None else json.dumps(body).encode(),
+                                headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+    t0 = time.monotonic()
+    try:
+        r = urllib.request.urlopen(rq, timeout=30)
+        return r.status, json.loads(r.read()), time.monotonic() - t0
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b"{}"), time.monotonic() - t0
 
 
 def test_readyz_503_within_probe_limit_and_recovers(tmp_path, request, frozen_pg):
@@ -137,6 +154,9 @@ def test_request_path_is_bounded_and_returns_unavailable(tmp_path, request, froz
                 break
             time.sleep(0.5)
         assert code in (200, 201)                              # 복구 뒤 서비스 재시작 없이 수집
+        # 같은 turn_id의 재전송: 첫 시도가 서버에 닿았는지 몰라도 기록은 한 건이다(ACCEPTED 뒤 DUPLICATE, 이중 기록 없음)
+        assert _post_status(base, "t-1") == "DUPLICATE"
+        assert _post_status(base, "t-new") == "ACCEPTED" and _post_status(base, "t-new") == "DUPLICATE"
     finally:
         frozen_pg.resume()
         p.terminate()
@@ -177,3 +197,36 @@ def test_invalid_timeout_setting_is_rejected(monkeypatch):
         pgbase._setting("OPS_DB_STATEMENT_TIMEOUT")
     monkeypatch.delenv("OPS_DB_STATEMENT_TIMEOUT")
     assert pgbase._setting("OPS_DB_STATEMENT_TIMEOUT") == 3.0
+
+
+def test_read_and_review_are_bounded_when_database_frozen_and_review_is_retry_safe(tmp_path, request, frozen_pg):
+    """D5(I7 읽기)와 D6(검토 게시)의 DB 무응답: 상한 안에 503, 반쯤 쓴 상태 없이 같은 요청을 다시 보내면 한 번만 반영된다."""
+    from ops_feedback.failurestore import FailureStoreImpl
+    from test_conformance_failurestore import TRACE, case
+    log_url, fail_url = _pg_schema_url(request), _pg_schema_url(request)
+    seed = FailureStoreImpl.postgres(fail_url)
+    seed.put_trace("tr-1", TRACE)
+    seed.publish_case(case())
+    seed._b.close()
+    p, base = _serve(tmp_path, log_url, fail_url)
+    try:
+        assert _call(base, "GET", "/v1/cases", "rt")[0] == 200
+        frozen_pg.pause()
+        code, body, dt = _call(base, "GET", "/v1/cases", "rt")
+        assert code == 503 and dt < 9, (code, dt)
+        code, body, dt = _call(base, "POST", "/v1/cases/fc-1/review", "vt", {"review_status": "DISMISSED"})
+        assert code == 503 and dt < 9, (code, dt)
+        frozen_pg.resume()
+        for _ in range(20):
+            code, body, _ = _call(base, "POST", "/v1/cases/fc-1/review", "vt", {"review_status": "DISMISSED"})
+            if code in (200, 201):
+                break
+            time.sleep(0.5)
+        assert code in (200, 201) and body["version"] == 2
+        assert _call(base, "POST", "/v1/cases/fc-1/review", "vt", {"review_status": "DISMISSED"})[0] == 200      # 재전송: 새 version 없음
+        items = _call(base, "GET", "/v1/cases?latest_only=false", "rt")[1]["items"]
+        assert [c["version"] for c in items] == [1, 2]
+    finally:
+        frozen_pg.resume()
+        p.terminate()
+        p.communicate(timeout=10)

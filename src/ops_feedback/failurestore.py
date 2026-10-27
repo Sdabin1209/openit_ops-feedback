@@ -141,9 +141,9 @@ class SqliteBackend(_Backend):
         except sqlite3.Error as e:
             raise BoundaryError("UNAVAILABLE", f"실패 사례 저장소 오류: {type(e).__name__}") from e
 
-    def insert_case(self, record):
+    def insert_case(self, record):       # 이미 있으면 무시한다. publish_case가 저장된 내용을 대조해 CONFLICT를 낸다
         return self._x(lambda: self._db.execute(
-            "INSERT INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record) VALUES(?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record) VALUES(?,?,?,?,?,?,?)",
             (record["case_id"], record["version"], record["review_status"], record["failure_type"],
              record["source_release_id"], record["created_at"], json.dumps(record, ensure_ascii=False))).lastrowid)
 
@@ -314,7 +314,14 @@ class FailureStoreImpl:
             if self._b.get_trace(case["deidentified_trace_ref"]) is None:
                 raise BoundaryError("FAILED_PRECONDITION", "deidentified_trace_ref에 해당하는 비식별 trace가 먼저 저장되어야 한다")
             self._b.insert_case(case)
-            return case
+            # 프로세스가 둘 이상이면(검토자 둘, 서버와 잡) 위의 확인과 쓰기 사이에 다른 쪽이 먼저 쓸 수 있다.
+            # 쓰기는 먼저 쓴 쪽을 남기므로, 실제로 저장된 내용이 내 것이 아니면 성공으로 말하지 않고 CONFLICT를 낸다.
+            for stored in self._b.versions(case["case_id"]):
+                if stored["version"] == case["version"]:
+                    if _same(stored, case):
+                        return case
+                    raise BoundaryError("CONFLICT", f"{case['case_id']} v{case['version']}에 다른 내용")
+            raise BoundaryError("UNAVAILABLE", "게시한 사례를 다시 읽지 못했다")
 
     def get_case(self, case_id: str, *, version: Optional[int] = None) -> dict:
         vs = self._b.versions(case_id)

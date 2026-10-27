@@ -1,5 +1,15 @@
 # 변경 이력
 
+## 0.11.3 (제안, FAULT_MATRIX D2·D3·D5·D6·A6)
+
+- 롤백 평가(잡): I4 읽기·I5 전달 실패를 잡아 보고서 `rollback`에 `{"action":"ERROR","error":코드}`로 남기고 `errors`에 넣는다(종료 코드 1). 이전에는 I4 실패가 잡 전체를 예외로 끝내(이미 게시한 사례의 보고서 없이) 종료 코드 2였고, I5 `submit_error`(401/403 포함)는 보고서에만 있고 종료 코드 0이었다. 평가 전체에 상한(`rollback.deadline_seconds`, 기본 60초, 기준 값이 아님)을 둔다.
+- I5 영수증의 `request_id`가 요청과 다르면 저장하지 않는다(INTEGRITY_ERROR). 형식이 다른 응답은 SDK가 INTEGRITY_ERROR로 막는다.
+- 지표 스냅샷은 요청을 처음 만들 때만 쓴다(이전에는 실행마다 `window_end`가 달라 같은 상황에서도 새 행이 쌓였다). 요청 id는 변함없이 (현재, 되돌릴, 포인터 버전)에서 정해진다.
+- 잡: I4가 UNAVAILABLE이면 같은 실행에서 다른 릴리스를 다시 부르지 않는다(릴리스마다 timeout을 기다리지 않게).
+- `publish_case`: 쓴 뒤 저장된 내용을 다시 읽어 대조한다. 두 프로세스가 같은 (case_id, version)을 동시에 게시하면 먼저 쓴 쪽이 남고 진 쪽은 CONFLICT를 받는다(이전에는 PostgreSQL에서 진 쪽도 성공으로 응답했고 SQLite에서는 UNAVAILABLE이었다).
+- 읽기 API(GET): 예상 밖 예외도 연결을 끊지 않고 503 본문으로 낸다.
+- 시험: `tests/test_upstream_faults.py`(실제 HTTP 가짜 상류: 멈춤·5xx·깨진 JSON·401/403·형식 이상·다른 request_id, 잡 중단, 중복 수집, 게시 경합), `tests/test_postgres_timeout.py`에 읽기·검토 게시·재전송 시험 추가.
+
 ## 0.11.2 (제안, FAULT_MATRIX P0-3 D1·D4)
 
 - PostgreSQL 대기 상한: 접속(`OPS_DB_CONNECT_TIMEOUT`, 기본 3초, 이전 10초 고정), 문장(`OPS_DB_STATEMENT_TIMEOUT`, 3초, 서버 쪽 `statement_timeout` + 서버가 얼면 +1초 뒤 클라이언트가 소켓을 닫음), 스키마 생성(`OPS_DB_DDL_TIMEOUT`, 30초). 이전에는 문장 상한이 없어 서버가 응답하지 않으면 무한 대기할 수 있었다.

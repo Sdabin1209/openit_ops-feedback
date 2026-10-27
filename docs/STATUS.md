@@ -61,3 +61,11 @@
 - 막힌 것: 이 영역 코드 안에서 막힌 것은 없다. 그러나 "막힌 것 없음"은 아니다. 다른 영역 의존·사용자 결정으로 열려 있는 항목은 README.md 5절(G14, G11, D-A, D-E)과 위 "남은 일"에 있다.
 - G11(문진 스키마 정수 버전 1 안의 비호환 변경, D79): ops-feedback은 사본 `_schemas/survey/v1`을 따라갔고(CHANGELOG 0.9.0), 배포는 survey-service와 같은 잠금으로 함께 해야 한다. 이 항목의 닫힘 여부는 `head/docs/OPEN_GAPS.md`가 정하며 이번 세션에서는 읽지 않았다(미확인). 공동 배포 쪽이 끝나기 전에는 닫힌 것으로 보지 않는다.
 - 대장 번호 없음: O11(분류체계), O16(허용 중단 시간·복구 시점), 비식별 기준은 이 영역 문서에만 나오는 이름이고 OPEN_GAPS의 ID와 대응하는 것이 확인되지 않았다(이름의 출처는 미확인).
+
+## 2026-10-28 장애 대응(FAULT_MATRIX D1~D6, A6 서버 쪽) 반영
+
+한 일은 CHANGELOG 0.11.2(PostgreSQL 대기 상한)와 0.11.3(이웃·중복·중단). 칸별 현재 동작은 docs/boundary.md "장애 칸별 현황".
+- 시험(이 WSL 한 환경, 호스트 Docker PostgreSQL 16, `TEST_DATABASE_URL`+`TEST_PG_CONTAINER` 지정): `pytest -q` 405 통과 0 건너뜀. PostgreSQL 없이는 295 통과 110 건너뜀(같은 405건). `scripts/smoke.sh` SMOKE OK(SQLite 구성).
+- 남은 일: 컨테이너 조합에서의 재측정(deploy E2E 5p, 헤드). 롤백 기준 값(사용자 결정)과 운영 설정의 `gate_service` 연결(P1-3)은 그대로다: 이 영역이 값을 채우지 않았고 `auto_submit` 예시는 false다.
+- 막힌 것: 이 영역 코드 안에서는 없음. 아래 "알려진 위험"은 사용자·헤드 판단이 필요하다.
+- 알려진 위험(고치지 않음): (1) I4가 일시적으로 응답하지 않을 때 만든 사례는 `question_set` 없이 게시되고 version 1은 다시 쓰지 않는다(기존 시험이 이 동작을 정한다). (2) `retention.raw_days`를 정하면 보존 삭제가 처리 표시와 무관하게 오래된 원본을 지우므로 잡이 `raw_days`보다 오래 멈추면 미처리 원본도 사라진다(현재 null). 

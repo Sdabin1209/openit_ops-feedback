@@ -137,6 +137,9 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 raise BoundaryError("NOT_FOUND", "경로 없음")
             except BoundaryError as e:
                 self._err(e)
+            except Exception:                    # 예상 밖 오류도 연결을 끊지 않고 503 본문으로 알린다
+                log.exception("읽기 중 예외")
+                self._err(BoundaryError("UNAVAILABLE", "내부 오류"))
 
         def do_GET(self):
             u = urlsplit(self.path)

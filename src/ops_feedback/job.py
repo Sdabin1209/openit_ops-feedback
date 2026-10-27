@@ -13,6 +13,7 @@ import importlib
 import json
 import os
 import sys
+import threading
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Optional
@@ -48,14 +49,23 @@ class JobReport:
 
 
 def _question_set(reader, release_id: str, cache: dict) -> Optional[dict]:
-    """source_release_id의 ReleaseManifest(I4)에서 문항 세트 ref. 읽을 수 없으면 None(필드 생략, 1.0 호환)."""
+    """source_release_id의 ReleaseManifest(I4)에서 문항 세트 ref. 읽을 수 없으면 None(필드 생략, 1.0 호환).
+
+    한 번 UNAVAILABLE(시간 초과 포함)이면 이번 실행에서는 다른 릴리스도 부르지 않는다: 상류가 멈춘 채 릴리스마다 읽기 timeout을 기다리지 않게
+    한다(원칙 4). 알려진 위험: 일시 장애 때 만든 사례는 문항 세트 없이 게시되고, version 1은 나중에 고쳐 쓰지 않는다(docs/boundary.md)."""
     if reader is None:
+        return None
+    if "__down__" in cache:
         return None
     if release_id not in cache:
         try:
             qs = reader.get_release(release_id).get("question_set")
             cache[release_id] = dict(qs) if isinstance(qs, dict) else None
-        except BoundaryError:
+        except BoundaryError as e:
+            if e.retryable:
+                cache["__down__"] = e.code
+            cache[release_id] = None
+        except (AttributeError, TypeError, KeyError, ValueError):     # 깨진 응답은 지어내지 않고 생략한다(원칙 10)
             cache[release_id] = None
     return cache[release_id]
 
@@ -94,6 +104,7 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
             rep.no_failure += 1
             continue
         cls = classifier.classify(detections)
+        qs = _question_set(release_reader, env["release_id"], qs_cache)
         trace_ref = "tr-" + sha256_hash(res.trace)[7:39]
         store.put_trace(trace_ref, res.trace)
         case = {
@@ -115,7 +126,6 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
                 "deid_stats": res.stats,
             }},
         }
-        qs = _question_set(release_reader, env["release_id"], qs_cache)
         if qs is not None:
             case["question_set"] = qs
         try:
@@ -143,8 +153,43 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
         rep.purged_raw = log.purge_received_before(cutoff)
 
     if evaluate_rollback and planner is not None:
-        rep.rollback = planner.evaluate()
+        rep.rollback = _evaluate_rollback(planner, cfg, rep)
     return rep
+
+
+DEFAULT_ROLLBACK_DEADLINE = 60.0     # 롤백 평가 전체(I4 읽기 여러 번 + I5 전달)의 상한(초). 기준 값이 아니라 대기 상한이다(FAULT_POLICY 4)
+
+
+def _evaluate_rollback(planner: RollbackPlanner, cfg: dict, rep: JobReport) -> dict:
+    """롤백 평가를 상한 안에서 한다. 이웃(I4/I5)이 멈추거나 실패해도 잡은 끝나고, 실패는 보고서와 종료 코드(1)에 드러난다(원칙 9).
+
+    클라이언트의 읽기 timeout(boundary_contracts 기본 10초)은 호출 한 번의 소켓 대기라 응답을 조금씩 흘리는 상류에서는 합이 길어질 수 있다.
+    그래서 평가 전체에도 상한(`rollback.deadline_seconds`, 기본 60초)을 둔다. 넘으면 평가 스레드는 버리고(데몬) 잡이 끝난다.
+    이미 저장된 요청·영수증은 그대로이고 다음 실행이 같은 request_id로 이어 간다."""
+    deadline = float((cfg.get("rollback") or {}).get("deadline_seconds", DEFAULT_ROLLBACK_DEADLINE))
+    box: dict = {}
+
+    def run():
+        try:
+            box["out"] = planner.evaluate()
+        except BaseException as e:           # noqa: BLE001 스레드 밖으로 옮겨 처리한다
+            box["exc"] = e
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    t.join(deadline)
+    if t.is_alive():
+        rep.errors.append({"stage": "rollback", "error": "DEADLINE_EXCEEDED"})
+        return {"action": "ERROR", "error": "DEADLINE_EXCEEDED"}
+    exc = box.get("exc")
+    if exc is not None:
+        code = exc.code if isinstance(exc, BoundaryError) else "INTEGRITY_ERROR"     # 형식이 다른 응답(KeyError 등)은 값을 지어내지 않고 실패로
+        rep.errors.append({"stage": "rollback", "error": code})
+        return {"action": "ERROR", "error": code}
+    out = box["out"]
+    if out.get("submit_error"):
+        rep.errors.append({"stage": "rollback_submit", "error": out["submit_error"]})
+    return out
 
 
 def _existing(store: FailureStoreImpl, case_id: str) -> Optional[dict]:

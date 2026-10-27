@@ -76,26 +76,30 @@ class RollbackPlanner:
         if prev is None:
             out["reason"] = "되돌릴 릴리스 없음"
             return out
-        metric = {"release_id": cur, "window_start": since, "window_end": now, "total_turns": total,
-                  "failure_cases": failures, "failure_rate": rate, "by_failure_type": dict(sorted(by_type.items())),
-                  "counted_review_statuses": sorted(self._p["counted_review_statuses"])}
-        metric_id = "metric-" + sha256_hash(metric)[7:31]
-        self._store.put_aux("metric", metric_id, dict(metric, metric_id=metric_id))
         request_id = "rb-" + sha256_hash({"from": cur, "to": prev, "pointer_version": ptr["pointer_version"]})[7:31]
         stored = self._store.get_aux("rollback_request", request_id)
         if stored is None:
+            # 지표 스냅샷은 요청을 처음 만들 때만 쓴다(실행마다 window_end가 달라 매번 새 행이 쌓이는 것을 막는다).
+            # 요청 id는 (현재, 되돌릴, 포인터 버전)에서만 정해지므로 같은 상황의 재실행·동시 실행은 같은 요청을 가리킨다.
+            metric = {"release_id": cur, "window_start": since, "window_end": now, "total_turns": total,
+                      "failure_cases": failures, "failure_rate": rate, "by_failure_type": dict(sorted(by_type.items())),
+                      "counted_review_statuses": sorted(self._p["counted_review_statuses"])}
+            metric_id = "metric-" + sha256_hash(metric)[7:31]
+            self._store.put_aux("metric", metric_id, dict(metric, metric_id=metric_id))
             req = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "request_id": request_id, "requested_at": now,
                    "from_release_id": cur, "to_release_id": prev,
                    "reason": f"실패율 {rate:.4f}이 기준 {self._p['max_failure_rate']}을 넘었다(최근 {self._p['window_hours']}시간)",
                    "evidence_refs": [metric_id], "requested_by_role": self._p["requested_by_role"]}
             validate_record("RollbackRequest", req)
-            self._store.put_aux("rollback_request", request_id, req)
-            stored = req
+            self._store.put_aux("rollback_request", request_id, req)       # 동시에 만든 다른 실행이 먼저 쓰면 그쪽이 남는다
+            stored = self._store.get_aux("rollback_request", request_id) or req
         out.update(action="REQUEST_CREATED", request_id=request_id, to_release_id=prev)
         if self._p["auto_submit"] and self._gate is not None and self._store.get_aux("rollback_receipt", request_id) is None:
             try:
                 receipt = self._gate.request_rollback(stored)
                 validate_record("RollbackReceipt", receipt)
+                if receipt.get("request_id") != request_id:       # 다른 요청의 영수증을 이 요청의 것으로 저장하지 않는다(원칙 10)
+                    raise BoundaryError("INTEGRITY_ERROR", "영수증의 request_id가 요청과 다르다")
                 self._store.put_aux("rollback_receipt", request_id, receipt)
                 out["receipt_status"] = receipt["status"]
             except BoundaryError as e:
