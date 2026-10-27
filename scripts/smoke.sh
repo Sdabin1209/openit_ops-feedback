@@ -65,10 +65,11 @@ sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/
 $DOCKER cp /tmp/smoke-job-$$.yaml $NAME:/tmp/job.yaml; rm -f /tmp/smoke-job-$$.yaml
 $DOCKER exec $NAME python -m ops_feedback.job --config /tmp/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
 CID=$(curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases?review_status=PENDING" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["case_id"])')
-rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Authorization: Bearer $1" -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
+rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Authorization: Bearer $1" ${3:+-H "X-Openit-User: $3"} -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
 [ "$(rv read-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "읽기 토큰으로 검토가 거부되지 않음"; exit 1; }
-[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "201" ] || { echo "검토 게시 실패"; exit 1; }
-[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "200" ] || { echo "검토 재전송이 멱등이 아님"; exit 1; }
+[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "신원 없는 검토 게시가 거부되지 않음(D88/U7)"; exit 1; }
+[ "$(rv review-token '{"review_status":"DISMISSED"}' smoke.reviewer)" = "201" ] || { echo "검토 게시 실패"; exit 1; }
+[ "$(rv review-token '{"review_status":"DISMISSED"}' smoke.reviewer)" = "200" ] || { echo "검토 재전송이 멱등이 아님"; exit 1; }
 curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases/$CID" | grep -q '"version": 2' || { echo "새 version이 읽히지 않음"; exit 1; }
 rm -f /tmp/smoke-$$.out /tmp/smoke-job-$$.out
 echo "SMOKE OK"
