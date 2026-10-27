@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from boundary_contracts import read_secret
 import argparse
 import importlib
 import json
@@ -162,9 +163,10 @@ def _resolve_args(args: dict, env: dict) -> dict:
     out = {}
     for k, v in (args or {}).items():
         if isinstance(v, dict) and set(v) == {"env"}:
-            if v["env"] not in env:
-                raise ValueError(f"환경 변수 {v['env']}가 없다")
-            out[k] = env[v["env"]]
+            val = read_secret(v["env"], environ=env)      # NAME_FILE 우선, 없으면 NAME
+            if val is None:
+                raise ValueError(f"비밀 {v['env']}가 없다(NAME_FILE 또는 NAME)")
+            out[k] = val
         else:
             out[k] = v
     return out
@@ -177,9 +179,10 @@ def _import(path: str):
 
 def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     policy = DeidPolicy.from_config(cfg["deid"])
-    salt = env.get(cfg["deid"].get("salt_env", "OPS_DEID_SALT"), "")
+    salt_name = cfg["deid"].get("salt_env", "OPS_DEID_SALT")
+    salt = read_secret(salt_name, environ=env)          # NAME_FILE 우선, 없으면 NAME
     if not salt:
-        raise ValueError(f"의사 식별자 salt 환경 변수({cfg['deid'].get('salt_env', 'OPS_DEID_SALT')})가 없다")
+        raise ValueError(f"의사 식별자 salt 비밀({salt_name}_FILE 또는 {salt_name})이 없다")
     log = LogStore.sqlite(cfg["storage"]["log_db"], clock=clock)
     store = FailureStoreImpl.sqlite(cfg["storage"]["failure_db"])
     deid = Deidentifier(policy, salt, log.grant_deidentifier_view())

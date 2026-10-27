@@ -6,7 +6,7 @@ storage:
 
 deid:
   policy_id: example-conservative-v0
-  salt_env: OPS_DEID_SALT               # 의사 식별자 salt. 환경 변수로만 받는다.
+  salt_env: OPS_DEID_SALT               # 의사 식별자 salt. 비밀 값은 OPS_DEID_SALT_FILE(파일 경로)로 받는다. 개발용으로 OPS_DEID_SALT도 된다.
   pseudonymize_keys: [session_id, turn_id]
   # 스키마가 열거값으로 정하지 않은 자유 문자열 중 남길 키. 구조 식별자만 둔다.
   # action·next_item은 EXTRACT_FAILED·REASK_STREAK 규칙이 읽는다(모델 출력의 문자열이라 위반 턴에서는 임의 문자열일 수 있고, 잔존 패턴 검사만 거친다).
@@ -54,7 +54,7 @@ retention:
 #   auto_submit: false
 # release_reader:                       # I4 읽기. 클라이언트가 나오면(boundary-contracts v1.2.0) 아래처럼 HTTP로 고른다.
 #   factory: "boundary_contracts.clients:HttpReleaseReader"
-#   args: {base_url: "http://release-gate:8080", token: {env: OPS_GATE_READ_TOKEN}}   # {env: 이름}은 환경 변수 값으로 바뀐다
+#   args: {base_url: "http://release-gate:8080", token: {env: OPS_GATE_READ_TOKEN}}   # {env: 이름}은 이름_FILE의 파일 내용(없으면 환경 변수 이름)으로 바뀐다
 # gate_service:                         # I5 request_rollback (auto_submit일 때)
 #   factory: "모듈:함수"
 #   args: {base_url: "...", token: {env: OPS_GATE_TOKEN}}

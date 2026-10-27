@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.10.0 (제안, boundary-contracts v2.0.2, D84)
+
+- 모든 토큰·salt를 `boundary_contracts.read_secret`으로 읽는다(`NAME_FILE` 우선, 없으면 `NAME`). 서버(`api.py`)와 잡(`job.py`, 설정의 `{env: 이름}` 인자 포함). `docker exec env`/`inspect`에 평문이 남지 않는다.
+- boundary-contracts를 v2.0.2로 올렸다. `tests/test_secrets.py` 추가(비밀이 출력·오류 본문·DB에 없음). 스모크는 비밀을 파일로 주고 inspect·exec env에 값이 없는지 검사한다.
+
 ## 0.9.1 (제안, boundary-contracts v2.0.1)
 
 - boundary-contracts를 v2.0.1로 올렸다(requirements, `build_wheels.sh` 기본 태그, `sync_vendor.sh` 주석, boundary.md, runbook.md). v2.0.1은 ActionExtraction properties 순서만 사전순으로 바꾼 PATCH이고 `examples/TraceEnvelope.json`을 v2 trace로 고쳤다. 코드 변경 없음.

@@ -16,7 +16,7 @@ python3 -m venv .venv
 | --- | --- | --- |
 | 쓰는 경로 | `log.db`(원본, `OPS_LOG_DB`) | `log.db`(처리 표시, 보관 기간 지난 원본 삭제), `failures.db`(사례, 비식별 trace, 지표, 롤백 요청) |
 | 읽는 경로 | `failures.db`(읽기 면, `OPS_FAILURE_DB`) | `log.db`(비식별 처리기만), `failures.db` |
-| 환경 변수 | `OPS_INGEST_TOKEN`(필수, 수집 쓰기), `OPS_LOG_DB`, `OPS_PORT`, 읽기 면: `OPS_FAILURE_DB`+`OPS_READ_TOKENS=역할=토큰,...` | `OPS_DEID_SALT`(필수, 이름은 `deid.salt_env`), 설정의 `{env: 이름}`이 가리키는 토큰들 |
+| 환경 변수(비밀은 `_FILE`, 아래 절) | `OPS_INGEST_TOKEN`(필수, 수집 쓰기), `OPS_LOG_DB`, `OPS_PORT`, 읽기 면: `OPS_FAILURE_DB`+`OPS_READ_TOKENS=역할=토큰,...` | `OPS_DEID_SALT`(필수, 이름은 `deid.salt_env`), 설정의 `{env: 이름}`이 가리키는 토큰들 |
 | 볼륨 | `/data`에 `log.db`와 `failures.db`를 둔다(이미지 기본 `OPS_LOG_DB=/data/log.db`, `OPS_FAILURE_DB=/data/failures.db`) | 설정 `storage.log_db`, `storage.failure_db`. ingest-api와 **같은 볼륨**을 가리켜야 한다(SQLite WAL, 두 프로세스가 같은 호스트에서 공유) |
 | 네트워크 | 수집 `POST /v1/traces`(수집 토큰), 읽기 `GET /v1/cases`, `/v1/cases/{id}`, `/v1/deidentified-traces/{ref}`(읽기 토큰, 역할별) | I4 읽기와 I5 롤백 호출을 쓰면 release-gate 주소와 토큰 |
 
@@ -56,12 +56,30 @@ python3 -m venv .venv
 | `OPS_REVIEW_TOKENS` | ingest-api | 검토 게시(`POST /v1/cases/{id}/review`)용 쓰기 토큰, 역할은 보통 `reviewer`. 읽기 면과 같이 켜진다. 수집·읽기·검토 토큰은 서로 달라야 하고 서로의 경로는 403 |
 | `OPS_DEID_SALT` | 잡 | 필수. 의사 식별자 salt. 바꾸면 case_id와 trace ref가 모두 바뀌므로 운영 중 바꾸지 않는다 |
 
+## 비밀은 NAME_FILE로 (D84)
+
+토큰과 salt를 환경 변수 값으로 주면 `docker exec env`, `docker inspect`로 평문이 보인다. 운영에서는 값을 파일에 두고 그 **경로**만 `NAME_FILE` 환경 변수로 준다(`boundary_contracts.read_secret`, 파일이 우선이고 없을 때만 `NAME`을 읽는다. `NAME` 직접 지정은 개발용). 서버(ingest-api)와 잡(run-once) 둘 다 같다.
+
+| 비밀 | 파일 경로 변수 |
+| --- | --- |
+| 수집 토큰 | `OPS_INGEST_TOKEN_FILE` |
+| 읽기 토큰(`역할=토큰,...`) | `OPS_READ_TOKENS_FILE` |
+| 검토 토큰(`역할=토큰,...`) | `OPS_REVIEW_TOKENS_FILE` |
+| 의사 식별자 salt | `OPS_DEID_SALT_FILE` (이름은 `deid.salt_env` + `_FILE`) |
+| 설정 `{env: 이름}`이 가리키는 토큰(예: `OPS_GATE_READ_TOKEN`, `OPS_GATE_WRITE_TOKEN`) | `이름_FILE` |
+
+```
+docker run ... -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read ...
+```
+
+파일은 컨테이너 사용자(root 아님)가 읽을 수 있어야 하고, 내용 앞뒤 공백·개행은 잘린다. 파일이 없거나 비어 있으면 값 없이 파일 경로만 담은 오류로 멈춘다(서버는 종료 코드 2). 값은 로그, `/readyz`, 오류 본문, 비식별 산출물에 나오지 않으며 `tests/test_secrets.py`와 `scripts/smoke.sh`(inspect·exec env 검사)가 확인한다.
+
 ## ingest-api 실행
 
 ```
 OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api
 # 컨테이너
-scripts/build_wheels.sh   # git archive v2.0.1 -> wheel (build/wheels)
+scripts/build_wheels.sh   # git archive v2.0.2 -> wheel (build/wheels)
 docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short HEAD) .
 docker run -p 8080:8080 -v ops-log:/data -e OPS_INGEST_TOKEN=... ops-feedback-ingest
 ```

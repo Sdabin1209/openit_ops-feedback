@@ -16,6 +16,8 @@ publish_case는 HTTP로 열지 않는다(내부 잡).
 """
 from __future__ import annotations
 
+from boundary_contracts import read_secret
+from boundary_contracts.secrets import SecretError
 import hmac
 import json
 import logging
@@ -224,16 +226,22 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
 
 def main() -> int:
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='{"ts":"%(asctime)s","lvl":"%(levelname)s","msg":"%(message)s"}')
-    token = os.environ.get("OPS_INGEST_TOKEN", "")
+    try:
+        token = read_secret("OPS_INGEST_TOKEN") or ""
+        read_raw = read_secret("OPS_READ_TOKENS")
+        review_raw = read_secret("OPS_REVIEW_TOKENS")
+    except SecretError as e:
+        log.error("%s", e)
+        return 2
     if not token:
-        log.error("OPS_INGEST_TOKEN이 필요하다")
+        log.error("OPS_INGEST_TOKEN_FILE 또는 OPS_INGEST_TOKEN이 필요하다")
         return 2
     store = LogStore.sqlite(os.environ.get("OPS_LOG_DB", "/data/log.db"))
     failures, rtoks = None, {}
-    if os.environ.get("OPS_FAILURE_DB") and os.environ.get("OPS_READ_TOKENS"):
+    if os.environ.get("OPS_FAILURE_DB") and read_raw:
         failures = FailureStoreImpl.sqlite(os.environ["OPS_FAILURE_DB"])
-        rtoks = parse_read_tokens(os.environ["OPS_READ_TOKENS"])
-    vtoks = parse_read_tokens(os.environ.get("OPS_REVIEW_TOKENS", ""))
+        rtoks = parse_read_tokens(read_raw)
+    vtoks = parse_read_tokens(review_raw or "")
     srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks, review_tokens=vtoks)
     log.info("listening on %s", srv.server_address[1])
     try:

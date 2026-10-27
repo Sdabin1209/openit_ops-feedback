@@ -15,7 +15,16 @@ CV=$(cat build/wheels/BOUNDARY_TAG)
 $DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" \
   --build-arg SURVEY_SCHEMA_VERSION="$(cat src/ops_feedback/_schemas/survey/v1/CONTRACT_VERSION)" .
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
-$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -e OPS_INGEST_TOKEN=smoke-token -e OPS_READ_TOKENS=synthetic-data=read-token -e OPS_REVIEW_TOKENS=reviewer=review-token $IMG >/dev/null
+# 비밀은 환경 변수가 아니라 파일로 준다(NAME_FILE, D84). docker inspect/exec env에 값이 보이지 않아야 한다.
+SECDIR=$(mktemp -d); chmod 755 $SECDIR
+printf 'smoke-token' > $SECDIR/ingest; printf 'synthetic-data=read-token' > $SECDIR/read; printf 'reviewer=review-token' > $SECDIR/review; printf 'smoke-salt' > $SECDIR/salt
+chmod 644 $SECDIR/*
+trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $SECDIR' EXIT
+$DOCKER run -d --name $NAME -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro \
+  -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read -e OPS_REVIEW_TOKENS_FILE=/run/secrets/review \
+  -e OPS_DEID_SALT_FILE=/run/secrets/salt $IMG >/dev/null
+if $DOCKER inspect $NAME | grep -qE 'smoke-token|read-token|review-token|smoke-salt'; then echo "inspect에 비밀 값이 보인다"; exit 1; fi
+if $DOCKER exec $NAME env | grep -qE 'smoke-token|read-token|review-token|smoke-salt'; then echo "exec env에 비밀 값이 보인다"; exit 1; fi
 PORT=$($DOCKER port $NAME 8080/tcp | head -1 | sed 's/.*://')
 echo "host port: $PORT"
 for i in $(seq 1 30); do
@@ -54,7 +63,7 @@ b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"][
 curl -fsS -X POST -H "Authorization: Bearer smoke-token" -d "$FAIL" http://127.0.0.1:$PORT/v1/traces >/dev/null
 sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/job.example.yaml > /tmp/smoke-job-$$.yaml
 $DOCKER cp /tmp/smoke-job-$$.yaml $NAME:/tmp/job.yaml; rm -f /tmp/smoke-job-$$.yaml
-$DOCKER exec -e OPS_DEID_SALT=smoke-salt $NAME python -m ops_feedback.job --config /tmp/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
+$DOCKER exec $NAME python -m ops_feedback.job --config /tmp/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
 CID=$(curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases?review_status=PENDING" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["case_id"])')
 rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Authorization: Bearer $1" -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
 [ "$(rv read-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "읽기 토큰으로 검토가 거부되지 않음"; exit 1; }

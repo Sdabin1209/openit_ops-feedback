@@ -37,7 +37,7 @@ I7 상세(구현이 정한 것):
 | I4 ReleaseReader | 활성 포인터, 릴리스 목록 | `boundary_contracts.sdk.ReleaseReader` Protocol |
 | I5 `request_rollback` | 롤백 요청 전달 | `boundary_contracts.sdk.GateService` Protocol |
 
-경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그 v2.0.1, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_schema_sync.py`가 원본과의 일치를 확인한다(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v2.0.1`으로 만든 wheel을 설치한다.
+경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그 v2.0.2, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_schema_sync.py`가 원본과의 일치를 확인한다(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v2.0.2`으로 만든 wheel을 설치한다.
 
 ## 보장하는 것
 
@@ -66,3 +66,7 @@ I7 상세(구현이 정한 것):
 - 롤백 수행과 활성 포인터(게이트 소유).
 - 다른 영역의 저장소와 코드. 이웃의 SDK는 Protocol로만 받는다.
 - 경계 계약과 문진 스키마(변경은 `docs/change-requests/` 5건 참조).
+
+## 비밀 전달 (D84)
+
+토큰·salt는 `boundary_contracts.read_secret(NAME)`으로 읽는다: `NAME_FILE`(파일 경로)이 우선이고 없으면 `NAME` 환경 변수(개발용). 대상은 `OPS_INGEST_TOKEN`, `OPS_READ_TOKENS`, `OPS_REVIEW_TOKENS`, `OPS_DEID_SALT`, 잡 설정 `{env: 이름}`의 토큰(`OPS_GATE_READ_TOKEN`, `OPS_GATE_WRITE_TOKEN` 등)이다. 서버와 잡이 같다. 상세는 runbook.md의 "비밀은 NAME_FILE로".
