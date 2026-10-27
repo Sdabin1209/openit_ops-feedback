@@ -212,10 +212,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--no-rollback", action="store_true")
     a = ap.parse_args(argv)
     cfg = load_config(a.config)
-    log, store, deid, detectors, classifier, planner, reader = build_from_config(cfg, dict(os.environ))
-    rep = run_once(cfg=cfg, log=log, store=store, deid=deid, detectors=detectors, classifier=classifier, planner=planner,
-                   limit=a.limit, reprocess=a.reprocess, retry_deid_failed=a.retry_deid_failed,
-                   evaluate_rollback=not a.no_rollback, release_reader=reader)
+    # DB가 무응답이면 문장·접속 상한(OPS_DB_*_TIMEOUT) 안에 BoundaryError(UNAVAILABLE)로 끝난다. 무한 대기하지 않고 종료 코드 2로 끝낸다(스택 트레이스 없이 코드만).
+    try:
+        log, store, deid, detectors, classifier, planner, reader = build_from_config(cfg, dict(os.environ))
+        rep = run_once(cfg=cfg, log=log, store=store, deid=deid, detectors=detectors, classifier=classifier, planner=planner,
+                       limit=a.limit, reprocess=a.reprocess, retry_deid_failed=a.retry_deid_failed,
+                       evaluate_rollback=not a.no_rollback, release_reader=reader)
+    except BoundaryError as e:
+        print(json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False), file=sys.stderr)
+        return 2
     print(json.dumps(rep.as_dict(), ensure_ascii=False, sort_keys=True))
     return 1 if rep.errors else 0
 

@@ -59,3 +59,14 @@ def test_http_status_table_matches_conventions_9():
     from ops_feedback.api import HTTP_STATUS
     assert HTTP_STATUS == {"INVALID_RECORD": 400, "PERMISSION_DENIED": 403, "NOT_FOUND": 404, "CONFLICT": 409,
                            "FAILED_PRECONDITION": 412, "UNSUPPORTED_VERSION": 422, "INTEGRITY_ERROR": 422, "UNAVAILABLE": 503}
+
+
+def test_auth_rejection_is_logged_without_token(server, caplog):
+    """수집 토큰이 맞지 않으면(FAULT_MATRIX A6 F7) 서버 로그에 코드와 경로가 남고 토큰 값은 남지 않는다."""
+    import logging
+    url, _ = server
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(BoundaryError):
+            HttpTraceIngest(url, "wrong-token-canary").send(envelope())
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "PERMISSION_DENIED" in text and "/v1/traces" in text and "wrong-token-canary" not in text

@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from urllib.parse import parse_qs, unquote, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
@@ -83,6 +84,8 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
             self.wfile.write(raw)
 
         def _err(self, e: BoundaryError) -> None:
+            if e.code in ("PERMISSION_DENIED", "UNAVAILABLE"):     # 접근 로그에는 상태 코드가 없다. 인증 실패(토큰 회전·오설정)와 저장소 장애가 로그에서 보이게 한다(값·토큰 없이 경로와 코드만).
+                log.warning("거절 %s %s -> %s", self.command, self.path.split("?")[0], e.code)
             self._json(HTTP_STATUS[e.code], e.to_record())
 
         def _read_auth(self) -> None:
@@ -143,9 +146,21 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 return self._json(200, {"status": "ok"})
             if self.path == "/readyz":
                 try:
-                    store.ping()
-                    if failures is not None:
-                        failures.ping()
+                    # 두 저장소를 동시에 확인한다: 각 확인은 DB_PROBE 상한(기본 2초)을 가지므로 합쳐도 상한 한 번이다.
+                    checks = [store.ping] + ([failures.ping] if failures is not None else [])
+                    errs: list = []
+                    def run(fn):
+                        try:
+                            fn()
+                        except BoundaryError as e:
+                            errs.append(e)
+                    ts = [threading.Thread(target=run, args=(c,), daemon=True) for c in checks]
+                    for t in ts:
+                        t.start()
+                    for t in ts:
+                        t.join()
+                    if errs:
+                        raise errs[0]
                     if not supported_trace_versions():
                         raise BoundaryError("UNAVAILABLE", "문진 스키마가 없다")
                 except BoundaryError as e:

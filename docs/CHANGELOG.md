@@ -1,5 +1,13 @@
 # 변경 이력
 
+## 0.11.2 (제안, FAULT_MATRIX P0-3 D1·D4)
+
+- PostgreSQL 대기 상한: 접속(`OPS_DB_CONNECT_TIMEOUT`, 기본 3초, 이전 10초 고정), 문장(`OPS_DB_STATEMENT_TIMEOUT`, 3초, 서버 쪽 `statement_timeout` + 서버가 얼면 +1초 뒤 클라이언트가 소켓을 닫음), 스키마 생성(`OPS_DB_DDL_TIMEOUT`, 30초). 이전에는 문장 상한이 없어 서버가 응답하지 않으면 무한 대기할 수 있었다.
+- `/readyz`는 주 연결·락을 쓰지 않고 새 연결로 `SELECT 1`을 한다(`OPS_DB_PROBE_TIMEOUT`, 기본 2초, 두 저장소 동시 확인). DB 무응답이면 2초 안에 503, 복구되면 200.
+- 잡: DB 무응답이면 `UNAVAILABLE`을 잡아 종료 코드 2로 끝낸다(스택 트레이스 없음). 처리 오류의 종료 코드 1과 구분.
+- 수집 서버: 인증 실패(`PERMISSION_DENIED`)와 `UNAVAILABLE` 응답을 경고 로그로 남긴다(경로와 코드만, 토큰 없음). FAULT_MATRIX A6 F7. `/readyz`에 인증 실패 건수는 넣지 않았다.
+- 시험: `tests/test_postgres_timeout.py`(docker pause, `TEST_DATABASE_URL`+`TEST_PG_CONTAINER`가 없으면 SKIP), `tests/test_api.py` 인증 거절 로그. SQLite 경로 변경 없음.
+
 ## 0.11.1 (제안)
 
 - PostgreSQL 연결이 끊기면(DB 서버 재시작, 연결 강제 종료) 연결을 다시 열고 같은 호출을 한 번 재시도한다. 연결 끊김 오류만 대상이고 SQL 오류는 재시도하지 않는다. 재접속도 실패하면 UNAVAILABLE(오류에 접속 정보 없음). 서비스 재시작이 필요 없다.

@@ -70,7 +70,14 @@ scripts/smoke.sh                                                # 이미지 빌�
 - docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 이 세션의 수집 건수는 195건으로, STATUS의 133과 다르다(아래 어긋남 참고).
 - 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
 
+이 세션에서 직접 돌려 확인한 것 (PostgreSQL 대기 상한, FAULT_MATRIX P0-3 D1·D4; 변경 내용은 docs/CHANGELOG.md 0.11.2, 근거와 수치는 docs/boundary.md "DB 대기 상한"):
+- `pytest -q`: PostgreSQL 16 컨테이너(호스트 Docker, `TEST_DATABASE_URL`+`TEST_PG_CONTAINER` 지정) 포함 326 통과 0 건너뜀. PostgreSQL 없이는 243 통과 83 건너뜀(같은 326건 중 PostgreSQL 시험 83건이 SKIP).
+- DB를 `docker pause`로 얼렸을 때(기본 상한): `/readyz` 503까지 2.0초 후 복구하면 200, 수집 POST는 7.0초 안에 503 후 복구, 잡은 3.3초에 종료 코드 2.
+- `scripts/smoke.sh`: SMOKE OK(SQLite 구성, WSL 한 환경).
+
 확인하지 못한 것:
+- 컨테이너 조합(deploy)에서의 재측정: deploy E2E 5p에서 헤드가 한다.
+- 수집 토큰 불일치(A6 F7)는 서버 로그 경고만 추가했다. `/readyz`에 건수 신호는 없다.
 - v2 TurnTrace 전체 키에 대한 규칙 동작(STATUS: 당시 v2 trace 키를 읽을 수 없었다고 기록. 이후 0.9.0에서 따라갔다는 기록은 있으나 이 세션에서 시험을 돌리지 않았다).
 - 두 번째 깨끗한 환경에서의 시험·스모크. I4/I5 실제 SDK와의 연결. CI 이미지 게시와 digest 제출(D24).
 - `REASK_STREAK`의 `next_item`이 되묻는 문항을 가리키는지(docs/design.md 5절 미확인).
