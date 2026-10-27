@@ -60,4 +60,4 @@
 - 시험: `.venv/bin/python -m pytest --collect-only -q`로 195건 수집, `.venv/bin/python -m pytest -q`로 `195 passed, 4 warnings`(이 WSL 한 환경, 2026-10-27에 확인). 위의 85건·133건은 각 시점의 이력이다. `scripts/smoke.sh`는 이번에 돌리지 않았다(미확인).
 - 막힌 것: 이 영역 코드 안에서 막힌 것은 없다. 그러나 "막힌 것 없음"은 아니다. 다른 영역 의존·사용자 결정으로 열려 있는 항목은 README.md 5절(G14, G11, D-A, D-E)과 위 "남은 일"에 있다.
 - G11(문진 스키마 정수 버전 1 안의 비호환 변경, D79): ops-feedback은 사본 `_schemas/survey/v1`을 따라갔고(CHANGELOG 0.9.0), 배포는 survey-service와 같은 잠금으로 함께 해야 한다. 이 항목의 닫힘 여부는 `head/docs/OPEN_GAPS.md`가 정하며 이번 세션에서는 읽지 않았다(미확인). 공동 배포 쪽이 끝나기 전에는 닫힌 것으로 보지 않는다.
-- 대장 번호 없음: O11(분류체계), O16(허용 중단 시간·복구 시점), 비식별 기준은 이 영역 문서(docs/brief.md, docs/design.md)가 붙인 이름이거나 번호가 없고, OPEN_GAPS의 ID와 대응하는 것이 확인되지 않았다.
+- 대장 번호 없음: O11(분류체계), O16(허용 중단 시간·복구 시점), 비식별 기준은 이 영역 문서에만 나오는 이름이고 OPEN_GAPS의 ID와 대응하는 것이 확인되지 않았다(이름의 출처는 미확인).
