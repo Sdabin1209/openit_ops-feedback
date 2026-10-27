@@ -1,2 +1,2 @@
 # 개발·CI 의존. 이미지는 requirements.lock(서드파티 고정)과 scripts/build_wheels.sh가 만든 wheel을 쓴다.
-git+ssh://git@github.com/Sdabin1209/openit_boundary-contracts.git@v2.0.0
+git+ssh://git@github.com/Sdabin1209/openit_boundary-contracts.git@v2.0.1

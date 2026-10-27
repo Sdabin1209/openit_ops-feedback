@@ -61,7 +61,7 @@ python3 -m venv .venv
 ```
 OPS_INGEST_TOKEN=... OPS_LOG_DB=/data/log.db python -m ops_feedback.api
 # 컨테이너
-scripts/build_wheels.sh   # git archive v2.0.0 -> wheel (build/wheels)
+scripts/build_wheels.sh   # git archive v2.0.1 -> wheel (build/wheels)
 docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short HEAD) .
 docker run -p 8080:8080 -v ops-log:/data -e OPS_INGEST_TOKEN=... ops-feedback-ingest
 ```

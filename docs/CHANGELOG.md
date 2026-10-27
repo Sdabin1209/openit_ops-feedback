@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.9.1 (제안, boundary-contracts v2.0.1)
+
+- boundary-contracts를 v2.0.1로 올렸다(requirements, `build_wheels.sh` 기본 태그, `sync_vendor.sh` 주석, boundary.md, runbook.md). v2.0.1은 ActionExtraction properties 순서만 사전순으로 바꾼 PATCH이고 `examples/TraceEnvelope.json`을 v2 trace로 고쳤다. 코드 변경 없음.
+- model-runtime에는 코드·요구 파일 의존이 없다(이미지 라벨 값만 빌드 인자로 받는다). 올릴 것이 없다.
+
 ## 0.9.0 (제안, 새 TurnTrace 따라가기: D79, survey-service ce480ab)
 
 - 문진 스키마 사본 `_schemas/survey/v1` 동기화(`scripts/sync_vendor.sh`). 정수 버전은 1 유지(D79). 같은 정수 안의 비호환 변경이므로 survey-service와 같은 잠금으로 함께 배포해야 한다(OPEN_GAPS G11).
