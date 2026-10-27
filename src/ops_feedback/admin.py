@@ -48,6 +48,7 @@ def delete_session(log, fail, salt: str, session_id: str, dry_run: bool) -> dict
     refs = sorted(set(fail.traces_of_session(session_pseudonym(salt, session_id)) + fail.traces_of_session(session_id))) if fail is not None else []
     if dry_run:
         out["traces"] = len(refs)
+        out["raw_rows"] = log.count_session(session_id)       # 실제 삭제와 같은 대상: 아직 비식별되지 않은 세션은 원본 행만 있다
         return out
     out["raw_rows"] = log.delete_session(session_id)
     if fail is not None and refs:
@@ -89,9 +90,9 @@ def main(argv=None) -> int:
                 return 2
             out = delete_session(log, fail, salt, a.session_id, a.dry_run)
             found = out["raw_rows"] + out["traces"] + out["cases"]
-            if not a.dry_run and found == 0 or a.dry_run and out["traces"] == 0:
+            if found == 0:
                 # 오류 없이 0건이면 잘못된 salt·정책(session_id 의사화 키가 다름)·이미 지워짐을 구별할 수 없으므로 종료 코드로 알린다
-                out["note"] = "NOTHING_FOUND: 해당 세션의 비식별 trace를 찾지 못했다. salt와 비식별 정책(pseudonymize_keys의 session_id)을 확인한다"
+                out["note"] = "NOTHING_FOUND: 해당 세션의 원본도 비식별 trace도 찾지 못했다. salt와 비식별 정책(pseudonymize_keys의 session_id)을 확인한다"
                 print(json.dumps(out, ensure_ascii=False, sort_keys=True))
                 return 3
             print(json.dumps(out, sort_keys=True))

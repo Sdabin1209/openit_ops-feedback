@@ -140,7 +140,7 @@ def _write(tmp_path, mutate):
 
 
 def test_retention_defaults_applied_when_omitted(tmp_path):
-    assert _write(tmp_path, lambda c: None)["retention"] == {"raw_days": 30, "cases_days": 180, "metrics_days": 365, "failed_raw_days": 90}
+    assert _write(tmp_path, lambda c: None)["retention"] == {"raw_days": 30, "cases_days": 180, "metrics_days": 365}      # failed_raw_days는 기본값 없음(raw_days를 따른다)
 
 
 @pytest.mark.parametrize("key", ["raw_days", "cases_days", "metrics_days"])
@@ -531,15 +531,20 @@ def test_all_other_regexes_are_linear_on_the_same_inputs():
                 assert dt < 0.5, (name, hn, n, dt)
 
 
-def test_deid_closes_on_oversized_leaf_strings_before_running_config_regexes():
-    from ops_feedback.deid import DeidError, MAX_LEAF_CHARS
+def test_deid_scans_long_strings_in_windows_instead_of_rejecting_them():
+    """문진 스키마에는 maxLength가 없어 정상 trace에도 긴 문자열이 남을 수 있다(scrub 키). 거부하지 않고 창으로 검사하며, 긴 문자열 속 개인정보는 잡는다."""
+    from ops_feedback.deid import DeidError
     cfg = base_config()
     cfg["deid"]["keep_string_patterns"] = {"next_item": r".*"}                 # 값 검증을 느슨하게 둔 정책
-    t = _trace_with(next_item="a" * (MAX_LEAF_CHARS + 1))
+    long_ok = "가" * 100_000
     t0 = time.perf_counter()
-    with pytest.raises(DeidError):
-        _deid(cfg).deidentify(envelope(t))
-    assert time.perf_counter() - t0 < 1
+    r = _deid(cfg).deidentify(envelope(_trace_with(next_item=long_ok)))        # 정상 trace는 닫히지 않는다
+    assert r.trace is not None
+    for pos in (0, 4000, 50_000, 99_000):                                     # 창 경계 근처를 포함해 어디에 있어도 잡는다
+        s_ = long_ok[:pos] + "a@example.com" + long_ok[pos:]
+        with pytest.raises(DeidError):
+            _deid(cfg).deidentify(envelope(_trace_with(next_item=s_)))
+    assert time.perf_counter() - t0 < 5
 
 
 def test_ingest_of_a_huge_free_text_field_is_fast(log_store):
@@ -662,3 +667,55 @@ def test_readyz_warns_when_reviewer_identity_not_required():
         assert "REVIEW_IDENTITY_NOT_REQUIRED" in body["warnings"]
     finally:
         s.shutdown()
+
+
+# ---------- round3 M1: failed_raw_days 기본값 없음, raw_days를 따른다 ----------
+
+@pytest.mark.parametrize("raw_days", [365, "forever", None])            # None = 적지 않음(기본 30)
+@pytest.mark.parametrize("failed", ["absent", 7, "forever"])
+def test_failed_raw_retention_follows_raw_days_unless_explicit(pipeline, raw_days, failed):
+    log = pipeline["log"]
+    log._clock = lambda: "2020-01-01T00:00:00Z"
+    log.send(envelope(make_trace("s", "a"), release_id="rel-0002"))
+    log.mark("s", "a", "DEID_FAILED", "h", "2020-01-01T00:00:00Z")
+    ret = {"cases_days": "forever", "metrics_days": "forever"}
+    if raw_days is not None:
+        ret["raw_days"] = raw_days
+    if failed != "absent":
+        ret["failed_raw_days"] = failed
+    pipeline["cfg"]["retention"] = ret
+    # 2020-01-01 수신, 200일 뒤: raw_days 365/forever면 남고, 기본 30이면 지워진다. 명시 7이면 지워지고 명시 forever면 남는다
+    purged = run(pipeline, now="2020-07-20T00:00:00Z").purged_failed_raw
+    if failed == 7:
+        expect = 1
+    elif failed == "forever":
+        expect = 0
+    else:
+        expect = 0 if raw_days in (365, "forever") else 1
+    assert purged == expect, (raw_days, failed)
+
+
+def test_load_config_does_not_fill_failed_raw_days(tmp_path):
+    assert "failed_raw_days" not in _write(tmp_path, lambda c: None)["retention"]
+    with pytest.raises(ValueError):
+        _write(tmp_path, lambda c: c["retention"].update({"failed_raw_days": None}))
+    with pytest.raises(ValueError):
+        _write(tmp_path, lambda c: c["retention"].update({"failed_raw_days": 0}))
+
+
+# ---------- round3 L3: dry-run이 원본만 있는 세션도 센다 ----------
+
+def test_delete_session_dry_run_counts_raw_rows(tmp_path):
+    ldb, fdb = str(tmp_path / "l.db"), str(tmp_path / "f.db")
+    log = LogStore.sqlite(ldb)
+    FailureStoreImpl.sqlite(fdb)
+    log.send(envelope(make_trace("s-only-raw", "t-1")))
+    base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "s-only-raw"]
+    env = {**os.environ, "OPS_DEID_SALT": "x"}
+    dry = subprocess.run(base + ["--dry-run"], env=env, capture_output=True, text=True)
+    assert dry.returncode == 0 and json.loads(dry.stdout)["raw_rows"] == 1
+    assert log.count_session("s-only-raw") == 1                                # dry-run은 지우지 않는다
+    real = subprocess.run(base, env=env, capture_output=True, text=True)
+    assert real.returncode == 0 and json.loads(real.stdout)["raw_rows"] == 1
+    gone = subprocess.run(base + ["--dry-run"], env=env, capture_output=True, text=True)
+    assert gone.returncode == 3

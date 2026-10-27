@@ -89,7 +89,7 @@ I7 상세(구현이 정한 것):
 | `aux`(지표·롤백 요청·영수증) | 집계, 릴리스 ID | 없음 | 365일(`metrics_days`) |
 | 서버 로그 | 요청 줄(메서드·경로), 거절 경고 | 없음(경로에 ID가 들어갈 수 있으나 이 서비스 경로는 case_id/ref) | 로그 보존은 deploy |
 
-**기본값 주의 (두 경로가 다르다)**: 잡의 자동 정리는 `retention.cases_purge_confirmed` 기본 **true**라 확정(CONFIRMED) 사례도 180일 뒤 지운다. 수동 `admin purge --cases-days`는 반대로 **확정 사례를 지우지 않고** `--include-confirmed`를 줘야 지운다. 이 차이는 사용자 결정(round2 L12) 전의 현재 기본값이며, 둘 다 불리언 설정/명시 플래그다(문자열 `"false"`는 시작 거부). 처리 기한(`raw_days`) 삭제는 재시도 대상(DEID_FAILED, PUBLISH_FAILED) 원본을 지우지 않고 별도 기한 `failed_raw_days`(기본 90일)를 쓴다. admin purge의 고아 trace 정리는 잡과 겹치면 방금 저장한 trace를 지울 수 있어, 잡은 그 경우 한 번 다시 저장·재시도한다(그래도 가능하면 같은 시각에 돌리지 않는다).
+**기본값 주의 (두 경로가 다르다)**: 잡의 자동 정리는 `retention.cases_purge_confirmed` 기본 **true**라 확정(CONFIRMED) 사례도 180일 뒤 지운다. 수동 `admin purge --cases-days`는 반대로 **확정 사례를 지우지 않고** `--include-confirmed`를 줘야 지운다. 이 차이는 사용자 결정(round2 L12) 전의 현재 기본값이며, 둘 다 불리언 설정/명시 플래그다(문자열 `"false"`는 시작 거부). 처리 기한(`raw_days`) 삭제는 재시도 대상(DEID_FAILED, PUBLISH_FAILED) 원본을 지우지 않고 별도 기한 `failed_raw_days`를 명시했을 때만 그 값을 쓰고, 적지 않으면 `raw_days`를 따른다(기본값 없음, raw_days가 forever면 forever). admin purge의 고아 trace 정리는 잡과 겹치면 방금 저장한 trace를 지울 수 있어, 잡은 그 경우 한 번 다시 저장·재시도한다(그래도 가능하면 같은 시각에 돌리지 않는다).
 
 삭제 경로: 잡의 자동 정리, `python -m ops_feedback.admin`(세션 단위 삭제 포함, 비밀 소유가 인증이며 서버 API로는 열지 않았다). 확인하지 못한 것: 디스크·백업의 암호화와 백업 보존(deploy), 운영 잡 설정의 실제 값. 운영 잡 설정(`deploy` 소유)에 `retention: {raw_days: 30, cases_days: 180, metrics_days: 365}`를 두고 서버에 `OPS_RAW_RETENTION_DAYS=30`을 선언하도록 deploy에 요청한다(이 영역은 deploy 파일을 수정하지 않는다).
 

@@ -20,7 +20,12 @@ from boundary_contracts.canonical import sha256_hash
 from .logstore import DeidentifierView
 from .schemas import trace_schema
 
-MAX_LEAF_CHARS = 4096     # 임의 상한, 측정 안 함(docs/adr/0008). 허용 목록을 통과한 문자열은 패턴 검사(최대 160자)나 스키마 열거값이다.
+# 잔존 패턴 검사의 창 크기와 겹침. 문진 스키마(TurnTrace)의 문자열에는 maxLength가 없어(읽어서 확인) 정상 trace에도 scrub_string_keys 등으로 긴 문자열이
+# 남을 수 있다(수집 본문 상한 8 MiB까지). 그래서 긴 문자열을 거부하지 않고 창으로 나눠 검사한다: 설정의 정규식이 입력 길이에 선형이라는 보장이 없으므로
+# 한 번에 보는 길이를 묶는 것이 목적이다(점검 round2 M2). 창 크기·겹침은 측정하지 않은 값이며 docs/adr/0011-deid-long-string-windows.md.
+# 겹침(1,024)은 예시 설정의 잔존 패턴이 낼 수 있는 가장 긴 일치(이메일 약 64+1+255+1+TLD)보다 크다. 이보다 긴 일치를 내는 패턴은 창 경계에서 놓칠 수 있다.
+SCAN_WINDOW = 4096
+SCAN_OVERLAP = 1024
 MASK = "[MASKED]"
 DROPPED = "[DROPPED]"
 _DROP = object()
@@ -303,14 +308,10 @@ class Deidentifier:
         if not isinstance(out, dict):
             raise DeidError("trace 전체가 제거되었다")
         for s in _leaf_strings(out):
-            if len(s) > MAX_LEAF_CHARS:
-                # 잔존 패턴은 설정의 정규식이라 입력 길이에 선형이라는 보장이 없다(점검 round2 M2). 비식별 뒤에 이렇게 긴 문자열이 남는 것은
-                # 비정상이므로(식별자·열거값·마스크만 남는다) 정규식을 돌리지 않고 닫는다.
-                raise DeidError("비식별 결과에 비정상적으로 긴 문자열이 남았다")
             if s in (MASK, DROPPED) or _PSEUDONYM.fullmatch(s):
                 continue          # 의사 식별자는 16진 해시라 숫자열이 우연히 전화번호 패턴에 걸릴 수 있다
             for name, rx in self._residual.items():
-                if rx.search(s):
+                if any(rx.search(s[i:i + SCAN_WINDOW]) for i in range(0, max(len(s) - SCAN_OVERLAP, 1), SCAN_WINDOW - SCAN_OVERLAP)):
                     raise DeidError(f"비식별 결과에 잔존 패턴({name})이 있다")
         stats = {k: v for k, v in w.stats.items() if not k.startswith("path_")}
         stats["masked_paths"] = sorted(k[len("path_masked:"):] for k in w.stats if k.startswith("path_masked:"))

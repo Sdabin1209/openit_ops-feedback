@@ -38,6 +38,8 @@ class _RawBackend(ABC):
     @abstractmethod
     def delete_session(self, session_id: str) -> int: ...
     @abstractmethod
+    def count_session(self, session_id: str) -> int: ...
+    @abstractmethod
     def mark(self, session_id: str, turn_id: str, status: str, config_hash: str, processed_at: str) -> None: ...
     @abstractmethod
     def reset_processing(self, only_status: Optional[str]) -> int: ...
@@ -74,6 +76,10 @@ class MemoryBackend(_RawBackend):
                     r["envelope"] = {"minimized": True}
                     n += 1
             return n
+
+    def count_session(self, session_id):
+        with self._lock:
+            return sum(1 for k in self._rows if k[0] == session_id)
 
     def delete_session(self, session_id):
         with self._lock:
@@ -167,6 +173,9 @@ class SqliteBackend(_RawBackend):
             q, a = q + " AND received_at<?", a + [received_before]
         return self._x(lambda: self._db.execute(q, a).rowcount)
 
+    def count_session(self, session_id):
+        return self._x(lambda: self._db.execute("SELECT COUNT(*) FROM raw_traces WHERE session_id=?", (session_id,)).fetchone()[0])
+
     def delete_session(self, session_id):
         return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE session_id=?", (session_id,)).rowcount)
 
@@ -245,6 +254,9 @@ class PostgresRawBackend(PgBase, _RawBackend):
         if received_before is not None:
             q, a = q + " AND received_at<%s", a + [received_before]
         return self._x(lambda: self._db.execute(q, a).rowcount)
+
+    def count_session(self, session_id):
+        return self._x(lambda: self._db.execute("SELECT COUNT(*) FROM raw_traces WHERE session_id=%s", (session_id,)).fetchone()[0])
 
     def delete_session(self, session_id):
         return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE session_id=%s", (session_id,)).rowcount)
@@ -378,6 +390,10 @@ class LogStore:
     def delete_session(self, session_id: str) -> int:
         """세션 하나의 원본 행을 모두 지운다(요청 시 삭제). 중복 키도 사라지므로 같은 턴이 다시 오면 새로 받는다."""
         return self._backend.delete_session(session_id)
+
+    def count_session(self, session_id: str) -> int:
+        """세션 하나의 원본 행 수. delete_session --dry-run이 실제 삭제와 같은 대상을 세기 위한 것(점검 round3 L3)."""
+        return self._backend.count_session(session_id)
 
     def ping(self) -> None:
         self._backend.ping()

@@ -28,8 +28,10 @@ def check_inline_secrets(value: Any, path: str = "config") -> None:
 
 FOREVER = "forever"
 # 출처: D88/U4 최소 보존 잠정 기본값(원본 30일, 사례 180일, 기록 1년). docs/adr/0007-retention-defaults.md
-# failed_raw_days: 재시도 대상(DEID_FAILED, PUBLISH_FAILED) 원본의 기한. D88에 없는 값이라 근거 기록 없음(raw_days의 3배인 임의값, 사용자 결정 대상)
-RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365, "failed_raw_days": 90}
+# failed_raw_days(재시도 대상 DEID_FAILED·PUBLISH_FAILED 원본의 기한)는 기본값이 없다: 적지 않으면 raw_days를 따른다(raw_days가 forever면 forever).
+# 근거 없는 별도 숫자를 채우면 운영자가 정한 raw_days보다 먼저(또는 forever인데도) 재처리 대상이 지워진다(점검 round3 M1). docs/adr/0007.
+RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
+OPTIONAL_RETENTION = ("failed_raw_days",)
 REQUIRED_TOP = ("storage", "deid", "detection", "classification", "retention")
 
 
@@ -50,9 +52,11 @@ def load_config(path: str | Path) -> dict:
         raise ValueError("retention은 객체")
     # D88/U4 최소 보존 기본값: 처리 끝난 원본 30일, 비식별 실패 사례 180일, 지표·롤백 기록 365일. 키를 생략하면 기본값, null은 거부한다
     # (기본 무기한 금지). 무기한이 정말 필요하면 명시적으로 "forever"를 쓴다(시작 때마다 경고).
-    for key, default in RETENTION_DEFAULTS.items():
+    for key in (*RETENTION_DEFAULTS, *OPTIONAL_RETENTION):
         if key not in ret:
-            ret[key] = default
+            if key in OPTIONAL_RETENTION:
+                continue
+            ret[key] = RETENTION_DEFAULTS[key]
         v = ret[key]
         if v == FOREVER:
             continue

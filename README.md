@@ -113,6 +113,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0008](docs/adr/0008-db-timeouts.md) | DB 접속·문장·probe 상한과 그 밖의 한도 |
 | [0009](docs/adr/0009-idempotency-key.md) | 수집 멱등 키 (session_id, turn_id) |
 | [0010](docs/adr/0010-stdlib-http-server.md) | 표준 라이브러리 HTTP 서버 |
+| [0011](docs/adr/0011-deid-long-string-windows.md) | 비식별 결과의 긴 문자열: 거부 대신 창 검사 |
 
 ## 7. 더 자세한 문서
 

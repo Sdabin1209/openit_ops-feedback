@@ -99,6 +99,8 @@ def retention_warnings(cfg: dict, policy=None) -> list:
     for key in RETENTION_DEFAULTS:
         if ret.get(key, RETENTION_DEFAULTS[key]) == FOREVER:
             out.append(f"RETENTION_FOREVER: retention.{key}가 forever라 무기한 보관된다(U4 기본은 {RETENTION_DEFAULTS[key]}일)")
+    if ret.get("failed_raw_days") == FOREVER:       # 명시했을 때만. 적지 않으면 raw_days를 따르므로 위의 raw_days 경고가 그 경우를 덮는다
+        out.append("RETENTION_FOREVER: retention.failed_raw_days가 forever라 재시도 대상 원본이 무기한 보관된다")
     if ret.get("raw_after_processing", "keep") == "keep" and ret.get("raw_days", 30) != FOREVER:
         pass       # 보관 기간 안에서는 전체 보관이 기본이다. 줄이려면 raw_after_processing: minimize
     if policy is not None and policy.unvalidated_keep_keys():
@@ -195,7 +197,7 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
     now = parse_ts(clock())
 
     def cutoff_of(key: str):
-        d = ret.get(key, RETENTION_DEFAULTS[key])
+        d = ret[key] if key in ret else RETENTION_DEFAULTS[key]
         return None if d == FOREVER else fmt_ts(now - timedelta(days=d))
 
     raw_cut = cutoff_of("raw_days")
@@ -206,7 +208,8 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
         old = deid.pending(1)
         if old and old[0]["received_at"] < raw_cut and not ret.get("purge_unprocessed", False):
             rep.warnings.append("UNPROCESSED_RAW_PAST_RETENTION: 보관 기한을 넘긴 원본이 아직 처리되지 않았다(지우지 않았다). 잡이 멈췄거나 처리가 막혔는지 확인한다")
-    failed_cut = cutoff_of("failed_raw_days")
+    # 재시도 대상 원본: failed_raw_days를 명시했을 때만 별도 기한, 아니면 raw_days를 그대로 따른다(raw_days가 forever면 forever)
+    failed_cut = cutoff_of("failed_raw_days") if "failed_raw_days" in ret else raw_cut
     if failed_cut is not None:
         rep.purged_failed_raw = log.purge_failed_before(failed_cut)      # 재시도 대상은 별도 기한 뒤에만 지운다
     if ret.get("raw_after_processing", "keep") == "minimize":
