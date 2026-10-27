@@ -24,7 +24,9 @@ import logging
 import os
 import re
 import sys
+import signal
 import threading
+import time
 from urllib.parse import parse_qs, unquote, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional
@@ -47,6 +49,47 @@ MAX_LIMIT = 500
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
 
+def _eq(a: str, b: str) -> bool:
+    """상수 시간 비교. 비ASCII 문자가 든 헤더도 TypeError 없이 거부한다."""
+    return hmac.compare_digest(a.encode("utf-8", "surrogateescape"), b.encode("utf-8", "surrogateescape"))
+
+
+class JsonFormatter(logging.Formatter):
+    """한 줄 JSON. 메시지의 따옴표·개행을 이스케이프해 요청 경로로 로그 줄을 위조할 수 없다."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps({"ts": self.formatTime(record), "lvl": record.levelname, "msg": record.getMessage()}, ensure_ascii=False)
+
+
+class BoundedServer(ThreadingHTTPServer):
+    """동시 연결 상한이 있는 서버. 상한을 넘는 연결은 스레드를 만들지 않고 바로 503으로 닫는다."""
+    daemon_threads = True
+
+    def __init__(self, addr, handler, max_connections: int = 64):
+        super().__init__(addr, handler)
+        self._slots = threading.BoundedSemaphore(max_connections)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nRetry-After: 1\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
+REQUEST_TIMEOUT = 30.0        # 소켓 읽기·쓰기 상한(초). 본문을 덜 보내고 멈춘 연결이 스레드를 영구 점유하지 못하게 한다
+READYZ_CACHE_SECONDS = 1.5    # 인증 없는 /readyz가 호출마다 DB 연결을 열지 못하게 결과를 짧게 공유한다(0이면 끈다)
+
+
 def parse_read_tokens(spec: str) -> dict[str, str]:
     """'역할=토큰,역할=토큰' -> {토큰: 역할}"""
     out: dict[str, str] = {}
@@ -60,7 +103,9 @@ def parse_read_tokens(spec: str) -> dict[str, str]:
 
 def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 8080, *,
                 failures: Optional[FailureStoreImpl] = None, read_tokens: Optional[dict[str, str]] = None,
-                review_tokens: Optional[dict[str, str]] = None) -> ThreadingHTTPServer:
+                review_tokens: Optional[dict[str, str]] = None, max_connections: int = 64,
+                readyz_cache_seconds: float = READYZ_CACHE_SECONDS, retention_declared: bool = True,
+                require_reviewer_identity: bool = True) -> ThreadingHTTPServer:
     if not token:
         raise ValueError("인증 토큰이 비어 있다")
     read_tokens = read_tokens or {}
@@ -68,9 +113,36 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
     if token in read_tokens or token in review_tokens or set(read_tokens) & set(review_tokens):
         raise ValueError("수집·읽기·검토 토큰은 서로 달라야 한다")
     queue = ReviewQueue(failures) if failures is not None else None
+    counters = {"auth_rejected": 0, "ingest_accepted": 0, "ingest_duplicate": 0, "unavailable": 0}   # 프로세스 안 누적(재시작하면 0). 인증 실패는 조용히 사라지지 않는다(FAULT_POLICY 9)
+    ready_cache: dict = {"at": 0.0, "val": None}
+    ready_lock = threading.Lock()
+
+    def check_ready() -> Optional[str]:
+        """저장소 확인. 실패하면 오류 코드, 정상이면 None. 결과를 readyz_cache_seconds 동안 공유한다(동시 호출도 한 번만 확인)."""
+        with ready_lock:
+            now = time.monotonic()
+            if ready_cache["val"] is not None and readyz_cache_seconds > 0 and now - ready_cache["at"] < readyz_cache_seconds:
+                return ready_cache["val"][0]
+            checks = [store.ping] + ([failures.ping] if failures is not None else [])
+            errs: list = []
+
+            def run(fn):
+                try:
+                    fn()
+                except BoundaryError as e:
+                    errs.append(e)
+            ts = [threading.Thread(target=run, args=(c,), daemon=True) for c in checks]    # 두 저장소는 동시에: 각 확인이 상한(기본 2초)을 가진다
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join()
+            code = errs[0].code if errs else (None if supported_trace_versions() else "UNAVAILABLE")
+            ready_cache.update(at=time.monotonic(), val=(code,))
+            return code
 
     class H(BaseHTTPRequestHandler):
         server_version = "ops-feedback-ingest"
+        timeout = REQUEST_TIMEOUT
 
         def log_message(self, fmt, *args):      # 요청 줄만 표준 출력으로
             log.info("%s %s", self.command, self.path.split("?")[0])
@@ -84,13 +156,17 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
             self.wfile.write(raw)
 
         def _err(self, e: BoundaryError) -> None:
+            if e.code == "PERMISSION_DENIED":
+                counters["auth_rejected"] += 1
+            elif e.code == "UNAVAILABLE":
+                counters["unavailable"] += 1
             if e.code in ("PERMISSION_DENIED", "UNAVAILABLE"):     # 접근 로그에는 상태 코드가 없다. 인증 실패(토큰 회전·오설정)와 저장소 장애가 로그에서 보이게 한다(값·토큰 없이 경로와 코드만).
                 log.warning("거절 %s %s -> %s", self.command, self.path.split("?")[0], e.code)
             self._json(HTTP_STATUS[e.code], e.to_record())
 
         def _read_auth(self) -> None:
             auth = self.headers.get("Authorization", "")
-            ok = auth.startswith("Bearer ") and any(hmac.compare_digest(auth[7:], t) for t in read_tokens)
+            ok = auth.startswith("Bearer ") and any(_eq(auth[7:], t) for t in read_tokens)
             if not ok:
                 raise BoundaryError("PERMISSION_DENIED", "읽기 토큰이 맞지 않는다")
 
@@ -148,34 +224,21 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
             if self.path == "/healthz":
                 return self._json(200, {"status": "ok"})
             if self.path == "/readyz":
-                try:
-                    # 두 저장소를 동시에 확인한다: 각 확인은 DB_PROBE 상한(기본 2초)을 가지므로 합쳐도 상한 한 번이다.
-                    checks = [store.ping] + ([failures.ping] if failures is not None else [])
-                    errs: list = []
-                    def run(fn):
-                        try:
-                            fn()
-                        except BoundaryError as e:
-                            errs.append(e)
-                    ts = [threading.Thread(target=run, args=(c,), daemon=True) for c in checks]
-                    for t in ts:
-                        t.start()
-                    for t in ts:
-                        t.join()
-                    if errs:
-                        raise errs[0]
-                    if not supported_trace_versions():
-                        raise BoundaryError("UNAVAILABLE", "문진 스키마가 없다")
-                except BoundaryError as e:
-                    return self._json(503, {"status": "not-ready", "code": e.code})
-                return self._json(200, {"status": "ready", "log_store": store.backend_kind(),
-                                       "failure_store": failures.backend_kind() if failures is not None else None, "supported_runtime_contract_versions": supported_trace_versions()})
+                code = check_ready()
+                if code is not None:
+                    return self._json(503, {"status": "not-ready", "code": code})
+                body = {"status": "ready", "log_store": store.backend_kind(),
+                        "failure_store": failures.backend_kind() if failures is not None else None,
+                        "supported_runtime_contract_versions": supported_trace_versions(), "counters": dict(counters)}
+                if not retention_declared:
+                    body["warnings"] = ["RAW_RETENTION_UNSET"]      # 원본 보관 기간이 정해져 있지 않다(무기한 보관). 보관 기간은 사용자 결정이다
+                return self._json(200, body)
             self._json(404, {"error": "not found"})
 
         def _review(self, path: str) -> None:
             try:
                 auth = self.headers.get("Authorization", "")
-                role = next((r for t, r in review_tokens.items() if auth.startswith("Bearer ") and hmac.compare_digest(auth[7:], t)), None)
+                role = next((r for t, r in review_tokens.items() if auth.startswith("Bearer ") and _eq(auth[7:], t)), None)
                 if role is None:
                     raise BoundaryError("PERMISSION_DENIED", "검토 토큰이 맞지 않는다")
                 if queue is None:
@@ -189,7 +252,7 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                     raise BoundaryError("INVALID_RECORD", "본문 크기가 맞지 않는다")
                 try:
                     body = json.loads(self.rfile.read(n))
-                except (ValueError, UnicodeDecodeError):
+                except (ValueError, UnicodeDecodeError, RecursionError):
                     raise BoundaryError("INVALID_RECORD", "JSON이 아니다") from None
                 if not isinstance(body, dict) or set(body) - {"review_status", "expected", "expected_kind", "reviewed_input"} or "review_status" not in body:
                     raise BoundaryError("INVALID_RECORD", "본문은 {review_status, expected?, expected_kind?}")
@@ -204,6 +267,9 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 user = self.headers.get("X-Openit-User")
                 if user is not None and not _ID.fullmatch(user):
                     raise BoundaryError("INVALID_RECORD", "X-Openit-User는 Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)이어야 한다")
+                if user is None and require_reviewer_identity:
+                    # D88/U7: 검토 게시는 gateway가 인증한 사용자(X-Openit-User)가 있어야 받는다. 없으면 토큰 역할만으로는 누가 검토했는지 남지 않는다.
+                    raise BoundaryError("PERMISSION_DENIED", "검토자 신원(X-Openit-User)이 필요하다")
                 before = failures.get_case(case_id)                       # 없으면 NOT_FOUND(404)
                 rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"), reviewed_input=ri, reviewed_by=user)
                 validate_record("FailureCase", rec)
@@ -221,7 +287,7 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
             if self.path != "/v1/traces":
                 return self._json(404, {"error": "not found"})
             auth = self.headers.get("Authorization", "")
-            if not (auth.startswith("Bearer ") and hmac.compare_digest(auth[7:], token)):
+            if not (auth.startswith("Bearer ") and _eq(auth[7:], token)):
                 return self._err(BoundaryError("PERMISSION_DENIED", "토큰이 맞지 않는다"))
             try:
                 n = int(self.headers.get("Content-Length", "0"))
@@ -231,21 +297,25 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 return self._err(BoundaryError("INVALID_RECORD", "본문 크기가 맞지 않는다"))
             try:
                 env = json.loads(self.rfile.read(n))
-            except (ValueError, UnicodeDecodeError):
+            except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._err(BoundaryError("INVALID_RECORD", "JSON이 아니다"))
             try:
-                self._json(200, store.send(env))
+                res = store.send(env)
+                counters["ingest_accepted" if res.get("status") == "ACCEPTED" else "ingest_duplicate"] += 1
+                self._json(200, res)
             except BoundaryError as e:
                 self._err(e)
             except Exception:                    # 예상 밖 오류도 서비스를 죽이지 않는다
                 log.exception("수집 중 예외")
                 self._err(BoundaryError("UNAVAILABLE", "내부 오류"))
 
-    return ThreadingHTTPServer((host, port), H)
+    return BoundedServer((host, port), H, max_connections)
 
 
 def main() -> int:
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='{"ts":"%(asctime)s","lvl":"%(levelname)s","msg":"%(message)s"}')
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter())
+    logging.basicConfig(level=logging.INFO, handlers=[handler])
     try:
         token = read_secret("OPS_INGEST_TOKEN") or ""
         read_raw = read_secret("OPS_READ_TOKENS")
@@ -267,8 +337,24 @@ def main() -> int:
         log.error("저장소를 열지 못했다: %s", getattr(e, "message", None) or type(e).__name__)
         return 2
     vtoks = parse_read_tokens(review_raw or "")
-    srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks, review_tokens=vtoks)
+    try:
+        max_conn = int(os.environ.get("OPS_MAX_CONNECTIONS", "64"))
+        cache_s = float(os.environ.get("OPS_READYZ_CACHE_SECONDS", str(READYZ_CACHE_SECONDS)))
+        if max_conn < 1 or cache_s < 0:
+            raise ValueError
+    except ValueError:
+        log.error("OPS_MAX_CONNECTIONS는 1 이상의 정수, OPS_READYZ_CACHE_SECONDS는 0 이상의 숫자")
+        return 2
+    # 원본 보관 기간은 잡 설정(retention.raw_days)이 정한다. 서버는 그 값을 알 수 없으므로 배포가 같은 값을 OPS_RAW_RETENTION_DAYS로 선언해야 경고가 사라진다(선언일 뿐 서버가 지우지 않는다).
+    declared = (os.environ.get("OPS_RAW_RETENTION_DAYS") or "").strip() != ""
+    if not declared:
+        log.warning("보관 기간 미설정: 원본이 무기한 보관된다(RAW_RETENTION_UNSET). 보관 기간은 사용자 결정이며, 정해지면 잡 retention.raw_days와 OPS_RAW_RETENTION_DAYS에 같은 값을 둔다")
+    srv = make_server(store, token, port=int(os.environ.get("OPS_PORT", "8080")), failures=failures, read_tokens=rtoks, review_tokens=vtoks,
+                      max_connections=max_conn, readyz_cache_seconds=cache_s, retention_declared=declared,
+                      require_reviewer_identity=os.environ.get("OPS_REVIEW_REQUIRE_USER", "1").strip().lower() not in ("0", "false", "no"))
     log.info("listening on %s", srv.server_address[1])
+    # SIGTERM(docker stop)에 새 연결을 멈추고 끝낸다. 쓰기는 자동 커밋 단일 문장이라 처리 중이던 요청은 완결되거나 호출자가 재시도한다.
+    signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=srv.shutdown, daemon=True).start())
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

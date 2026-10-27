@@ -109,7 +109,7 @@ def test_api_server_secrets_from_files_do_not_leak(tmp_path):
         OPS_INGEST_TOKEN_FILE=_secret_file(tmp_path, "i", ING),
         OPS_READ_TOKENS_FILE=_secret_file(tmp_path, "r", f"synthetic-data={RD}"),
         OPS_REVIEW_TOKENS_FILE=_secret_file(tmp_path, "v", f"reviewer={RV}"),
-        OPS_LOG_DB=str(tmp_path / "l.db"), OPS_FAILURE_DB=str(tmp_path / "f.db"), OPS_PORT=str(port))
+        OPS_LOG_DB=str(tmp_path / "l.db"), OPS_FAILURE_DB=str(tmp_path / "f.db"), OPS_PORT=str(port), OPS_REVIEW_REQUIRE_USER="0")
     pr = subprocess.Popen([sys.executable, "-m", "ops_feedback.api"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     bodies = []
     try:

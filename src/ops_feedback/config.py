@@ -26,6 +26,8 @@ def check_inline_secrets(value: Any, path: str = "config") -> None:
             check_inline_secrets(v, f"{path}[{i}]")
 
 
+FOREVER = "forever"
+RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
 REQUIRED_TOP = ("storage", "deid", "detection", "classification", "retention")
 
 
@@ -41,11 +43,34 @@ def load_config(path: str | Path) -> dict:
     for k in ("log_db", "failure_db"):
         if k not in st:
             raise ValueError(f"storage.{k}가 없다")
-    if "raw_days" not in cfg["retention"]:
-        raise ValueError("retention.raw_days가 없다. 보관 기간은 사용자가 정한다. 정하기 전이면 null로 두면 삭제하지 않는다")
+    ret = cfg["retention"]
+    if not isinstance(ret, dict):
+        raise ValueError("retention은 객체")
+    # D88/U4 최소 보존 기본값: 처리 끝난 원본 30일, 비식별 실패 사례 180일, 지표·롤백 기록 365일. 키를 생략하면 기본값, null은 거부한다
+    # (기본 무기한 금지). 무기한이 정말 필요하면 명시적으로 "forever"를 쓴다(시작 때마다 경고).
+    for key, default in RETENTION_DEFAULTS.items():
+        if key not in ret:
+            ret[key] = default
+        v = ret[key]
+        if v == FOREVER:
+            continue
+        if v is None:
+            raise ValueError(f"retention.{key}가 null이다. 기본 무기한은 허용하지 않는다: 일 수를 적거나 명시적으로 \"forever\"를 쓴다")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
+            raise ValueError(f"retention.{key}는 0보다 큰 일 수 또는 \"forever\"")
+    if ret.get("raw_after_processing", "keep") not in ("keep", "minimize"):
+        raise ValueError("retention.raw_after_processing은 keep 또는 minimize")
+    for flag in ("purge_unprocessed",):
+        if flag in ret and not isinstance(ret[flag], bool):
+            raise ValueError(f"retention.{flag}는 true 또는 false(문자열 불가)")
+    bs = (cfg.get("job") or {}).get("batch_size", 1)
+    if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
+        raise ValueError("job.batch_size는 1 이상의 정수")
     rb = cfg.get("rollback")
     if rb:
         for k in ("window_hours", "min_turns", "max_failure_rate", "counted_review_statuses", "requested_by_role", "auto_submit"):
             if k not in rb:
                 raise ValueError(f"rollback.{k}가 없다. 롤백 기준은 사용자가 정한다")
+        if not isinstance(rb["auto_submit"], bool):      # 문자열 "false"는 참으로 평가되어 실수로 자동 전송된다
+            raise ValueError("rollback.auto_submit은 true 또는 false(YAML 불리언)여야 한다. 문자열은 거부한다")
     return cfg

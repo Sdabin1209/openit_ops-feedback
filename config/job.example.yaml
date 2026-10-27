@@ -41,8 +41,11 @@ classification:                         # 분류체계는 미정(O11). 아래 �
   rule_to_type: {}
   priority: [TURN_FAILURE_SIGNAL, COMMIT_ERROR, TURN_FAILED_STEPS]
 
-retention:
-  raw_days: null                        # 미정(사용자 결정). null이면 원본을 지우지 않는다.
+retention:                              # D88/U4 최소 보존 잠정 기본값(병원 규정이 다르면 숫자만 바꾼다). null은 시작 거부, 무기한은 명시적으로 "forever"(경고)
+  raw_days: 30                          # 처리 끝난 원본 Trace(처리 표시가 없는 원본은 지우지 않는다)
+  cases_days: 180                       # 비식별 실패 사례(모든 version)와 고아 trace
+  metrics_days: 365                     # 지표 스냅샷·롤백 요청·영수증
+  raw_after_processing: keep            # keep | minimize(처리가 끝나면 봉투 내용을 즉시 지우고 중복 판별 키·해시·시각만 남김)
 
 # rollback 항목을 두면 롤백 평가를 한다. release_reader가 없으면 평가를 건너뛴다.
 # rollback:

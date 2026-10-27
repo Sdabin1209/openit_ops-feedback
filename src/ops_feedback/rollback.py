@@ -23,6 +23,8 @@ from boundary_contracts import PIPELINE_SCHEMA_VERSION  # 새 레코드는 이 �
 class RollbackPlanner:
     def __init__(self, *, store: FailureStoreImpl, log: LogStore, release_reader: ReleaseReader,
                  gate: Optional[GateService], policy: dict, clock: Clock = utc_now) -> None:
+        if not isinstance(policy.get("auto_submit"), bool):      # 문자열 "false"는 참으로 평가되어 실수로 자동 전송된다
+            raise ValueError("rollback.auto_submit은 true 또는 false(불리언)여야 한다")
         self._store, self._log, self._rr, self._gate, self._p, self._clock = store, log, release_reader, gate, policy, clock
 
     def _previous_release(self, current: str) -> Optional[str]:

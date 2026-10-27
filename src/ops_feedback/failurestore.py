@@ -35,6 +35,14 @@ class _Backend(ABC):
     @abstractmethod
     def get_trace(self, ref: str) -> Optional[dict]: ...
     @abstractmethod
+    def scan_traces(self) -> list: ...                       # [(ref, trace)] 관리용(삭제 대상 찾기)
+    @abstractmethod
+    def delete_cases(self, case_ids: list) -> int: ...       # 사례의 모든 version을 지운다
+    @abstractmethod
+    def delete_traces(self, refs: list) -> int: ...
+    @abstractmethod
+    def delete_aux(self, kind: str, key: str) -> int: ...
+    @abstractmethod
     def put_aux(self, kind: str, key: str, record: dict) -> bool: ...   # 새로 썼으면 True
     @abstractmethod
     def get_aux(self, kind: str, key: str) -> Optional[dict]: ...
@@ -92,6 +100,25 @@ class MemoryBackend(_Backend):
         with self._lock:
             t = self._traces.get(ref)
             return json.loads(json.dumps(t)) if t is not None else None
+
+    def scan_traces(self):
+        with self._lock:
+            return [(k, json.loads(json.dumps(v))) for k, v in self._traces.items()]
+
+    def delete_cases(self, case_ids):
+        with self._lock:
+            ids = set(case_ids)
+            n = len(self._cases)
+            self._cases = [(s_, r) for s_, r in self._cases if r["case_id"] not in ids]
+            return n - len(self._cases)
+
+    def delete_traces(self, refs):
+        with self._lock:
+            return sum(1 for r in set(refs) if self._traces.pop(r, None) is not None)
+
+    def delete_aux(self, kind, key):
+        with self._lock:
+            return 1 if self._aux.pop((kind, key), None) is not None else 0
 
     def put_aux(self, kind, key, record):
         with self._lock:
@@ -178,6 +205,18 @@ class SqliteBackend(_Backend):
         row = self._x(lambda: self._db.execute("SELECT trace FROM traces WHERE ref=?", (ref,)).fetchone())
         return json.loads(row[0]) if row else None
 
+    def scan_traces(self):
+        return [(r, json.loads(t)) for r, t in self._x(lambda: self._db.execute("SELECT ref,trace FROM traces").fetchall())]
+
+    def delete_cases(self, case_ids):
+        return sum(self._x(lambda c=c: self._db.execute("DELETE FROM cases WHERE case_id=?", (c,)).rowcount) for c in set(case_ids))
+
+    def delete_traces(self, refs):
+        return sum(self._x(lambda r=r: self._db.execute("DELETE FROM traces WHERE ref=?", (r,)).rowcount) for r in set(refs))
+
+    def delete_aux(self, kind, key):
+        return self._x(lambda: self._db.execute("DELETE FROM aux WHERE kind=? AND key=?", (kind, key)).rowcount)
+
     def put_aux(self, kind, key, record):
         return self._x(lambda: self._db.execute(
             "INSERT OR IGNORE INTO aux(kind,key,record) VALUES(?,?,?)", (kind, key, json.dumps(record, ensure_ascii=False))).rowcount == 1)
@@ -198,6 +237,7 @@ class SqliteBackend(_Backend):
 
 class PostgresFailureBackend(PgBase, _Backend):
     WHAT = "실패 사례 저장소"
+    TABLES = ("cases", "traces", "aux")
     DDL = """
         CREATE TABLE IF NOT EXISTS cases(
           seq BIGSERIAL PRIMARY KEY, case_id TEXT NOT NULL, version INTEGER NOT NULL,
@@ -249,6 +289,18 @@ class PostgresFailureBackend(PgBase, _Backend):
     def get_trace(self, ref):
         row = self._x(lambda: self._db.execute("SELECT trace FROM traces WHERE ref=%s", (ref,)).fetchone())
         return json.loads(row[0]) if row else None
+
+    def scan_traces(self):
+        return [(r, json.loads(t)) for r, t in self._x(lambda: self._db.execute("SELECT ref,trace FROM traces").fetchall())]
+
+    def delete_cases(self, case_ids):
+        return sum(self._x(lambda c=c: self._db.execute("DELETE FROM cases WHERE case_id=%s", (c,)).rowcount) for c in set(case_ids))
+
+    def delete_traces(self, refs):
+        return sum(self._x(lambda r=r: self._db.execute("DELETE FROM traces WHERE ref=%s", (r,)).rowcount) for r in set(refs))
+
+    def delete_aux(self, kind, key):
+        return self._x(lambda: self._db.execute("DELETE FROM aux WHERE kind=%s AND key=%s", (kind, key)).rowcount)
 
     def put_aux(self, kind, key, record):
         return self._x(lambda: self._db.execute(
@@ -356,6 +408,45 @@ class FailureStoreImpl:
         if t is None:
             raise BoundaryError("NOT_FOUND", f"비식별 trace 없음: {deidentified_trace_ref}")
         return t
+
+    # --- 삭제(관리 도구 전용, I7 Protocol에는 없다) ---
+    def traces_of_session(self, pseudonymized_session_id: str) -> list[str]:
+        """비식별 trace 중 session_id(의사 식별자)가 일치하는 ref."""
+        return [r for r, t in self._b.scan_traces() if t.get("session_id") == pseudonymized_session_id]
+
+    def delete_by_trace_refs(self, refs: list[str]) -> dict:
+        """주어진 비식별 trace를 가리키는 사례(모든 version)와 그 trace를 지운다."""
+        refs = set(refs)
+        case_ids = {r["case_id"] for _, r in self._b.scan(0) if r["deidentified_trace_ref"] in refs}
+        return {"cases": self._b.delete_cases(sorted(case_ids)), "traces": self._b.delete_traces(sorted(refs))}
+
+    def purge_cases_created_before(self, cutoff: str, *, include_confirmed: bool = False) -> dict:
+        """created_at(원본 수신 시각)이 cutoff보다 이른 사례를 모든 version째 지우고, 어떤 사례도 가리키지 않게 된 trace를 지운다.
+        검토로 확정된(CONFIRMED) 사례는 학습 정답으로 소비되므로 include_confirmed일 때만 지운다."""
+        latest: dict[str, dict] = {}
+        first: dict[str, str] = {}
+        for _, r in self._b.scan(0):
+            if r["case_id"] not in latest or r["version"] > latest[r["case_id"]]["version"]:
+                latest[r["case_id"]] = r
+            first[r["case_id"]] = min(first.get(r["case_id"], r["created_at"]), r["created_at"])     # 나이는 첫 version(원본 수신 시각) 기준
+        old = sorted(c for c, r in latest.items() if first[c] < cutoff and (include_confirmed or r["review_status"] != "CONFIRMED"))
+        n = self._b.delete_cases(old)
+        used = {r["deidentified_trace_ref"] for _, r in self._b.scan(0)}
+        orphans = [ref for ref, _ in self._b.scan_traces() if ref not in used]
+        return {"cases": n, "traces": self._b.delete_traces(orphans)}
+
+    _AUX_TIME = {"metric": "window_end", "rollback_request": "requested_at", "rollback_receipt": "decided_at"}
+
+    def purge_aux_before(self, cutoff: str) -> int:
+        """지표 스냅샷·롤백 요청·영수증 중 기록 시각이 cutoff보다 이른 것을 지운다. 개인정보는 없지만 무한 증가를 막는다."""
+        n = 0
+        for kind, field_ in self._AUX_TIME.items():
+            for rec in self._b.list_aux(kind):
+                t = rec.get(field_)
+                key = rec.get("metric_id") if kind == "metric" else rec.get("request_id")
+                if t and key and t < cutoff:
+                    n += self._b.delete_aux(kind, key)
+        return n
 
     # --- 내부 보조 레코드(지표 스냅샷, 롤백 요청 기록) ---
     def put_aux(self, kind: str, key: str, record: dict) -> bool:

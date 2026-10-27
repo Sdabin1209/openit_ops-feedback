@@ -76,7 +76,7 @@ def test_ingest_api_survives_backend_kill(tmp_path, request):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_PORT=str(port),
+    env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_PORT=str(port), OPS_READYZ_CACHE_SECONDS="0",
                  OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", log_url), OPS_FAILURE_DATABASE_URL_FILE=_file(tmp_path, "fu", fail_url))
     p = subprocess.Popen([sys.executable, "-m", "ops_feedback.api"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     base = f"http://127.0.0.1:{port}"

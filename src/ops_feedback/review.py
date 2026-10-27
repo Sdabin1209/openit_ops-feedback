@@ -1,6 +1,7 @@
 """사람 검토 큐. 검토 결과는 version을 올린 새 FailureCase로 게시한다(레코드는 불변, D25)."""
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from boundary_contracts.errors import BoundaryError
@@ -17,10 +18,38 @@ _INPUT_DEF = {"LORA_A": "ActionExtractionInput", "LORA_B": "ResponseRequest"}
 _KINDS = "LORA_A|LORA_B"
 
 
+# 검토자가 직접 쓰는 expected·reviewed_input은 비식별 처리기를 거치지 않으므로, 잔존 패턴(이메일·전화·주민번호)이 든 값은 받지 않는다.
+# 이름·주소 같은 것은 패턴으로 알 수 없다: 검토 화면 안내와 사람 책임이다(docs/boundary.md). 값은 오류에 싣지 않는다.
+DEFAULT_REVIEW_PATTERNS = {
+    "email": r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+    "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}",
+    "rrn_kr": r"\d{6}[- ]?[1-4]\d{6}",
+}
+
+
+def _strings(v):
+    if isinstance(v, str):
+        yield v
+    elif isinstance(v, list):
+        for x in v:
+            yield from _strings(x)
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            yield str(k)
+            yield from _strings(x)
+
+
 class ReviewQueue:
-    def __init__(self, store: FailureStoreImpl, *, clock: Clock = utc_now) -> None:
+    def __init__(self, store: FailureStoreImpl, *, clock: Clock = utc_now, residual_patterns: Optional[dict] = None) -> None:
         self._store = store
         self._clock = clock
+        self._pii = {n: re.compile(p) for n, p in (residual_patterns if residual_patterns is not None else DEFAULT_REVIEW_PATTERNS).items()}
+
+    def _reject_pii(self, value, what: str) -> None:
+        for s_ in _strings(value):
+            for name, rx in self._pii.items():
+                if rx.search(s_):
+                    raise BoundaryError("INVALID_RECORD", f"{what}에 개인정보로 보이는 패턴({name})이 있다. 개인정보 없이 다시 쓴다")
 
     def pending(self, *, failure_type: Optional[str] = None, source_release_id: Optional[str] = None,
                 cursor: Optional[str] = None, limit: int = 50):
@@ -38,6 +67,12 @@ class ReviewQueue:
             raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
         if reviewed_input is not None and expected_kind not in _INPUT_DEF:
             raise BoundaryError("INVALID_RECORD", "reviewed_input을 적을 때는 expected_kind(LORA_A|LORA_B)도 필요하다")
+        if expected is not None:
+            self._reject_pii(expected, "expected")
+        if reviewed_input is not None:
+            self._reject_pii(reviewed_input, "reviewed_input")
+        if note:
+            self._reject_pii(note, "note")
         cur = self._store.get_case(case_id)
         if base_version is not None and base_version != cur["version"]:
             raise BoundaryError("CONFLICT", f"최신 version은 {cur['version']}")

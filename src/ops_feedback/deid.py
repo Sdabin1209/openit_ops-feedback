@@ -26,6 +26,22 @@ _DROP = object()
 _PSEUDONYM = re.compile(r"p-[0-9a-f]{32}")
 
 
+# 값 검증 기본 패턴. keep_string_keys에 든 키의 값은 이 패턴(전체 일치)에 맞을 때만 남고, 맞지 않으면 마스킹한다(원문을 보존하지 않는다).
+# 이 키들은 문항 ID·슬롯 키·코드·action처럼 식별자 모양이어야 하는 값인데, 위반 턴에서는 모델이 임의 문자열(예: 사람 이름이 든 문장)을
+# 낼 수 있어서 키 이름만으로 통과시키면 개인정보가 남는다. 설정의 `keep_string_patterns`로 키별로 바꿀 수 있다.
+# 한계: 식별자 모양의 영문 이름("John")은 구별할 수 없다. 한국어·공백·기호가 든 값은 모두 걸러진다.
+DEFAULT_KEEP_PATTERNS = {
+    "question_id": r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}",
+    "next_item": r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}",
+    "current_question_id": r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}",
+    "slot_id": r"[A-Za-z][A-Za-z0-9_\-]{0,63}",
+    "repeat_key": r"[A-Za-z0-9_\-]{0,64}",
+    "code": r"[A-Z][A-Z0-9_]{0,63}",
+    "action": r"[A-Z][A-Z0-9_]{0,31}",
+    "path": r"[A-Za-z0-9_\[\]\.\-]{0,160}",
+}
+
+
 class DeidError(Exception):
     """비식별 결과에 개인정보 의심 패턴이 남았다. 결과를 버린다(fail-closed)."""
 
@@ -43,6 +59,11 @@ class DeidPolicy:
     unlisted_string_action: str          # "mask" | "drop"
     residual_patterns: dict
     scrub_replacements: dict
+    keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(기본 + 설정)
+
+    def unvalidated_keep_keys(self) -> list:
+        """값 검증 패턴이 없는 keep 키. 값이 그대로 통과하므로 시작 때 경고한다."""
+        return sorted(k for k in self.keep_string_keys if k not in self.keep_patterns)
 
     @classmethod
     def from_config(cls, cfg: dict) -> "DeidPolicy":
@@ -53,6 +74,10 @@ class DeidPolicy:
             raise ValueError("deid.unlisted_string_action은 mask 또는 drop")
         pats = cfg.get("residual_patterns") or {}
         for name, p in pats.items():
+            re.compile(p)
+        kp = dict(DEFAULT_KEEP_PATTERNS)
+        kp.update(cfg.get("keep_string_patterns") or {})
+        for name, p in kp.items():
             re.compile(p)
         return cls(
             policy_id=str(cfg["policy_id"]),
@@ -66,6 +91,7 @@ class DeidPolicy:
             unlisted_string_action=cfg["unlisted_string_action"],
             residual_patterns=dict(pats),
             scrub_replacements=dict(cfg.get("scrub_patterns") or {}),
+            keep_patterns={k: v for k, v in kp.items() if k in frozenset(cfg.get("keep_string_keys") or [])},
         )
 
     def fingerprint(self) -> str:
@@ -73,7 +99,7 @@ class DeidPolicy:
             "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys), "scrub": sorted(self.scrub_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
             "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys), "unlisted": self.unlisted_string_action,
-            "residual": self.residual_patterns, "scrub_patterns": self.scrub_replacements})
+            "residual": self.residual_patterns, "scrub_patterns": self.scrub_replacements, "keep_patterns": self.keep_patterns})
 
 
 @dataclass
@@ -106,6 +132,7 @@ class _Walker:
         self.salt = salt
         self.stats: Counter = Counter()
         self._scrub = {n: re.compile(pat) for n, pat in policy.scrub_replacements.items()}
+        self._keep = {k: re.compile(p) for k, p in policy.keep_patterns.items()}
 
     # --- 스키마 해석 ---
     def _resolve(self, node: dict, names: tuple = ()) -> tuple[dict, tuple]:
@@ -222,6 +249,11 @@ class _Walker:
                 self.stats["scrubbed"] += n
             return s
         if key in self.p.keep_string_keys:
+            rx = self._keep.get(key)
+            if rx is not None and not rx.fullmatch(s):       # 식별자 모양이 아니면 원문을 남기지 않는다
+                self.stats["masked_by_pattern"] += 1
+                self.stats[f"path_masked:{path}"] += 1
+                return MASK
             return s
         self.stats["masked_strings"] += 1
         self.stats[f"path_masked:{path}"] += 1
@@ -250,11 +282,11 @@ class Deidentifier:
         self._view = view
         self._residual = {n: re.compile(p) for n, p in policy.residual_patterns.items()}
 
-    def pending(self, limit: Optional[int] = None) -> list[dict]:
-        """아직 처리하지 않은 원본 봉투(row: envelope, received_at, ...). 원본을 읽는 유일한 경로."""
+    def pending(self, limit: Optional[int] = None, after_seq: int = 0) -> list[dict]:
+        """아직 처리하지 않은 원본 봉투(row: envelope, received_at, ...). 원본을 읽는 유일한 경로. seq가 after_seq보다 큰 것만, 오름차순."""
         if self._view is None:
             raise RuntimeError("원본 읽기 권한이 없다")
-        return self._view.read_unprocessed(limit)
+        return self._view.read_unprocessed(limit, after_seq)
 
     def deidentify(self, envelope: dict) -> DeidResult:
         ver = envelope["runtime_contract_version"]

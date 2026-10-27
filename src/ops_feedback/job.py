@@ -22,7 +22,7 @@ from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 
 from .clock import Clock, fmt_ts, parse_ts, utc_now
-from .config import load_config
+from .config import FOREVER, RETENTION_DEFAULTS, load_config
 from .deid import DeidError, Deidentifier, DeidPolicy
 from .detect import Classifier, Detector, build_detectors
 from .failurestore import FailureStoreImpl
@@ -43,6 +43,10 @@ class JobReport:
     purged_raw: int = 0
     rollback: Optional[dict] = None
     errors: list = field(default_factory=list)
+    minimized_raw: int = 0
+    purged_cases: int = 0
+    purged_aux: int = 0
+    warnings: list = field(default_factory=list)       # 사용자 결정 전의 기본값이 켜져 있다는 알림(오류 아님, 종료 코드에 영향 없음)
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
@@ -70,6 +74,37 @@ def _question_set(reader, release_id: str, cache: dict) -> Optional[dict]:
     return cache[release_id]
 
 
+DEFAULT_BATCH_SIZE = 500     # 한 번에 메모리에 올리는 미처리 원본 수(봉투 하나 최대 8 MiB). 설정 job.batch_size로 바꾼다
+
+
+def _pending_rows(deid: Deidentifier, limit: Optional[int], batch_size: int):
+    """미처리 원본을 seq 순으로 batch_size씩 읽어 하나씩 낸다. 표시하지 않고 넘어간 행(재시도 대상)을 다시 읽지 않도록 seq로 이어 읽는다."""
+    after, left = 0, limit
+    while left is None or left > 0:
+        rows = deid.pending(batch_size if left is None else min(batch_size, left), after)
+        if not rows:
+            return
+        for r in rows:
+            yield r
+        after = max(r["seq"] for r in rows)
+        if left is not None:
+            left -= len(rows)
+
+
+def retention_warnings(cfg: dict, policy=None) -> list:
+    """명시적 무기한("forever")이나 처리 뒤 전체 보관 같은, 보존이 길게 열려 있는 설정과 값 검증 없는 keep 키를 알린다."""
+    out = []
+    ret = cfg.get("retention") or {}
+    for key in RETENTION_DEFAULTS:
+        if ret.get(key, RETENTION_DEFAULTS[key]) == FOREVER:
+            out.append(f"RETENTION_FOREVER: retention.{key}가 forever라 무기한 보관된다(U4 기본은 {RETENTION_DEFAULTS[key]}일)")
+    if ret.get("raw_after_processing", "keep") == "keep" and ret.get("raw_days", 30) != FOREVER:
+        pass       # 보관 기간 안에서는 전체 보관이 기본이다. 줄이려면 raw_after_processing: minimize
+    if policy is not None and policy.unvalidated_keep_keys():
+        out.append("DEID_KEEP_KEYS_UNVALIDATED: 값 검증 패턴이 없는 keep_string_keys: " + ",".join(policy.unvalidated_keep_keys()))
+    return out
+
+
 def case_id_for(deid: Deidentifier, session_id: str, turn_id: str) -> str:
     return "fc-" + sha256_hash({"s": deid.pseudonym("case", session_id), "t": deid.pseudonym("case", turn_id)})[7:39]
 
@@ -87,7 +122,8 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
     elif retry_deid_failed:
         log.reset_processing("DEID_FAILED")
 
-    for row in deid.pending(limit):                       # 원본을 읽는 유일한 경로
+    rep.warnings.extend(retention_warnings(cfg, deid.policy))
+    for row in _pending_rows(deid, limit, int((cfg.get("job") or {}).get("batch_size", DEFAULT_BATCH_SIZE))):    # 원본을 읽는 유일한 경로
         env = row["envelope"]
         sid, tid = env["session_id"], env["turn_id"]
         rep.processed += 1
@@ -147,10 +183,29 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
             continue
         log.mark(sid, tid, "DONE_CASE", cfg_hash, clock())
 
-    days = cfg["retention"].get("raw_days")
-    if days is not None:
-        cutoff = fmt_ts(parse_ts(clock()) - timedelta(days=days))
-        rep.purged_raw = log.purge_received_before(cutoff)
+    ret = cfg["retention"]
+    now = parse_ts(clock())
+
+    def cutoff_of(key: str):
+        d = ret.get(key, RETENTION_DEFAULTS[key])
+        return None if d == FOREVER else fmt_ts(now - timedelta(days=d))
+
+    raw_cut = cutoff_of("raw_days")
+    if raw_cut is not None:
+        # 처리 표시가 있는 원본만 지운다(기본). 잡이 raw_days보다 오래 멈춰도 미처리 원본이 처리 전에 사라지지 않는다.
+        # 대신 보관 기한을 넘기고도 처리되지 못한 원본이 있으면 경보(보고서 warnings)로 알린다.
+        rep.purged_raw = log.purge_received_before(raw_cut, processed_only=not ret.get("purge_unprocessed", False))
+        old = deid.pending(1)
+        if old and old[0]["received_at"] < raw_cut and not ret.get("purge_unprocessed", False):
+            rep.warnings.append("UNPROCESSED_RAW_PAST_RETENTION: 보관 기한을 넘긴 원본이 아직 처리되지 않았다(지우지 않았다). 잡이 멈췄거나 처리가 막혔는지 확인한다")
+    if ret.get("raw_after_processing", "keep") == "minimize":
+        rep.minimized_raw = log.minimize_processed()
+    cases_cut, metrics_cut = cutoff_of("cases_days"), cutoff_of("metrics_days")
+    if cases_cut is not None:
+        r = store.purge_cases_created_before(cases_cut, include_confirmed=ret.get("cases_purge_confirmed", True))
+        rep.purged_cases = r["cases"]
+    if metrics_cut is not None:
+        rep.purged_aux = store.purge_aux_before(metrics_cut)
 
     if evaluate_rollback and planner is not None:
         rep.rollback = _evaluate_rollback(planner, cfg, rep)
@@ -266,6 +321,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     except BoundaryError as e:
         print(json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False), file=sys.stderr)
         return 2
+    for w in rep.warnings:
+        print("경고: " + w, file=sys.stderr)
     print(json.dumps(rep.as_dict(), ensure_ascii=False, sort_keys=True))
     return 1 if rep.errors else 0
 

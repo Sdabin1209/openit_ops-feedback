@@ -58,7 +58,7 @@ def base_config() -> dict:
                                                                 {"id": "COMMIT_ERROR"}]}]},
         "classification": {"default_failure_type": "UNCLASSIFIED", "rule_to_type": {"GENERATOR_FALLBACK": "T-FALLBACK"},
                            "priority": ["TURN_FAILURE_SIGNAL", "GENERATOR_FALLBACK"]},
-        "retention": {"raw_days": None},
+        "retention": {"raw_days": "forever", "cases_days": "forever", "metrics_days": "forever"},
     }
 
 

@@ -23,12 +23,20 @@ from .schemas import supported_trace_versions, validate_record, validate_trace
 from boundary_contracts import PIPELINE_SCHEMA_VERSION  # 새 레코드는 이 버전으로 쓴다(1.1). 읽기는 1.0·1.1 모두
 
 
+MINIMIZED = '{"minimized": true}'          # 처리가 끝난 원본의 봉투 자리에 남기는 표지(중복 판별 키·해시·시각·릴리스는 남는다)
+MINIMIZABLE = ("DONE_CASE", "NO_FAILURE")  # 재처리가 필요한 상태(DEID_FAILED, PUBLISH_FAILED)는 원본을 남긴다
+
+
 class _RawBackend(ABC):
     @abstractmethod
     def insert_if_absent(self, session_id: str, turn_id: str, release_id: str, received_at: str,
                          envelope: dict, envelope_hash: str) -> bool: ...
     @abstractmethod
-    def unprocessed(self, limit: Optional[int]) -> list[dict]: ...
+    def unprocessed(self, limit: Optional[int], after_seq: int = 0) -> list[dict]: ...
+    @abstractmethod
+    def minimize_processed(self, received_before: Optional[str]) -> int: ...
+    @abstractmethod
+    def delete_session(self, session_id: str) -> int: ...
     @abstractmethod
     def mark(self, session_id: str, turn_id: str, status: str, config_hash: str, processed_at: str) -> None: ...
     @abstractmethod
@@ -36,7 +44,7 @@ class _RawBackend(ABC):
     @abstractmethod
     def counts_by_release(self, since: Optional[str]) -> dict[str, int]: ...
     @abstractmethod
-    def purge_received_before(self, cutoff: str) -> int: ...
+    def purge_received_before(self, cutoff: str, processed_only: bool = False) -> int: ...
     @abstractmethod
     def ping(self) -> None: ...
     @abstractmethod
@@ -58,9 +66,25 @@ class MemoryBackend(_RawBackend):
                              "envelope_hash": envelope_hash, "status": None, "seq": len(self._rows) + 1}
             return True
 
-    def unprocessed(self, limit):
+    def minimize_processed(self, received_before):
         with self._lock:
-            rows = sorted((r for r in self._rows.values() if r["status"] is None), key=lambda r: r["seq"])
+            n = 0
+            for r in self._rows.values():
+                if r["status"] in MINIMIZABLE and r["envelope"] != {"minimized": True} and (received_before is None or r["received_at"] < received_before):
+                    r["envelope"] = {"minimized": True}
+                    n += 1
+            return n
+
+    def delete_session(self, session_id):
+        with self._lock:
+            old = [k for k in self._rows if k[0] == session_id]
+            for k in old:
+                del self._rows[k]
+            return len(old)
+
+    def unprocessed(self, limit, after_seq=0):
+        with self._lock:
+            rows = sorted((r for r in self._rows.values() if r["status"] is None and r["seq"] > after_seq), key=lambda r: r["seq"])
             rows = rows[:limit] if limit else rows
             return [json.loads(json.dumps(r)) for r in rows]
 
@@ -72,7 +96,7 @@ class MemoryBackend(_RawBackend):
         with self._lock:
             n = 0
             for r in self._rows.values():
-                if r["status"] is not None and (only_status is None or r["status"] == only_status):
+                if r["status"] is not None and r["envelope"] != {"minimized": True} and (only_status is None or r["status"] == only_status):
                     r["status"] = None
                     n += 1
             return n
@@ -85,9 +109,9 @@ class MemoryBackend(_RawBackend):
                     out[r["release_id"]] = out.get(r["release_id"], 0) + 1
             return out
 
-    def purge_received_before(self, cutoff):
+    def purge_received_before(self, cutoff, processed_only=False):
         with self._lock:
-            old = [k for k, r in self._rows.items() if r["received_at"] < cutoff]
+            old = [k for k, r in self._rows.items() if r["received_at"] < cutoff and (not processed_only or r["status"] is not None)]
             for k in old:
                 del self._rows[k]
             return len(old)
@@ -137,13 +161,22 @@ class SqliteBackend(_RawBackend):
             return cur.rowcount == 1
         return self._x(f)
 
-    def unprocessed(self, limit):
+    def minimize_processed(self, received_before):
+        q, a = "UPDATE raw_traces SET envelope=? WHERE status IN ('DONE_CASE','NO_FAILURE') AND envelope<>?", [MINIMIZED, MINIMIZED]
+        if received_before is not None:
+            q, a = q + " AND received_at<?", a + [received_before]
+        return self._x(lambda: self._db.execute(q, a).rowcount)
+
+    def delete_session(self, session_id):
+        return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE session_id=?", (session_id,)).rowcount)
+
+    def unprocessed(self, limit, after_seq=0):
         def f():
-            q = "SELECT session_id,turn_id,release_id,received_at,envelope,envelope_hash,seq FROM raw_traces WHERE status IS NULL ORDER BY seq"
-            args: tuple = ()
+            q = "SELECT session_id,turn_id,release_id,received_at,envelope,envelope_hash,seq FROM raw_traces WHERE status IS NULL AND seq>? ORDER BY seq"
+            args: tuple = (after_seq,)
             if limit:
                 q += " LIMIT ?"
-                args = (limit,)
+                args = (after_seq, limit)
             return [{"session_id": a, "turn_id": b, "release_id": c, "received_at": d, "envelope": json.loads(e),
                      "envelope_hash": h, "seq": s, "status": None} for a, b, c, d, e, h, s in self._db.execute(q, args)]
         return self._x(f)
@@ -156,8 +189,8 @@ class SqliteBackend(_RawBackend):
     def reset_processing(self, only_status):
         def f():
             if only_status is None:
-                return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status IS NOT NULL").rowcount
-            return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status=?", (only_status,)).rowcount
+                return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status IS NOT NULL AND envelope<>?", (MINIMIZED,)).rowcount
+            return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status=? AND envelope<>?", (only_status, MINIMIZED)).rowcount
         return self._x(f)
 
     def counts_by_release(self, since):
@@ -169,8 +202,9 @@ class SqliteBackend(_RawBackend):
             return {r: n for r, n in rows}
         return self._x(f)
 
-    def purge_received_before(self, cutoff):
-        return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE received_at<?", (cutoff,)).rowcount)
+    def purge_received_before(self, cutoff, processed_only=False):
+        q = "DELETE FROM raw_traces WHERE received_at<?" + (" AND status IS NOT NULL" if processed_only else "")
+        return self._x(lambda: self._db.execute(q, (cutoff,)).rowcount)
 
     def ping(self):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
@@ -188,6 +222,7 @@ class SqliteBackend(_RawBackend):
 
 class PostgresRawBackend(PgBase, _RawBackend):
     WHAT = "로그 저장소"
+    TABLES = ("raw_traces",)
     DDL = """
         CREATE TABLE IF NOT EXISTS raw_traces(
           seq BIGSERIAL PRIMARY KEY,
@@ -205,13 +240,22 @@ class PostgresRawBackend(PgBase, _RawBackend):
             " VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT(session_id,turn_id) DO NOTHING",
             (session_id, turn_id, release_id, received_at, json.dumps(envelope, ensure_ascii=False), envelope_hash)).rowcount == 1)
 
-    def unprocessed(self, limit):
+    def minimize_processed(self, received_before):
+        q, a = "UPDATE raw_traces SET envelope=%s WHERE status IN ('DONE_CASE','NO_FAILURE') AND envelope<>%s", [MINIMIZED, MINIMIZED]
+        if received_before is not None:
+            q, a = q + " AND received_at<%s", a + [received_before]
+        return self._x(lambda: self._db.execute(q, a).rowcount)
+
+    def delete_session(self, session_id):
+        return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE session_id=%s", (session_id,)).rowcount)
+
+    def unprocessed(self, limit, after_seq=0):
         def f():
-            q = "SELECT session_id,turn_id,release_id,received_at,envelope,envelope_hash,seq FROM raw_traces WHERE status IS NULL ORDER BY seq"
-            args: tuple = ()
+            q = "SELECT session_id,turn_id,release_id,received_at,envelope,envelope_hash,seq FROM raw_traces WHERE status IS NULL AND seq>%s ORDER BY seq"
+            args: tuple = (after_seq,)
             if limit:
                 q += " LIMIT %s"
-                args = (limit,)
+                args = (after_seq, limit)
             return [{"session_id": a, "turn_id": b, "release_id": c, "received_at": d, "envelope": json.loads(e),
                      "envelope_hash": h, "seq": s, "status": None} for a, b, c, d, e, h, s in self._db.execute(q, args).fetchall()]
         return self._x(f)
@@ -224,8 +268,8 @@ class PostgresRawBackend(PgBase, _RawBackend):
     def reset_processing(self, only_status):
         def f():
             if only_status is None:
-                return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status IS NOT NULL").rowcount
-            return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status=%s", (only_status,)).rowcount
+                return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status IS NOT NULL AND envelope<>%s", (MINIMIZED,)).rowcount
+            return self._db.execute("UPDATE raw_traces SET status=NULL WHERE status=%s AND envelope<>%s", (only_status, MINIMIZED)).rowcount
         return self._x(f)
 
     def counts_by_release(self, since):
@@ -237,8 +281,9 @@ class PostgresRawBackend(PgBase, _RawBackend):
             return {r: int(n) for r, n in rows.fetchall()}
         return self._x(f)
 
-    def purge_received_before(self, cutoff):
-        return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE received_at<%s", (cutoff,)).rowcount)
+    def purge_received_before(self, cutoff, processed_only=False):
+        q = "DELETE FROM raw_traces WHERE received_at<%s" + (" AND status IS NOT NULL" if processed_only else "")
+        return self._x(lambda: self._db.execute(q, (cutoff,)).rowcount)
 
     def received_at(self, session_id, turn_id):
         row = self._x(lambda: self._db.execute("SELECT received_at FROM raw_traces WHERE session_id=%s AND turn_id=%s",
@@ -252,8 +297,8 @@ class DeidentifierView:
     def __init__(self, log: "LogStore") -> None:
         self._log = log
 
-    def read_unprocessed(self, limit: Optional[int] = None) -> list[dict]:
-        return self._log._backend.unprocessed(limit)
+    def read_unprocessed(self, limit: Optional[int] = None, after_seq: int = 0) -> list[dict]:
+        return self._log._backend.unprocessed(limit, after_seq)
 
 
 class LogStore:
@@ -314,8 +359,18 @@ class LogStore:
     def reset_processing(self, only_status: Optional[str] = None) -> int:
         return self._backend.reset_processing(only_status)
 
-    def purge_received_before(self, cutoff: str) -> int:
-        return self._backend.purge_received_before(cutoff)
+    def purge_received_before(self, cutoff: str, processed_only: bool = False) -> int:
+        """cutoff보다 먼저 받은 원본을 지운다. processed_only이면 처리 표시가 있는 것만(미처리 원본은 남긴다)."""
+        return self._backend.purge_received_before(cutoff, processed_only)
+
+    def minimize_processed(self, received_before: Optional[str] = None) -> int:
+        """처리가 끝난(DONE_CASE, NO_FAILURE) 원본의 봉투 내용을 지운다. (session_id, turn_id)·해시·시각·릴리스·처리 표시는 남아
+        중복 수집이 다시 ACCEPTED로 들어오지 않고 릴리스별 집계도 유지된다. 재처리(--reprocess)는 이 행들을 건너뛴다."""
+        return self._backend.minimize_processed(received_before)
+
+    def delete_session(self, session_id: str) -> int:
+        """세션 하나의 원본 행을 모두 지운다(요청 시 삭제). 중복 키도 사라지므로 같은 턴이 다시 오면 새로 받는다."""
+        return self._backend.delete_session(session_id)
 
     def ping(self) -> None:
         self._backend.ping()

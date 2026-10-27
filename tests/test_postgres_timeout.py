@@ -48,7 +48,7 @@ def _serve(tmp_path, url_log, url_fail):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_REVIEW_TOKENS="reviewer=vt", OPS_PORT=str(port), **LIMITS,
+    env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_REVIEW_TOKENS="reviewer=vt", OPS_REVIEW_REQUIRE_USER="0", OPS_PORT=str(port), OPS_READYZ_CACHE_SECONDS="0", **LIMITS,
                  OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", url_log), OPS_FAILURE_DATABASE_URL_FILE=_file(tmp_path, "fu", url_fail))
     p = subprocess.Popen([sys.executable, "-m", "ops_feedback.api"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     base = f"http://127.0.0.1:{port}"

@@ -25,7 +25,7 @@ def env(pipeline):
     (c,), _ = pipeline["store"].list_cases()
     s = make_server(LogStore.memory(), "ingest-tok", "127.0.0.1", 0, failures=pipeline["store"],
                     read_tokens=parse_read_tokens("synthetic-data=read-tok"),
-                    review_tokens=parse_read_tokens("reviewer=review-tok"))
+                    review_tokens=parse_read_tokens("reviewer=review-tok"), require_reviewer_identity=False)
     threading.Thread(target=s.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{s.server_address[1]}", c["case_id"]
     s.shutdown()

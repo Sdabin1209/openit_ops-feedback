@@ -72,6 +72,7 @@ class PgBase:
     KIND = "postgresql"
     WHAT = "저장소"
     DDL = ""
+    TABLES: tuple = ()      # OPS_DB_SCHEMA=verify일 때 존재를 확인할 표
 
     def __init__(self, url: str) -> None:
         self._url = url                      # 어디에도 출력하지 않는다
@@ -91,7 +92,17 @@ class PgBase:
             finally:
                 self._db.execute(f"SET statement_timeout = {int(self.statement_timeout * 1000)}")
         self._db = self._open()
-        self._x(ddl, limit=ddl_timeout)
+        mode = (os.environ.get("OPS_DB_SCHEMA") or "apply").strip()
+        if mode not in ("apply", "verify"):
+            raise BoundaryError("INVALID_RECORD", "OPS_DB_SCHEMA는 apply 또는 verify")
+        if mode == "apply":
+            self._x(ddl, limit=ddl_timeout)
+        else:
+            # verify: 앱은 스키마를 만들지 않는다(DDL 권한이 필요 없다). 표가 없으면 시작을 거부하고 `python -m ops_feedback.admin migrate`를 안내한다.
+            try:
+                self._x(lambda: [self._db.execute(f"SELECT 1 FROM {t} LIMIT 0") for t in self.TABLES])
+            except BoundaryError:
+                raise BoundaryError("FAILED_PRECONDITION", f"{self.WHAT}의 스키마가 없다. 먼저 `python -m ops_feedback.admin migrate`를 실행한다(OPS_DB_SCHEMA=verify)") from None
 
     def _open(self):
         return _connect(self._url, self.WHAT, self.connect_timeout, self.statement_timeout)
