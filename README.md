@@ -119,6 +119,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0012](docs/adr/0012-reask-streak-and-empty-values.md) | REASK_STREAK 임계값 3(측정 안 함), 빈 값 HOLD·SKIP은 실패 |
 | [0013](docs/adr/0013-extract-protections-counts.md) | extract_protections 건수는 식별자 모양 키+정수만 남김 |
 | [0014](docs/adr/0014-pause-reason.md) | 정지 사유 pause_reason 보존, 지표 분리, 서비스가 이미 호출한 사건의 중복 방지 |
+| [0015](docs/adr/0015-response-fallback-rule-id.md) | 규칙 ID GENERATOR_FALLBACK을 RESPONSE_FALLBACK으로 개명, 기존 사례는 skipped_diff |
 
 ## 7. 더 자세한 문서
 

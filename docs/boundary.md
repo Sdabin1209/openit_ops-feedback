@@ -125,5 +125,5 @@ I7 상세(구현이 정한 것):
 
 ## 비밀 전달 (D84)
 
-토큰·salt는 `boundary_contracts.read_secret(NAME)`으로 읽는다: `NAME_FILE`(파일 경로)이 우선이고 없으면 `NAME` 환경 변수(개발용). 대상은 `OPS_INGEST_TOKEN`, `OPS_READ_TOKENS`, `OPS_REVIEW_TOKENS`, `OPS_DEID_SALT`, 잡 설정 `{env: 이름}`의 토큰(`OPS_GATE_READ_TOKEN`, `OPS_GATE_WRITE_TOKEN` 등)이다. 서버와 잡이 같다. 상세는 runbook.md의 "비밀은 NAME_FILE로".
+토큰·salt는 `boundary_contracts.read_secret(NAME)`으로 읽는다: `NAME_FILE`(파일 경로)이 우선이고 없으면 `NAME` 환경 변수(개발용). 대상은 `OPS_INGEST_TOKEN`, `OPS_READ_TOKENS`, `OPS_REVIEW_TOKENS`, `OPS_LOG_DATABASE_URL`, `OPS_FAILURE_DATABASE_URL`(서버, deploy compose의 `*_FILE`과 같다), `OPS_DEID_SALT`, `OPS_GATE_READ_TOKEN`, `OPS_GATE_WRITE_TOKEN`, `OPS_LOG_DATABASE_URL`, `OPS_FAILURE_DATABASE_URL`(잡)이다. 잡 설정 `{env: 이름}`/`{secret: 이름}`으로 참조한 다른 이름도 같은 방식이다. 서버와 잡이 같다. 상세는 runbook.md의 "비밀은 NAME_FILE로".
 잡 설정에 비밀 값을 직접 적으면 시작을 거부하고, 비밀은 `{secret: NAME}`/`{env: NAME}`으로만 참조한다(runbook.md).

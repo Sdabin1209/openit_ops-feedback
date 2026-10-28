@@ -72,7 +72,7 @@ HTTP 형식은 CR-005. 토큰은 `OPS_INGEST_TOKEN_FILE`(파일 경로, D84)이 
 | 환자 발화 원문 | `FrontendMessage.utterance`, `UtteranceParserInput.utterance`, `AnswerJudgeInput.utterance`, `ResponseGeneratorInput.utterance` | STT 결과. 이름, 연락처, 증상 서술 등 무엇이든 가능 |
 | 발화에서 잘라낸 조각 | `Item.source_text`, `Item.value`, `TextSpan.text`, `Evidence.text`, `Request.source_text[]`, `Judgment.said_value` | 발화의 일부, 환자가 말한 값 |
 | 환자 답변 값 | `Value`(문자열 / `{amount, unit, unit_code}` / `CodedValue`)를 쓰는 모든 곳: `SayValue.value`, `SlotRecord.current_value`·`history`·`pending.value`, `StoreDecision.value`, `ChangedSlot.previous_value`·`new_value`, `Notice.value`·`previous_value`, `ItemCheck.standard_value`, `Judgment.value_now` | 건강 정보. 숫자도 포함 |
-| 시스템이 환자에게 한 말 | `GeneratorOutput.response_text`, `FrontendInput.response_text`, `LogEntry.response_text`, `SentenceMaterials.*`, `FixedSentence.sentence` | 값이 문장에 섞여 들어간다 |
+| 시스템이 환자에게 한 말 | `TurnTrace.response_output`, `FrontendInput.response_text`, `ResponseRequestRecord.next`(LoRA-B 입력 사본) | 값이 문장에 섞여 들어간다 |
 | 오류 메시지 | `ProblemDetail.message`, `SessionCommitResult.detail` | 저장소 오류에 값이 섞일 수 있다 |
 | 세션 전체 상태 | `session_before`, `session_after`(`SessionStore`: `answer_records`, `dialogue_log`, `progress_record`, ...) | 지금까지의 모든 답변과 대화 기록 |
 | 구조가 없는 자유 객체 | `pendings`, `current_values`, `question_slots`, `target_records`, `awaiting`, `correction_requests`, `deferred`, `unknown_refused_records`, `created_pendings`, `resolved_pendings`, `*_counts` 등 `type: object`(properties 없음) | 내용을 스키마로 알 수 없다 |
@@ -110,10 +110,10 @@ class Detector(Protocol):
 
 - 탐지기는 **비식별 뒤 trace만** 입력으로 받는다. 원본이 필요한 탐지기는 만들 수 없는 구조다.
 - `detail`에는 규칙 ID, 열거값, 개수만 담는다(개인정보 없음).
-- 규칙 기반 `RuleDetector`의 규칙(구조 필드만 본다, **확인**): `TURN_FAILURE_SIGNAL`(턴 실패 신호), `TURN_FAILED_STEPS`(`turn_result.failed_steps`), `COMMIT_ERROR`(`persistence_commit_result.status != OK`), `GENERATOR_FALLBACK`(`response_outcome == "fallback"`, 옛 이름 유지), `STAFF_ALERT_DELIVERY_FAILED`, `INTERVENTION_FAILED`, `EXTRACT_FAILED`, `REASK_STREAK`(임계값은 설정, 기본값 없음). 어떤 규칙을 켤지는 설정이 정한다.
+- 규칙 기반 `RuleDetector`의 규칙(구조 필드만 본다, **확인**): `TURN_FAILURE_SIGNAL`(턴 실패 신호), `TURN_FAILED_STEPS`(`turn_result.failed_steps`), `COMMIT_ERROR`(`persistence_commit_result.status != OK`), `RESPONSE_FALLBACK`(`response_outcome == "fallback"`, v1 이름 `GENERATOR_FALLBACK`에서 개명, ADR 0015), `STAFF_ALERT_DELIVERY_FAILED`, `INTERVENTION_FAILED`, `EXTRACT_FAILED`, `REASK_STREAK`(임계값은 설정, 기본값 없음). 어떤 규칙을 켤지는 설정이 정한다.
   - `EXTRACT_FAILED`(v1 `PARSER_EMPTY` 대체): (1) `extract_status`가 있고 `OK`가 아니다(OUTPUT_INVALID, VIOLATION, ERROR). (2) `OK`인데 `extract_output.values`가 비고 `action`이 `params.empty_values_ok_actions`(기본 `["REDIRECT"]`)에 없다. 근거: survey-service design.md 18절 "첫 값의 문항, 값이 없으면(REDIRECT)"(학습 데이터 5,077행 전수 일치) 즉 REDIRECT만 값이 비는 것이 정상이다 **[확인: 그 문서. 데이터는 직접 보지 않았다]**. HOLD·SKIP은 계약상 targets가 필수이고 targets는 같은 행 values의 key라 값이 비면 계약 위반이다 **[확인: ActionExtraction 스키마, V2_DRAFT 2.2]**: 허용 목록에 더하지 않는다(ADR 0012). `action`은 비식별에서 남겨야 하므로 `keep_string_keys`에 있어야 한다.
   - `REASK_STREAK`(v1 `UNRECOGNIZED_STREAK` 대체, planner가 없어짐): 이번 턴의 `extract_output.action`이 `params.actions`(기본 `["REASK","CONFIRM"]`)에 있고, `session_before.dialogue_log`를 뒤에서부터 REASK·CONFIRM이 연속인 턴을 합쳐 세어(문항 무관, COMMITTED 아닌 턴은 건너뜀, 다른 action·추출 없는 턴에서 리셋) 이번 턴 포함 `params.threshold` 이상이면 걸린다. 정의는 survey-service `_reask_escalation`과 같다. 임계값 3은 헤드 결정(측정 안 함)이고 예시 설정에서 켠다(ADR 0012).
-  - 옛 이름 `PARSER_EMPTY`·`UNRECOGNIZED_STREAK`는 뜻이 달라져 받지 않는다(설정에 있으면 대체 이름을 알리는 오류, `enabled:false`여도). `TURN_FAILED_STEPS`는 `phase:step` 문자열을 그대로 남기므로 새 `step` 값(`LoRA-A`, `VALIDATE`, `COMMIT`, `DELIVER_STAFF`, `LoRA-B`, `DELIVER_FRONT`)에서도 그대로 동작한다(시험으로 확인).
+  - 옛 이름 `PARSER_EMPTY`·`UNRECOGNIZED_STREAK`·`GENERATOR_FALLBACK`은 뜻이 달라져 받지 않는다(설정에 있으면 대체 이름을 알리는 오류, `enabled:false`여도). `TURN_FAILED_STEPS`는 `phase:step` 문자열을 그대로 남기므로 새 `step` 값(`LoRA-A`, `VALIDATE`, `COMMIT`, `DELIVER_STAFF`, `LoRA-B`, `DELIVER_FRONT`)에서도 그대로 동작한다(시험으로 확인).
 - 교체: 설정의 `detection.detectors`에 `{factory: "모듈:함수", args: {...}}`로 다른 `Detector`(예: 모델 기반, 사람 신고)를 더한다. 반환한 `Detection.method`가 `FailureCase.detection_method`(RULE, MODEL, HUMAN, FEEDBACK)가 된다.
 - 규칙이 놓치는 것(**미정**): 의미적 오류(잘못 이해했지만 구조는 정상인 턴)는 규칙으로 못 잡는다. 사람 신고(FEEDBACK/HUMAN) 경로와 모델 탐지기는 후속 구간이다.
 
