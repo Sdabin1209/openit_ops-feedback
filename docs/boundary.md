@@ -58,7 +58,7 @@ I7 상세(구현이 정한 것):
 | 비식별 실패 | 해당 Trace는 사례가 되지 않고 `DEID_FAILED`로 남는다(잡 종료 코드 1) | 정책 보정 후 `--retry-deid-failed` |
 | 게이트 `UNAVAILABLE` | 롤백 요청이 전달되지 않는다. 요청은 저장되어 같은 id로 재전송된다 | 다음 실행에서 자동 재시도 |
 | PostgreSQL 무응답(TCP는 받되 응답 없음, `docker pause` 같은 얼음) | 아래 "DB 대기 상한" 절. 요청은 상한 안에 `UNAVAILABLE`(HTTP 503)로 끝나고(호출자는 재시도), `/readyz`는 2초 안에 503, 잡은 종료 코드 2 | 서버가 되살아나면 서비스 재시작 없이 다음 호출이 새 연결로 복구 |
-| 수집 토큰 불일치(survey-service 설정·회전 오류) | `POST /v1/traces`가 403 `PERMISSION_DENIED`. 서버 로그에 `거절 POST /v1/traces -> PERMISSION_DENIED` 경고가 남는다(토큰 값 없음). `/readyz`에는 인증 실패 신호가 **없다**(건수 지표를 만들지 않았다) | 로그의 경고를 감시한다. 호출자 쪽 DEAD 처리는 survey-service 영역의 일 |
+| 수집 토큰 불일치(survey-service 설정·회전 오류) | `POST /v1/traces`가 401(+`WWW-Authenticate: Bearer`) `PERMISSION_DENIED`(D106). 서버 로그에 `거절 POST /v1/traces -> PERMISSION_DENIED` 경고가 남는다(토큰 값 없음). `/readyz`에는 인증 실패 신호가 **없다**(건수 지표를 만들지 않았다) | 로그의 경고를 감시한다. 호출자 쪽 DEAD 처리는 survey-service 영역의 일 |
 | `failures.db` 장애 | I7 읽기 소비자(합성 데이터, model-lab, 문항 저작)가 새 사례를 못 받는다. 수집은 영향 없음 | 복구 후 잡이 이어서 게시 |
 
 ### DB 대기 상한 (PostgreSQL, FAULT_MATRIX P0-3 D1·D4)
@@ -111,7 +111,7 @@ I7 상세(구현이 정한 것):
 | D6 검토 게시 중 장애 | 게시는 단일 INSERT라 반쯤 쓴 상태가 없다. DB 무응답이면 상한 안에 503, 같은 본문을 다시 보내면 한 번만 반영된다(201 뒤 200, 새 version 없음). 서버와 잡·검토자 둘이 같은 version을 동시에 게시하면 먼저 쓴 쪽이 남고 진 쪽은 CONFLICT(이전에는 성공으로 응답할 수 있었다) | 시험 |
 | 잡이 도중에 죽음 | 사례 하나는 trace 저장, 게시, 처리 표시 순서다. 게시 직후·게시 전에 죽어도 다시 실행하면 이중 게시 없이 이어지고 모든 사례가 비식별 trace를 가리킨다 | 시험(예외로 중단 모사. 프로세스 강제 종료 자체는 시험하지 않음) |
 | A6 수집 중복·재전송 | 같은 (session_id, turn_id)는 동시에 8개를 보내도 한 건만 ACCEPTED, 나머지 DUPLICATE. 같은 키에 다른 내용이 와도 먼저 받은 것이 남는다(덮어쓰지 않음, 알려 주는 오류도 없음). 잘못된 봉투는 아무것도 쓰지 않는다. DB 장애로 실패한 전송을 재전송하면 ACCEPTED 한 번 뒤 DUPLICATE | 시험 |
-| A6 F7 인증 실패 | `POST /v1/traces`가 403. 서버 로그에 경고(경로·코드만). 호출자 쪽 DEAD 건수의 노출은 survey-service 영역이고 이 영역 `/readyz`에는 건수가 없다 | 시험(로그) |
+| A6 F7 인증 실패 | `POST /v1/traces`가 401(+`WWW-Authenticate: Bearer`). 서버 로그에 경고(경로·코드만). 호출자 쪽 DEAD 건수의 노출은 survey-service 영역이고 이 영역 `/readyz`에는 건수가 없다 | 시험(로그) |
 
 종료 코드: 0 정상, 1 처리 오류 있음(비식별 실패, I4/I5 오류 포함. 어느 단계인지는 보고서 `errors`), 2 시작 못 함(DB 무응답, 설정 오류). 확인하지 못한 것: 프로세스 강제 종료(SIGKILL) 뒤 재실행, 게이트의 request_id 멱등, 컨테이너 조합(deploy E2E)에서의 재측정(헤드).
 

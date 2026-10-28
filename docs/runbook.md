@@ -20,7 +20,7 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | 볼륨(SQLite일 때만) | `/data`에 `log.db`와 `failures.db`를 둔다(이미지 기본 `OPS_LOG_DB=/data/log.db`, `OPS_FAILURE_DB=/data/failures.db`) | 설정 `storage.log_db`, `storage.failure_db`. ingest-api와 **같은 볼륨**을 가리켜야 한다(SQLite WAL, 두 프로세스가 같은 호스트에서 공유) |
 | 네트워크 | 수집 `POST /v1/traces`(수집 토큰), 읽기 `GET /v1/cases`, `/v1/cases/{id}`, `/v1/deidentified-traces/{ref}`(읽기 토큰, 역할별) | I4 읽기와 I5 롤백 호출을 쓰면 release-gate 주소와 토큰 |
 
-읽기 토큰으로 `/v1/traces`를, 수집 토큰으로 읽기 경로를 호출하면 403이다. `publish_case`는 HTTP로 열려 있지 않다(잡만 쓴다).
+읽기 토큰으로 `/v1/traces`를, 수집 토큰으로 읽기 경로를 호출하면 403이다(맞는 토큰이지만 권한 없음). 토큰이 없거나 틀리면 401과 `WWW-Authenticate: Bearer`이고, 검토 게시는 `X-Openit-User`가 없어도 401이다(계약 CONVENTIONS.md 6절, D106). `publish_case`는 HTTP로 열려 있지 않다(잡만 쓴다).
 
 ## 잡 설정 파일 키 (YAML, `config/job.example.yaml` 참고)
 

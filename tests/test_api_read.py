@@ -73,8 +73,8 @@ def test_get_trace(srv):
 def test_tokens_are_separated(srv):
     assert call(srv, "/v1/cases", token="r2")[0] == 200            # 다른 역할의 읽기 토큰
     assert call(srv, "/v1/cases", token="ingest-tok")[0] == 403    # 수집 토큰으로 읽기 불가
-    assert call(srv, "/v1/cases", token=None)[0] == 403
-    assert call(srv, "/v1/cases", token="bad")[0] == 403
+    assert call(srv, "/v1/cases", token=None)[0] == 401            # D106: 토큰 없음·틀림은 401(권한 없음만 403)
+    assert call(srv, "/v1/cases", token="bad")[0] == 401
     body = json.dumps(envelope(make_trace())).encode()
     assert call(srv, "/v1/traces", token="r1", method="POST", body=body)[0] == 403   # 읽기 토큰으로 수집 불가
     assert call(srv, "/v1/traces", token="ingest-tok", method="POST", body=body)[1]["status"] == "ACCEPTED"

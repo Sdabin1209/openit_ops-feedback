@@ -85,8 +85,9 @@ def test_unknown_case_404(env):
 
 def test_token_separation(env):
     base, cid = env
-    for tok in ("read-tok", "ingest-tok", "bad"):
-        assert post(base, cid, {"review_status": "DISMISSED"}, token=tok)[0] == 403
+    for tok in ("read-tok", "ingest-tok"):
+        assert post(base, cid, {"review_status": "DISMISSED"}, token=tok)[0] == 403       # 맞는 토큰이지만 이 호출의 권한이 없다
+    assert post(base, cid, {"review_status": "DISMISSED"}, token="bad")[0] == 401           # D106: 틀린 토큰은 401
     req = urllib.request.Request(base + "/v1/cases", headers={"Authorization": "Bearer review-tok"})
     with pytest.raises(urllib.error.HTTPError) as x:
         urllib.request.urlopen(req)

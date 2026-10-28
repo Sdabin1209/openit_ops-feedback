@@ -49,7 +49,8 @@ R1=$(post); R2=$(post)
 echo "send1: $R1"; echo "send2: $R2"
 echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q "\"pipeline_schema_version\": \"$PSV\""  || { echo "수집 확인 실패"; exit 1; }
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces)
-[ "$code" = "403" ] || { echo "토큰 없는 요청이 거부되지 않음: $code"; exit 1; }
+[ "$code" = "401" ] || { echo "토큰 없는 요청이 401이 아님(D106): $code"; exit 1; }
+curl -s -D - -o /dev/null -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces | grep -qi '^www-authenticate: Bearer' || { echo "401에 WWW-Authenticate: Bearer가 없음"; exit 1; }
 rd() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -H "Authorization: Bearer $1" "http://127.0.0.1:$PORT$2"; }
 [ "$(rd read-token '/v1/cases?latest_only=true&limit=5')" = "200" ] && grep -q '"items": \[\]' /tmp/smoke-$$.out || { echo "읽기 호출 실패"; exit 1; }
 [ "$(rd read-token /v1/cases/nope)" = "404" ] || { echo "없는 사례가 404가 아님"; exit 1; }
@@ -70,7 +71,7 @@ $DOCKER exec $NAME python -m ops_feedback.job --config /tmp/job.yaml --no-rollba
 CID=$(curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases?review_status=PENDING" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["case_id"])')
 rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Authorization: Bearer $1" ${3:+-H "X-Openit-User: $3"} -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
 [ "$(rv read-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "읽기 토큰으로 검토가 거부되지 않음"; exit 1; }
-[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "신원 없는 검토 게시가 거부되지 않음(D88/U7)"; exit 1; }
+[ "$(rv review-token '{"review_status":"DISMISSED"}')" = "401" ] || { echo "신원 없는 검토 게시가 401이 아님(D88/U7, D106)"; exit 1; }
 [ "$(rv review-token '{"review_status":"DISMISSED"}' smoke.reviewer)" = "201" ] || { echo "검토 게시 실패"; exit 1; }
 [ "$(rv review-token '{"review_status":"DISMISSED"}' smoke.reviewer)" = "200" ] || { echo "검토 재전송이 멱등이 아님"; exit 1; }
 curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases/$CID" | grep -q '"version": 2' || { echo "새 version이 읽히지 않음"; exit 1; }

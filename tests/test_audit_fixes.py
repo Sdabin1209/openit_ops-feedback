@@ -120,7 +120,7 @@ def test_review_requires_gateway_user_by_default(pipeline):
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
     try:
-        assert post({})[0] == 403                                             # 신원 없음: 거부
+        assert post({})[0] == 401                                             # 신원 없음: 거부(D106: 사람 행위자가 필요한 호출은 401)
         assert pipeline["store"].get_case(c["case_id"])["version"] == 1
         st, rec = post({"X-Openit-User": "kim.reviewer"})
         assert st == 201 and rec["ext"]["ops-feedback"]["reviewed_by"] == "kim.reviewer"
@@ -351,7 +351,7 @@ def test_deeply_nested_json_and_non_ascii_token_do_not_drop_the_connection():
         assert c.getresponse().status == 400
         c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
         c.request("POST", "/v1/traces", body=b"{}", headers={"Authorization": "Bearer 한글".encode("utf-8").decode("latin-1")})
-        assert c.getresponse().status == 403
+        assert c.getresponse().status == 401        # D106: 틀린 토큰은 401
     finally:
         s.shutdown()
 

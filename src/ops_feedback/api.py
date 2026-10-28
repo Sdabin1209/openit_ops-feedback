@@ -9,7 +9,7 @@
   GET  /readyz      저장소가 열려 있고 스키마가 적재됨
 
 설정은 환경 변수로만 받는다(진입점에서만 읽는다). OPS_INGEST_TOKEN(수집 쓰기), OPS_LOG_DB, OPS_PORT(기본 8080),
-읽기 면: OPS_FAILURE_DB와 OPS_READ_TOKENS=역할=토큰,역할=토큰 (둘 다 있을 때만 켠다). 수집 토큰과 읽기 토큰은 서로의 경로를 호출할 수 없다(403).
+읽기 면: OPS_FAILURE_DB와 OPS_READ_TOKENS=역할=토큰,역할=토큰 (둘 다 있을 때만 켠다). 수집 토큰과 읽기 토큰은 서로의 경로를 호출할 수 없다(맞는 토큰이지만 권한 없음 = 403, 토큰이 없거나 틀림 = 401 + WWW-Authenticate: Bearer, 계약 CONVENTIONS.md 6절).
 검토 면: OPS_REVIEW_TOKENS=역할=토큰,…(읽기 면과 같이 켜진다). 세 종류 토큰은 서로의 경로를 호출할 수 없다.
 publish_case는 HTTP로 열지 않는다(내부 잡).
 로그는 표준 출력으로 낸다. 본문(개인정보 가능)은 로그에 남기지 않는다.
@@ -53,6 +53,11 @@ _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 def _eq(a: str, b: str) -> bool:
     """상수 시간 비교. 비ASCII 문자가 든 헤더도 TypeError 없이 거부한다."""
     return hmac.compare_digest(a.encode("utf-8", "surrogateescape"), b.encode("utf-8", "surrogateescape"))
+
+
+class Unauthenticated(BoundaryError):
+    """자격 없음/틀림 -> HTTP 401 + `WWW-Authenticate: Bearer`. 오류 코드는 계약대로 PERMISSION_DENIED다.
+    왜: 계약 CONVENTIONS.md 6절(D106)이 RFC 9110 15.5.2·11.6.1, RFC 6750 3절에 따라 자격이 없거나 틀리면 401, 자격은 맞지만 권한이 없으면 403으로 정했다."""
 
 
 class JsonFormatter(logging.Formatter):
@@ -148,9 +153,11 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
         def log_message(self, fmt, *args):      # 요청 줄만 표준 출력으로
             log.info("%s %s", self.command, self.path.split("?")[0])
 
-        def _json(self, code: int, body: dict) -> None:
+        def _json(self, code: int, body: dict, headers: Optional[dict] = None) -> None:
             raw = json.dumps(body, ensure_ascii=False).encode()
             self.send_response(code)
+            for k, v in (headers or {}).items():
+                self.send_header(k, v)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
@@ -163,13 +170,30 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 counters["unavailable"] += 1
             if e.code in ("PERMISSION_DENIED", "UNAVAILABLE"):     # 접근 로그에는 상태 코드가 없다. 인증 실패(토큰 회전·오설정)와 저장소 장애가 로그에서 보이게 한다(값·토큰 없이 경로와 코드만).
                 log.warning("거절 %s %s -> %s", self.command, self.path.split("?")[0], e.code)
+            if isinstance(e, Unauthenticated):
+                return self._json(401, e.to_record(), {"WWW-Authenticate": "Bearer"})
             self._json(HTTP_STATUS[e.code], e.to_record())
 
-        def _read_auth(self) -> None:
+        def _role(self, surface: str) -> str:
+            """Authorization 헤더를 이 면(ingest|read|review)의 토큰과 대조해 역할을 돌려준다(수집 면의 역할은 빈 문자열).
+            어느 면의 토큰도 아니면 Unauthenticated(401), 다른 면의 토큰이면 PERMISSION_DENIED(403)이다.
+            왜 모든 토큰을 끝까지 비교하나: 먼저 맞는 것에서 멈추면 비교 시간으로 어느 토큰에서 맞았는지 새어 나간다(OWASP 타이밍 공격 대응)."""
             auth = self.headers.get("Authorization", "")
-            ok = auth.startswith("Bearer ") and any(_eq(auth[7:], t) for t in read_tokens)
-            if not ok:
-                raise BoundaryError("PERMISSION_DENIED", "읽기 토큰이 맞지 않는다")
+            bearer = auth[7:] if auth.startswith("Bearer ") else None
+            found: dict = {}
+            if bearer is not None:
+                for name, table in (("ingest", {token: ""}), ("read", read_tokens), ("review", review_tokens)):
+                    for t, role in table.items():
+                        if _eq(bearer, t):
+                            found[name] = role
+            if not found:
+                raise Unauthenticated("PERMISSION_DENIED", "토큰이 없거나 맞지 않는다")
+            if surface not in found:
+                raise BoundaryError("PERMISSION_DENIED", "이 토큰은 이 호출의 권한이 없다")
+            return found[surface]
+
+        def _read_auth(self) -> None:
+            self._role("read")
 
         def _read_api(self, path: str, q: dict) -> None:
             try:
@@ -243,10 +267,13 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
 
         def _review(self, path: str) -> None:
             try:
-                auth = self.headers.get("Authorization", "")
-                role = next((r for t, r in review_tokens.items() if auth.startswith("Bearer ") and _eq(auth[7:], t)), None)
-                if role is None:
-                    raise BoundaryError("PERMISSION_DENIED", "검토 토큰이 맞지 않는다")
+                role = self._role("review")
+                user = self.headers.get("X-Openit-User")
+                if user is not None and not _ID.fullmatch(user):
+                    raise BoundaryError("INVALID_RECORD", "X-Openit-User는 Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)이어야 한다")
+                if user is None and require_reviewer_identity:
+                    # D88/U7: 검토 게시는 gateway가 인증한 사용자(X-Openit-User)가 있어야 받는다. 없으면 토큰 역할만으로는 누가 검토했는지 남지 않는다.
+                    raise Unauthenticated("PERMISSION_DENIED", "검토자 신원(X-Openit-User)이 필요하다")
                 if queue is None:
                     raise BoundaryError("NOT_FOUND", "검토 면이 꺼져 있다")
                 case_id = unquote(path[len("/v1/cases/"):-len("/review")])
@@ -270,12 +297,6 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                     raise BoundaryError("INVALID_RECORD", "reviewed_input은 객체")
                 if exp is None and ri is None and body.get("expected_kind") is not None:
                     raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
-                user = self.headers.get("X-Openit-User")
-                if user is not None and not _ID.fullmatch(user):
-                    raise BoundaryError("INVALID_RECORD", "X-Openit-User는 Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)이어야 한다")
-                if user is None and require_reviewer_identity:
-                    # D88/U7: 검토 게시는 gateway가 인증한 사용자(X-Openit-User)가 있어야 받는다. 없으면 토큰 역할만으로는 누가 검토했는지 남지 않는다.
-                    raise BoundaryError("PERMISSION_DENIED", "검토자 신원(X-Openit-User)이 필요하다")
                 before = failures.get_case(case_id)                       # 없으면 NOT_FOUND(404)
                 rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"), reviewed_input=ri, reviewed_by=user)
                 validate_record("FailureCase", rec)
@@ -292,9 +313,10 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                 return self._review(u.path)
             if self.path != "/v1/traces":
                 return self._json(404, {"error": "not found"})
-            auth = self.headers.get("Authorization", "")
-            if not (auth.startswith("Bearer ") and _eq(auth[7:], token)):
-                return self._err(BoundaryError("PERMISSION_DENIED", "토큰이 맞지 않는다"))
+            try:
+                self._role("ingest")
+            except BoundaryError as e:
+                return self._err(e)
             try:
                 n = int(self.headers.get("Content-Length", "0"))
             except ValueError:
