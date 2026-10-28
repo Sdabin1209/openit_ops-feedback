@@ -3,8 +3,7 @@
 ## 준비
 
 ```
-python3 -m venv .venv
-.venv/bin/pip install -e ../boundary-contracts -e '.[dev]'
+scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirements.txt(계약 태그)대로 설치. 멱등
 .venv/bin/python -m pytest -q          # 수용 시험
 ```
 

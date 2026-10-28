@@ -48,11 +48,10 @@ survey-service --I6--> ingest-api --> log.db (원본)
 
 ## 3. 실행 방법
 
-전제: Python 3.10 이상(`pyproject.toml`), git. 스모크와 이미지에는 Docker. `../boundary-contracts`가 이웃 폴더에 있어야 한다(런북의 설치 명령).
+전제: Python 3.10 이상(`pyproject.toml`), git. 스모크와 이미지에는 Docker. 이웃 폴더는 필요 없다. 계약 패키지는 `requirements.txt`의 Git 태그로 설치되므로 GitHub(SSH)에 접근할 수 있어야 한다.
 
 ```
-python3 -m venv .venv
-.venv/bin/pip install -e ../boundary-contracts -e '.[dev]'     # 설치 (docs/runbook.md)
+scripts/setup-env.sh                                            # 설치 (.venv 생성·재사용, 핀대로 맞춤, 여러 번 실행해도 안전)
 .venv/bin/python -m pytest -q                                   # 시험 (PostgreSQL 시험은 건너뜀으로 표시된다)
 scripts/dev-postgres.sh                                         # 일회용 PostgreSQL 컨테이너 위에서 전체 시험 (make test-pg)
 scripts/smoke.sh                                                # 이미지 빌드, 기동, 수집, 인증 확인 (Docker 필요)
