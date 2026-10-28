@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 태그 v2.0.2 시점의 boundary-contracts 소스를 git archive로 꺼내 wheel을 만든다(docker 안 ssh가 어려워서).
+# 지정 태그 시점의 boundary-contracts 소스를 git archive로 꺼내 wheel을 만든다(docker 안 ssh가 어려워서).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 TAG=${BOUNDARY_TAG:-v2.1.0}

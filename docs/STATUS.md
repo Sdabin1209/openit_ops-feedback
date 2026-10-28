@@ -12,7 +12,7 @@
 
 ## 시험
 
-- `.venv/bin/python -m pytest -q`: 전부 통과(85건, 2026-10-15 당시. 현재는 195건).
+- `.venv/bin/python -m pytest -q`: 전부 통과(건수는 README 5절/시험 현황이 정본).
 - 헤드 회신 후속(0.1.1) 반영 후 재실행 결과는 CHANGELOG 0.1.1과 최신 커밋 기준.
 - `scripts/smoke.sh`: `SMOKE OK`.
 

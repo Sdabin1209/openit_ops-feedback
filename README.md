@@ -67,8 +67,8 @@ scripts/smoke.sh                                                # 이미지 빌�
 ## 4. 현재 상태
 
 확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
-- docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): `pytest -q` 133 통과 0 실패, `scripts/smoke.sh` SMOKE OK(boundary-contracts v2.0.0 wheel, WSL 한 환경에서만).
-- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 시험이 늘어 현재 실측은 아래 실행 결과와 같다(STATUS의 133은 오래된 값).
+- docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): 시험·smoke 결과는 docs/STATUS.md의 해당 날짜 기록과 아래 시험 현황을 본다(여기에 개수를 복사하지 않는다).
+- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 현재 시험 상태는 아래 시험 현황이 정본이다.
 - 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
 
 이 세션에서 직접 돌려 확인한 것 (PostgreSQL 대기 상한, FAULT_MATRIX P0-3 D1·D4; 변경 내용은 docs/CHANGELOG.md 0.11.2, 근거와 수치는 docs/boundary.md "DB 대기 상한"):
@@ -95,7 +95,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황(2026-10-28, 0.13.0 제안, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, WSL 한 환경, 계약 패키지는 `../boundary-contracts` 작업 트리 2.1.0 editable, 문진 스키마 스냅샷은 survey-service f4c3f9b): 439 통과, 145 건너뜀(PostgreSQL 시험), 0 실패. 계약 태그 v2.1.0 기준 재시험과 PostgreSQL을 띄운 실행은 아직 하지 않았다.
+시험 현황(2026-10-28, 0.13.0 제안, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, WSL 한 환경, 계약 패키지는 `../boundary-contracts` 작업 트리 2.1.0 editable, 문진 스키마 스냅샷은 survey-service 원본과 해시 일치(tests/test_vendor_sync.py)): 441 통과, 145 건너뜀(PostgreSQL 시험), 0 실패. 계약 태그 v2.1.0 기준 재시험과 PostgreSQL을 띄운 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
