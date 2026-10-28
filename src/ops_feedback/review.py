@@ -28,7 +28,7 @@ _EMAIL_LOCAL = re.compile(r"[A-Za-z0-9._%+-]")
 _EMAIL_TAIL = re.compile(r"[A-Za-z0-9.-]{0,254}")
 DEFAULT_REVIEW_PATTERNS = {
     "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}",
-    "rrn_kr": r"\d{6}[- ]?[1-4]\d{6}",
+    "rrn_kr": r"\d{6}[- ]?[1-8]\d{6}",
 }
 
 

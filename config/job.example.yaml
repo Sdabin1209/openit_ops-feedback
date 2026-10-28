@@ -23,7 +23,7 @@ deid:
   residual_patterns:                    # 결과에 남으면 실패로 닫는 패턴
     email: '[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}'     # 길이를 묶어 입력 길이에 선형(점검 round2 M2)
     phone_kr: '0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}'
-    rrn_kr: '\d{6}[- ]?[1-4]\d{6}'
+    rrn_kr: '\d{6}[- ]?[1-8]\d{6}'
 
 detection:
   detectors:
