@@ -35,10 +35,13 @@ def test_delete_session_removes_records_stored_under_deid_pseudonym(tmp_path):
 
 def test_changing_deid_pseudonym_computation_does_not_break_delete(tmp_path, monkeypatch):
     """deid 쪽 계산을 바꿔도(monkeypatch) admin이 같은 함수를 쓰므로 삭제가 여전히 된다."""
-    real = deid_mod.sha256_hash
-    # 의사 식별자 계산(payload에 salt가 있는 호출)만 다른 값으로 바꾼다
-    monkeypatch.setattr(deid_mod, "sha256_hash",
-                        lambda p: real({**p, "v": 2}) if isinstance(p, dict) and "salt" in p else real(p))
+    real = deid_mod.hmac
+    # 의사 식별자 계산(HMAC 호출)만 다른 값으로 바꾼다
+    class Patched:
+        @staticmethod
+        def new(key, msg, digest):
+            return real.new(key, msg + b"v2", digest)
+    monkeypatch.setattr(deid_mod, "hmac", Patched)
     log, fail = _published(tmp_path)
     out = admin.delete_session(log, fail, SALT, "s-del", dry_run=False)
     assert out["traces"] == 1 and out["cases"] == 1, "deid와 admin이 다른 식을 쓰면 여기서 0건이 된다"

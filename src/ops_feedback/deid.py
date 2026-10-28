@@ -10,12 +10,14 @@
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Optional
 
-from boundary_contracts.canonical import sha256_hash
+from boundary_contracts.canonical import canonicalize, sha256_hash
 
 from .logstore import DeidentifierView
 from .schemas import trace_schema
@@ -345,8 +347,12 @@ def _leaf_strings(v: Any) -> Iterator[str]:
 
 def pseudonym_of(salt: str, key: str, value: str) -> str:
     """의사 식별자 계산의 유일한 정의. 비식별 처리기(_Walker, Deidentifier.pseudonym)와 admin의 세션 삭제가 모두 이 함수를 쓴다.
-    왜: 삭제가 식을 따로 구현하면 한쪽만 바뀔 때 개인정보 삭제가 조용히 0건이 된다(점검 OF-03)."""
-    return "p-" + sha256_hash({"salt": salt, "key": key, "value": value})[7:39]
+    왜: 삭제가 식을 따로 구현하면 한쪽만 바뀔 때 개인정보 삭제가 조용히 0건이 된다(점검 OF-03).
+    식: HMAC-SHA256(키=salt, 메시지=JCS({key, value}))의 앞 128비트 16진 32자. 키 있는 해시의 표준은 HMAC이다(RFC 2104, FIPS 198-1)이고
+    salt를 메시지 앞에 붙인 SHA-256 직접 구성은 표준이 아니라 바꿨다(표준성 점검 B4, ADR 0016). 128비트 절단은 HMAC 출력 절단 허용(RFC 2104 5절)을
+    따른 것이며 길이 자체는 기존 형식(`p-`+32자)을 지키려는 선택이다."""
+    msg = canonicalize({"key": key, "value": value})
+    return "p-" + hmac.new(salt.encode("utf-8"), msg, hashlib.sha256).hexdigest()[:32]
 
 
 class Deidentifier:

@@ -1,9 +1,9 @@
 {
-  "session_id": "p-599a3a1090ab2a289d8b174c7b95d74f",
-  "turn_id": "p-96a26733615bb4ca7688dd826caa6325",
+  "session_id": "p-0ceeab87092f7748521f58a8d5190c10",
+  "turn_id": "p-f63752f925216557de6812bfd77a46bb",
   "contract_version": 1,
   "frontend_message": {
-    "session_id": "p-599a3a1090ab2a289d8b174c7b95d74f",
+    "session_id": "p-0ceeab87092f7748521f58a8d5190c10",
     "kind": "UTTERANCE",
     "utterance": "[MASKED]"
   },
