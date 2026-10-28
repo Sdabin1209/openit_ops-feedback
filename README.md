@@ -62,17 +62,17 @@ scripts/smoke.sh                                                # 이미지 빌�
 - 잡 1회: `OPS_DEID_SALT_FILE=/run/secrets/deid_salt python -m ops_feedback.job --config config/job.yaml` (`config/job.example.yaml`을 복사해 사용. 옵션 `--limit --reprocess --retry-deid-failed --no-rollback`).
 - 비밀(D84): 운영에서는 토큰과 salt를 파일에 두고 경로만 `OPS_INGEST_TOKEN_FILE`, `OPS_READ_TOKENS_FILE`, `OPS_REVIEW_TOKENS_FILE`, `OPS_DEID_SALT_FILE`로 준다. 잡 설정 파일에 비밀 값을 적으면 잡이 시작을 거부한다. 상세는 docs/runbook.md.
 
-이 문서를 쓰는 세션에서 실제로 돌린 것: `.venv/bin/python -m pytest --collect-only -q`(195건 수집), `.venv/bin/python -m ops_feedback.job --help`(옵션 목록 출력). 돌리지 않은 것: pytest 실행 전체, `scripts/smoke.sh`, 이미지 빌드, ingest-api 기동, 잡 실행, `pip install`.
+이 문서를 쓰는 세션에서 실제로 돌린 것: `.venv/bin/python -m pytest --collect-only -q`(195건 수집, 이후 시험이 늘었다), `.venv/bin/python -m ops_feedback.job --help`(옵션 목록 출력). 돌리지 않은 것: pytest 실행 전체, `scripts/smoke.sh`, 이미지 빌드, ingest-api 기동, 잡 실행, `pip install`.
 
 ## 4. 현재 상태
 
 확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
-- docs/STATUS.md 마지막 기록: `pytest -q` 133 통과 0 실패, `scripts/smoke.sh` SMOKE OK(boundary-contracts v2.0.0 wheel, WSL 한 환경에서만).
-- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 이 세션의 수집 건수는 195건으로, STATUS의 133과 다르다(아래 어긋남 참고).
+- docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): `pytest -q` 133 통과 0 실패, `scripts/smoke.sh` SMOKE OK(boundary-contracts v2.0.0 wheel, WSL 한 환경에서만).
+- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 시험이 늘어 현재 실측은 아래 실행 결과와 같다(STATUS의 133은 오래된 값).
 - 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
 
 이 세션에서 직접 돌려 확인한 것 (PostgreSQL 대기 상한, FAULT_MATRIX P0-3 D1·D4; 변경 내용은 docs/CHANGELOG.md 0.11.2, 근거와 수치는 docs/boundary.md "DB 대기 상한"):
-- `pytest -q`(2026-10-28, 0.12.0): `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너) 포함 469 통과 0 건너뜀. PostgreSQL 없이는 345 통과 124 건너뜀(같은 469건 중 PostgreSQL 시험 124건이 SKIP).
+- `pytest -q -rs`(2026-10-28, 이 PC 한 환경, PostgreSQL 없음): 402 통과, 138 건너뜀, 0 실패. 건너뜀 138건의 사유는 `TEST_DATABASE_URL` 없음으로 PostgreSQL 시험 133건, `TEST_DATABASE_URL`/`TEST_PG_CONTAINER` 없음으로 PostgreSQL 무응답 시험 5건이다. PostgreSQL을 띄운(`scripts/dev-postgres.sh`) 실행은 이번에 하지 않았다. 이전 기록(0.12.0 시점, PostgreSQL 포함 469 통과 0 건너뜀, 없이는 345 통과 124 건너뜀)은 그 뒤 시험이 늘기 전 값이다.
 - 이웃 장애·중복·중단 칸(FAULT_MATRIX D2·D3·D5·D6·A6)의 현재 동작은 docs/boundary.md "장애 칸별 현황"(실제 HTTP 가짜 상류로 시험, 실제 이웃 서비스와는 연결하지 않음).
 - DB를 `docker pause`로 얼렸을 때(기본 상한): `/readyz` 503까지 2.0초 후 복구하면 200, 수집 POST는 7.0초 안에 503 후 복구, 잡은 3.3초에 종료 코드 2.
 - `scripts/smoke.sh`: SMOKE OK(SQLite 구성, WSL 한 환경, 0.11.3 기준).
