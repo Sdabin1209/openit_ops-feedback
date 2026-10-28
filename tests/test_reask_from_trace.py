@@ -45,3 +45,39 @@ def test_service_pause_with_signal_is_one_detection():
     rules = [{"id": "TURN_FAILURE_SIGNAL"}, *STREAK_ONLY]
     (d,) = RuleDetector(rules).detect(turn(prior=3, pause_reason="REASK_LIMIT"))
     assert d.rule_id == "TURN_FAILURE_SIGNAL" and d.detail["service_escalated"] is True
+
+
+# ---- 설정 조합: REASK_STREAK은 비식별이 pause_reason을 남길 때만 뜻이 있다 ----
+
+def _cfg(tmp_path, keep, enabled=True):
+    import yaml
+    from conftest import base_config
+    cfg = base_config()
+    cfg["storage"] = {"log_db": str(tmp_path / "l.db"), "failure_db": str(tmp_path / "f.db")}
+    cfg["deid"]["keep_pause_reason"] = keep
+    cfg["detection"]["detectors"][0]["rules"].append({"id": "REASK_STREAK", "enabled": enabled, "params": {"threshold": 3}})
+    p = tmp_path / "job.yaml"
+    p.write_text(yaml.safe_dump(cfg))
+    return p
+
+
+def test_reask_streak_without_keep_pause_reason_is_a_config_error(tmp_path):
+    import pytest
+    from ops_feedback.config import load_config
+    with pytest.raises(ValueError, match="keep_pause_reason"):
+        load_config(_cfg(tmp_path, keep=False))
+
+
+def test_reask_streak_combinations_that_are_fine(tmp_path):
+    from ops_feedback.config import load_config
+    load_config(_cfg(tmp_path, keep=True))
+    load_config(_cfg(tmp_path, keep=False, enabled=False))          # 규칙을 껐으면 정책은 자유
+
+
+def test_job_exits_2_with_reason_on_that_combination(tmp_path):
+    import os
+    import subprocess
+    import sys
+    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(_cfg(tmp_path, keep=False))], env=env, capture_output=True, text=True)
+    assert r.returncode == 2 and "keep_pause_reason" in r.stderr and "Traceback" not in r.stderr

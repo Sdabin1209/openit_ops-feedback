@@ -2,6 +2,7 @@
 
 ## 0.14.1 (제안, OF-02, ADR 0019)
 
+- 설정 조합 검사: `REASK_STREAK`이 켜져 있고 `deid.keep_pause_reason`이 꺼져 있으면 설정 오류(잡 종료 코드 2, 이유 메시지). 잡의 모든 설정 오류가 스택 트레이스 대신 종료 코드 2가 된다.
 - `REASK_STREAK`은 대화 로그의 연속 횟수를 다시 세지 않고 trace의 `pause_reason == REASK_LIMIT`을 읽는다. 서비스가 정지한 그 턴에 사례가 생긴다(이전에는 한 칸 일렀다). `params.threshold`·`actions`는 무시하고 시작할 때 경고한다(폐기 예정, 계약 `OpsFeedbackJobConfig`에는 아직 필수).
 
 ## 0.14.0 (제안, 단위 3: 계약 v2.2.1, 경계 스키마 사용, 문진 스키마 패키지)

@@ -48,6 +48,11 @@ def load_config(path: str | Path) -> dict:
     errs = sorted(validator("OpsFeedbackJobConfig").iter_errors(cfg), key=lambda e: list(map(str, e.absolute_path)))
     if errs:
         raise ValueError("설정이 OpsFeedbackJobConfig 스키마를 어긴다: " + "; ".join(_brief(e) for e in errs[:5]))
+    # 조합 검사(스키마로 표현하지 못하는 불변식): REASK_STREAK은 trace의 pause_reason을 읽는데(ADR 0019) 비식별이 그것을 지우면 아무것도 못 잡는 조용한 실패가 된다.
+    rules = [r for d in cfg["detection"]["detectors"] if d.get("type") == "rule" for r in d.get("rules", [])]
+    if any(r["id"] == "REASK_STREAK" and r.get("enabled", True) for r in rules) and not cfg["deid"].get("keep_pause_reason", False):
+        raise ValueError("REASK_STREAK 규칙이 켜져 있는데 deid.keep_pause_reason이 꺼져 있다: 비식별이 pause_reason을 지워 이 규칙은 아무것도 잡지 못한다. "
+                         "deid.keep_pause_reason: true로 하거나 REASK_STREAK을 끈다(ADR 0019)")
     ret = cfg["retention"]
     # D88/U4 최소 보존 기본값: 처리 끝난 원본 30일, 비식별 실패 사례 180일, 기록 1년. 키를 생략하면 기본값(null은 스키마가 거부한다: 기본 무기한 금지).
     # 무기한이 정말 필요하면 명시적으로 "forever"를 쓴다(시작 때마다 경고).

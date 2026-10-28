@@ -330,7 +330,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--retry-deid-failed", action="store_true")
     ap.add_argument("--no-rollback", action="store_true")
     a = ap.parse_args(argv)
-    cfg = load_config(a.config)
+    try:
+        cfg = load_config(a.config)
+    except ValueError as e:
+        # 설정 오류는 스택 트레이스 없이 이유만 내고 종료 코드 2(접속 실패 등과 같은 "실행 못 함" 코드)
+        print(f"오류: {e}", file=sys.stderr)
+        return 2
     # DB가 무응답이면 문장·접속 상한(OPS_DB_*_TIMEOUT) 안에 BoundaryError(UNAVAILABLE)로 끝난다. 무한 대기하지 않고 종료 코드 2로 끝낸다(스택 트레이스 없이 코드만).
     try:
         log, store, deid, detectors, classifier, planner, reader = build_from_config(cfg, dict(os.environ))
