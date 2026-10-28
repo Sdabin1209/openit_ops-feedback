@@ -32,7 +32,7 @@ detection:
         - {id: TURN_FAILURE_SIGNAL}
         - {id: TURN_FAILED_STEPS}
         - {id: COMMIT_ERROR}
-        - {id: GENERATOR_FALLBACK}          # response_outcome == fallback (옛 이름 유지)
+        - {id: RESPONSE_FALLBACK}          # response_outcome == fallback
         - {id: STAFF_ALERT_DELIVERY_FAILED}
         - {id: INTERVENTION_FAILED}
         # 값이 빈 추출은 REDIRECT만 정상이다. HOLD·SKIP도 계약상 targets(1~4개, 모두 같은 행 values의 key)가 필수라 값이 비면 계약 위반이다(ADR 0012).

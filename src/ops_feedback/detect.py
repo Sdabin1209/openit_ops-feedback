@@ -73,8 +73,8 @@ def _commit_error(t: dict, params: dict) -> Optional[dict]:
     return None
 
 
-def _generator_fallback(t: dict, params: dict) -> Optional[dict]:
-    """LoRA-B 호출이 서버 대체 문장으로 끝났다(response_outcome=='fallback'). 규칙 ID는 설정 호환을 위해 옛 이름을 유지한다."""
+def _response_fallback(t: dict, params: dict) -> Optional[dict]:
+    """LoRA-B 호출이 서버 대체 문장으로 끝났다(response_outcome=='fallback'). 규칙 ID는 v1 이름 GENERATOR_FALLBACK에서 바꿨다(ADR 0015)."""
     return {} if _get(t, "response_outcome") == "fallback" else None
 
 
@@ -150,7 +150,7 @@ RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {
     "TURN_FAILURE_SIGNAL": _turn_failure_signal,
     "TURN_FAILED_STEPS": _failed_steps,
     "COMMIT_ERROR": _commit_error,
-    "GENERATOR_FALLBACK": _generator_fallback,
+    "RESPONSE_FALLBACK": _response_fallback,
     "STAFF_ALERT_DELIVERY_FAILED": _staff_alert_failed,
     "INTERVENTION_FAILED": _intervention_failed,
     "EXTRACT_FAILED": _extract_failed,
@@ -160,6 +160,7 @@ RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {
 # v2(D74)에서 없어진 규칙. 뜻이 달라져 이름만 바꿔 받지 않고, 바꿀 이름을 알려 준다.
 RETIRED_RULES = {
     "PARSER_EMPTY": "EXTRACT_FAILED (파서 입력·항목이 없어졌다. 조건: extract_status!=OK 또는 값 없는 비REDIRECT 추출)",
+    "GENERATOR_FALLBACK": "RESPONSE_FALLBACK (v1 이름. 뜻은 같다: response_outcome==fallback. ADR 0015)",
     "UNRECOGNIZED_STREAK": "REASK_STREAK (planner가 없어졌다. 같은 문항 REASK 연속 횟수, params.threshold)",
 }
 

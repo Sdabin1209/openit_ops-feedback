@@ -56,10 +56,10 @@ def base_config() -> dict:
                  "unlisted_string_action": "mask", "mask_defs": ["Value"], "drop_defs": [], "mask_value_keys": ["value"],
                  "residual_patterns": {"email": r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,}",
                                        "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}"}},
-        "detection": {"detectors": [{"type": "rule", "rules": [{"id": "TURN_FAILURE_SIGNAL"}, {"id": "GENERATOR_FALLBACK"},
+        "detection": {"detectors": [{"type": "rule", "rules": [{"id": "TURN_FAILURE_SIGNAL"}, {"id": "RESPONSE_FALLBACK"},
                                                                 {"id": "COMMIT_ERROR"}]}]},
-        "classification": {"default_failure_type": "UNCLASSIFIED", "rule_to_type": {"GENERATOR_FALLBACK": "T-FALLBACK"},
-                           "priority": ["TURN_FAILURE_SIGNAL", "GENERATOR_FALLBACK"]},
+        "classification": {"default_failure_type": "UNCLASSIFIED", "rule_to_type": {"RESPONSE_FALLBACK": "T-FALLBACK"},
+                           "priority": ["TURN_FAILURE_SIGNAL", "RESPONSE_FALLBACK"]},
         "retention": {"raw_days": "forever", "cases_days": "forever", "metrics_days": "forever"},
     }
 

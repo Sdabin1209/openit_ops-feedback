@@ -2,7 +2,7 @@
 
 - 상태: 채택. REASK_STREAK 임계값은 [0012](0012-reask-streak-and-empty-values.md)가 대체했다(아래 임계값 항목은 당시 기록).
 - 맥락: 어떤 턴을 실패로 볼지 정해야 한다. 의미적 오류까지는 규칙으로 못 잡는다.
-- 결정: 비식별 뒤 trace의 구조 필드만 보는 규칙들(`detect.py`): `TURN_FAILURE_SIGNAL`, `TURN_FAILED_STEPS`, `COMMIT_ERROR`, `GENERATOR_FALLBACK`, `STAFF_ALERT_DELIVERY_FAILED`, `INTERVENTION_FAILED`, `EXTRACT_FAILED`, `REASK_STREAK`. 켤 규칙과 값은 설정이 정한다.
+- 결정: 비식별 뒤 trace의 구조 필드만 보는 규칙들(`detect.py`): `TURN_FAILURE_SIGNAL`, `TURN_FAILED_STEPS`, `COMMIT_ERROR`, `RESPONSE_FALLBACK`(원래 이름 GENERATOR_FALLBACK, ADR 0015), `STAFF_ALERT_DELIVERY_FAILED`, `INTERVENTION_FAILED`, `EXTRACT_FAILED`, `REASK_STREAK`. 켤 규칙과 값은 설정이 정한다.
 - 왜: 규칙은 결정적이어서 같은 trace에 같은 결과를 낸다(수용 기준). 탐지기가 비식별 뒤 trace만 받는 구조라 원본이 필요한 탐지기를 만들 수 없다.
 - 임계값과 기본값의 근거:
   - `REASK_STREAK.threshold`: 기본값 없음, 예시 설정의 3은 **자리표시자**다(사용자 결정 대기, README G14). 근거 기록 없음. 예시는 `enabled: false`.

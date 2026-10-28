@@ -5,17 +5,17 @@ from conftest import make_trace
 
 
 def test_rules_fire_on_structural_fields():
-    d = RuleDetector([{"id": "TURN_FAILURE_SIGNAL"}, {"id": "GENERATOR_FALLBACK"}, {"id": "COMMIT_ERROR"}, {"id": "TURN_FAILED_STEPS"}])
+    d = RuleDetector([{"id": "TURN_FAILURE_SIGNAL"}, {"id": "RESPONSE_FALLBACK"}, {"id": "COMMIT_ERROR"}, {"id": "TURN_FAILED_STEPS"}])
     t = make_trace(response_output="[MASKED]", response_outcome="fallback",
                    persistence_commit_result={"session_id": "p", "status": "DB_ERROR", "write_outcome": "UNKNOWN", "revision": None, "detail": "[MASKED]"},
                    orchestrator_output={"turn_failure_signal": {"session_id": "p", "write_committed": "NOT_COMMITTED", "staff_alert": "NONE"}})
-    assert {x.rule_id for x in d.detect(t)} == {"GENERATOR_FALLBACK", "COMMIT_ERROR", "TURN_FAILURE_SIGNAL"}
+    assert {x.rule_id for x in d.detect(t)} == {"RESPONSE_FALLBACK", "COMMIT_ERROR", "TURN_FAILURE_SIGNAL"}
     assert d.detect(make_trace()) == []
 
 
 @pytest.mark.parametrize("outcome,fires", [("fallback", True), ("ok", False), ("fixed", False), (None, False)])
 def test_generator_fallback_reads_response_outcome(outcome, fires):
-    d = RuleDetector([{"id": "GENERATOR_FALLBACK"}])
+    d = RuleDetector([{"id": "RESPONSE_FALLBACK"}])
     assert bool(d.detect(make_trace(response_outcome=outcome))) is fires
 
 
@@ -203,3 +203,9 @@ def test_example_config_enables_both_rules_with_threshold_3():
     d = RuleDetector([r for r in rules.values()])
     assert d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q1")]))                     # 3번째 연속
     assert not d.detect(streak_trace([("REASK", "Q1")]))
+
+
+def test_retired_generator_fallback_name_is_rejected_with_replacement():
+    import pytest
+    with pytest.raises(ValueError, match="RESPONSE_FALLBACK"):
+        RuleDetector([{"id": "GENERATOR_FALLBACK"}])

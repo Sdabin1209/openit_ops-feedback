@@ -14,11 +14,11 @@
     "ops-feedback": {
       "detections": [
         {
-          "rule_id": "GENERATOR_FALLBACK",
+          "rule_id": "RESPONSE_FALLBACK",
           "detail": {}
         }
       ],
-      "primary_rule": "GENERATOR_FALLBACK",
+      "primary_rule": "RESPONSE_FALLBACK",
       "deid_policy_id": "test-policy",
       "deid_stats": {
         "pseudonymized": 3,
