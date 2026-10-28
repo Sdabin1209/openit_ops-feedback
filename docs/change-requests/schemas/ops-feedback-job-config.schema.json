@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openit.example/ops-feedback/job-config.schema.json",
+  "title": "OpsFeedbackJobConfig",
+  "description": "ops-feedback 주기 잡 설정(YAML을 객체로 읽은 것). 만드는 쪽: deploy(운영) 또는 이 영역의 예시. 읽는 쪽: ops-feedback `python -m ops_feedback.job --config`. 모르는 키는 어디서나 거부한다(오타가 조용히 무시되어 비식별·보존 설정이 꺼지는 것을 막는다). 비밀 값은 적을 수 없고 {secret: NAME}만 쓴다(D84).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["storage", "deid", "detection", "classification", "retention"],
+  "properties": {
+    "storage": {
+      "type": "object", "additionalProperties": false, "required": ["log_db", "failure_db"],
+      "description": "SQLite 경로. 환경 변수 OPS_LOG_DATABASE_URL[_FILE] / OPS_FAILURE_DATABASE_URL[_FILE]가 있으면 PostgreSQL이 우선하고 이 경로는 쓰이지 않는다.",
+      "properties": {"log_db": {"type": "string", "minLength": 1}, "failure_db": {"type": "string", "minLength": 1}}
+    },
+    "deid": {"$ref": "#/$defs/Deid"},
+    "detection": {
+      "type": "object", "additionalProperties": false, "required": ["detectors"],
+      "properties": {"detectors": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Detector"}}}
+    },
+    "classification": {
+      "type": "object", "additionalProperties": false, "required": ["default_failure_type"],
+      "properties": {
+        "default_failure_type": {"type": "string", "minLength": 1},
+        "rule_to_type": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+        "priority": {"type": "array", "items": {"$ref": "#/$defs/RuleId"}}
+      }
+    },
+    "retention": {
+      "type": "object", "additionalProperties": false,
+      "description": "일 수(0 초과) 또는 \"forever\". null은 거부(기본 무기한 금지). 생략하면 raw 30, cases 180, metrics 365(ADR 0007).",
+      "properties": {
+        "raw_days": {"$ref": "#/$defs/DaysOrForever"},
+        "cases_days": {"$ref": "#/$defs/DaysOrForever"},
+        "metrics_days": {"$ref": "#/$defs/DaysOrForever"},
+        "failed_raw_days": {"$ref": "#/$defs/DaysOrForever"},
+        "purge_unprocessed": {"type": "boolean"},
+        "cases_purge_confirmed": {"type": "boolean"},
+        "raw_after_processing": {"enum": ["keep", "minimize"]}
+      }
+    },
+    "job": {"type": "object", "additionalProperties": false, "properties": {"batch_size": {"type": "integer", "minimum": 1}}},
+    "rollback": {
+      "type": "object", "additionalProperties": false,
+      "required": ["window_hours", "min_turns", "max_failure_rate", "counted_review_statuses", "requested_by_role", "auto_submit"],
+      "description": "있으면 롤백 평가를 한다(release_reader도 있어야 평가가 돈다). 기준 값은 사용자 결정이며 기본값이 없다.",
+      "properties": {
+        "window_hours": {"type": "number", "exclusiveMinimum": 0},
+        "min_turns": {"type": "integer", "minimum": 1},
+        "max_failure_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "counted_review_statuses": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+        "requested_by_role": {"type": "string", "minLength": 1},
+        "auto_submit": {"type": "boolean"},
+        "deadline_seconds": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "release_reader": {"$ref": "#/$defs/Factory"},
+    "gate_service": {"$ref": "#/$defs/Factory"}
+  },
+  "$defs": {
+    "DaysOrForever": {"oneOf": [{"type": "number", "exclusiveMinimum": 0}, {"const": "forever"}]},
+    "RuleId": {"enum": ["TURN_FAILURE_SIGNAL", "TURN_FAILED_STEPS", "COMMIT_ERROR", "RESPONSE_FALLBACK", "STAFF_ALERT_DELIVERY_FAILED", "INTERVENTION_FAILED", "EXTRACT_FAILED", "REASK_STREAK"]},
+    "SecretRef": {"type": "object", "additionalProperties": false, "required": ["secret"], "properties": {"secret": {"type": "string", "minLength": 1}}},
+    "Factory": {
+      "type": "object", "additionalProperties": false, "required": ["factory"],
+      "description": "\"모듈:함수\". 이웃 패키지 경로가 설정에 들어가는 결합이다(제안: 계약 클라이언트 이름만 허용하도록 좁히는 것은 헤드 결정).",
+      "properties": {
+        "factory": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"},
+        "args": {"type": "object", "description": "문자열 값에 이름이 token/secret/password/credential/api_key/authorization/private_key를 포함하는 키는 {secret: NAME}만 허용(config.py check_inline_secrets)."}
+      }
+    },
+    "Detector": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["type", "rules"],
+         "properties": {"type": {"const": "rule"}, "rules": {"type": "array", "items": {"$ref": "#/$defs/Rule"}}}},
+        {"type": "object", "additionalProperties": false, "required": ["factory"],
+         "properties": {"factory": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$"}, "args": {"type": "object"}}}
+      ]
+    },
+    "Rule": {
+      "type": "object", "additionalProperties": false, "required": ["id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/RuleId"},
+        "enabled": {"type": "boolean"},
+        "params": {"type": "object"}
+      },
+      "allOf": [
+        {"if": {"properties": {"id": {"const": "REASK_STREAK"}}, "required": ["id"]},
+         "then": {"required": ["params"], "properties": {"params": {"type": "object", "required": ["threshold"], "additionalProperties": false,
+            "properties": {"threshold": {"type": "integer", "minimum": 1}, "actions": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}}}}}},
+        {"if": {"properties": {"id": {"const": "EXTRACT_FAILED"}}, "required": ["id"]},
+         "then": {"properties": {"params": {"type": "object", "additionalProperties": false,
+            "properties": {"empty_values_ok_actions": {"type": "array", "items": {"type": "string"}}}}}}}
+      ]
+    },
+    "Deid": {
+      "type": "object", "additionalProperties": false, "required": ["policy_id", "keep_string_keys", "unlisted_string_action"],
+      "description": "비식별 정책. 기본값 없음(사용자 결정). 제안 불변식: pseudonymize_keys에 session_id가 있어야 admin delete-session이 비식별 trace를 찾는다(코드는 없어도 시작한다).",
+      "properties": {
+        "policy_id": {"type": "string", "minLength": 1},
+        "salt_env": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "description": "salt 비밀의 이름. 값은 <이름>_FILE 파일에서 읽는다. 기본 OPS_DEID_SALT"},
+        "pseudonymize_keys": {"$ref": "#/$defs/StrList"},
+        "keep_string_keys": {"$ref": "#/$defs/StrList"},
+        "keep_string_patterns": {"$ref": "#/$defs/RegexMap"},
+        "keep_count_map_keys": {"$ref": "#/$defs/StrList"},
+        "count_map_key_pattern": {"type": "string", "format": "regex"},
+        "keep_pause_reason": {"type": "boolean"},
+        "scrub_string_keys": {"$ref": "#/$defs/StrList"},
+        "scrub_patterns": {"$ref": "#/$defs/RegexMap"},
+        "unlisted_string_action": {"enum": ["mask", "drop"]},
+        "mask_defs": {"$ref": "#/$defs/StrList"},
+        "drop_defs": {"$ref": "#/$defs/StrList"},
+        "mask_value_keys": {"$ref": "#/$defs/StrList"},
+        "mask_number_keys": {"$ref": "#/$defs/StrList"},
+        "residual_patterns": {"$ref": "#/$defs/RegexMap"}
+      }
+    },
+    "StrList": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "RegexMap": {"type": "object", "additionalProperties": {"type": "string", "format": "regex"}}
+  }
+}

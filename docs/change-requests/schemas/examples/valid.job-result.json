@@ -1,0 +1,16 @@
+{
+ "cases_existing": 0,
+ "cases_published": 1,
+ "deid_failed": 0,
+ "errors": [],
+ "minimized_raw": 0,
+ "no_failure": 0,
+ "processed": 1,
+ "purged_aux": 0,
+ "purged_cases": 0,
+ "purged_failed_raw": 0,
+ "purged_raw": 0,
+ "rollback": null,
+ "skipped_diff": 0,
+ "warnings": []
+}

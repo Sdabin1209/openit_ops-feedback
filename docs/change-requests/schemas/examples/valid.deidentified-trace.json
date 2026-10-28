@@ -1,0 +1,62 @@
+{
+ "session_id": "p-c1463533ade1c1a1a59e913284edfce4",
+ "turn_id": "p-70a382c99ecb7565b5217544205f2a14",
+ "contract_version": 1,
+ "frontend_message": {
+  "session_id": "p-c1463533ade1c1a1a59e913284edfce4",
+  "kind": "UTTERANCE",
+  "utterance": "[MASKED]"
+ },
+ "intervention_decision": null,
+ "orchestrator_input": null,
+ "extract_input": {
+  "question_id": "Q1",
+  "current_question": "[MASKED]",
+  "user_utterance": "[MASKED]",
+  "state": {}
+ },
+ "extract_output": {
+  "values": [
+   {
+    "key": "[MASKED]",
+    "value": "[MASKED]",
+    "precision": "[MASKED]",
+    "status": "[MASKED]",
+    "save": true
+   }
+  ],
+  "action": "NEXT",
+  "next_item": "Q2",
+  "reason": "[MASKED]",
+  "targets": [],
+  "note": "[MASKED]"
+ },
+ "extract_attempts": 1,
+ "extract_status": "OK",
+ "extract_protections": {
+  "R1": 1
+ },
+ "validation_ok": true,
+ "validation_violations": [],
+ "response_input": {
+  "action": "NEXT",
+  "topic": "[MASKED]",
+  "next": {}
+ },
+ "response_output": "[MASKED]",
+ "response_outcome": "fallback",
+ "response_protections": {},
+ "frontend_input": null,
+ "staff_console_input": null,
+ "dispatch_input": null,
+ "dispatch_output": null,
+ "orchestrator_output": null,
+ "session_before": null,
+ "session_after": null,
+ "log_entry": null,
+ "persistence_load_request": null,
+ "persistence_load_result": null,
+ "persistence_commit_request": null,
+ "persistence_commit_result": null,
+ "turn_index": 0
+}

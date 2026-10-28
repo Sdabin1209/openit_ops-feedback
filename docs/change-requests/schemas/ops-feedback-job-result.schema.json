@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openit.example/ops-feedback/job-result.schema.json",
+  "title": "OpsFeedbackJobResult",
+  "description": "`python -m ops_feedback.job` 한 번 실행의 stdout(JSON 한 줄)과 종료 코드. 만드는 쪽: ops-feedback 잡. 읽는 쪽: deploy 스케줄러. 종료 코드(코드 확인: job.py main): 0 = 오류 없음; 1 = 보고서 errors가 비어 있지 않음(일부 턴 실패, 롤백 평가 실패 포함; stdout 보고서는 있음); 2 = BoundaryError로 시작·접속 실패(stderr에 {\"error\":코드,\"message\":…} 한 줄, stdout 없음)이거나 argparse 사용 오류. 경고(warnings)는 stderr에 `경고: ` 접두로도 나가며 종료 코드에 영향이 없다. 확인된 어긋남(제안으로 고칠 것): 설정 파일 오류(ValueError)와 salt 없음은 잡히지 않아 파이썬 트레이스백과 종료 코드 1로 끝난다 -> 스케줄러가 '일부 실패(1)'와 '설정 오류'를 구별하지 못한다. 설정 오류는 2로 통일하자고 제안한다(코드는 아직 바꾸지 않음). 모르는 키: 읽는 쪽 무시(additionalProperties 허용), 쓰는 쪽은 아래 키만 쓴다.",
+  "type": "object",
+  "required": ["processed", "cases_published", "cases_existing", "no_failure", "deid_failed", "skipped_diff", "purged_raw", "purged_failed_raw", "purged_cases", "purged_aux", "minimized_raw", "rollback", "errors", "warnings"],
+  "additionalProperties": true,
+  "properties": {
+    "processed": {"type": "integer", "minimum": 0}, "cases_published": {"type": "integer", "minimum": 0},
+    "cases_existing": {"type": "integer", "minimum": 0}, "no_failure": {"type": "integer", "minimum": 0},
+    "deid_failed": {"type": "integer", "minimum": 0}, "skipped_diff": {"type": "integer", "minimum": 0},
+    "purged_raw": {"type": "integer", "minimum": 0}, "purged_failed_raw": {"type": "integer", "minimum": 0},
+    "purged_cases": {"type": "integer", "minimum": 0}, "purged_aux": {"type": "integer", "minimum": 0},
+    "minimized_raw": {"type": "integer", "minimum": 0},
+    "rollback": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["action"], "properties": {"action": {"enum": ["NONE", "REQUEST_CREATED", "ERROR"]}, "reason": {"type": "string"}, "error": {"type": "string"}, "release_id": {"type": "string"}, "total_turns": {"type": "integer"}, "failures": {"type": "integer"}, "rate": {"type": "number"}, "by_pause_reason": {"type": "object", "additionalProperties": {"type": "integer"}}, "request_id": {"type": "string"}, "to_release_id": {"type": "string"}, "receipt_status": {"type": "string"}, "submit_error": {"type": "string"}}}]},
+    "errors": {"type": "array", "description": "개인정보가 없는 값만: turn은 의사 식별자, error는 코드 또는 DeidError 메시지", "items": {"type": "object", "properties": {"turn": {"type": "string", "pattern": "^p-[0-9a-f]{32}$"}, "stage": {"enum": ["rollback", "rollback_submit"]}, "error": {"type": "string"}}, "required": ["error"], "additionalProperties": false}},
+    "warnings": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z_]+: "}}
+  },
+  "allOf": [{"$comment": "종료 코드 1 <=> errors 비어 있지 않음. 스키마로 표현하지 않고 CR의 검증 스크립트가 쌍으로 확인한다."}]
+}

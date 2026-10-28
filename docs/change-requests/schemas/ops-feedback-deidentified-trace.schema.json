@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openit.example/ops-feedback/deidentified-trace.schema.json",
+  "title": "OpsFeedbackDeidentifiedTurnTrace",
+  "description": "I7 GET /v1/deidentified-traces/{ref}가 돌려주는 비식별 TurnTrace(문진 스키마 TurnTrace의 비식별 사본). 만드는 쪽: ops-feedback 비식별 처리기. 읽는 쪽: synthetic-data, model-lab, 문항 저작(I7 소비자). 최상위 키는 TurnTrace(contract_version 1)와 같고 모르는 최상위 키는 거부한다(비식별은 허용 목록 방식이라 모르는 키는 이미 제거되어 있어야 한다). 안쪽 객체는 문진 스키마가 정한 모양의 부분집합이며 이 스키마는 비식별이 보장하는 것만 적는다: (1) 자유 문자열 잎은 \"[MASKED]\" 또는 \"[DROPPED]\"이거나 keep 키의 식별자 모양 값이다, (2) session_id/turn_id는 의사 식별자 p-<32 hex>이다, (3) 구조 없는 자유 객체는 비워진다. 아래 $defs에 적히지 않은 안쪽 객체(session_before 등 12개 기록)는 'object 또는 null'로만 검사한다: 안쪽 전체를 문진 스키마와 같은 깊이로 다시 적지 않았다(이웃 영역 스키마의 복사본을 만들지 않기 위해).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "turn_id", "contract_version", "frontend_message", "intervention_decision", "orchestrator_input", "extract_input", "extract_output", "extract_attempts", "extract_status", "extract_protections", "validation_ok", "validation_violations", "response_input", "response_output", "response_outcome", "response_protections", "frontend_input", "staff_console_input", "dispatch_input", "dispatch_output", "orchestrator_output", "session_before", "session_after", "log_entry", "persistence_load_request", "persistence_load_result", "persistence_commit_request", "persistence_commit_result"],
+  "properties": {
+    "session_id": {"$ref": "#/$defs/Pseudonym"},
+    "turn_id": {"$ref": "#/$defs/Pseudonym"},
+    "contract_version": {"type": "integer", "minimum": 1},
+    "turn_index": {"type": "integer", "minimum": 0},
+    "frontend_message": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["session_id", "kind"], "properties": {"session_id": {"$ref": "#/$defs/Pseudonym"}, "kind": {"enum": ["SESSION_START", "UTTERANCE", "SESSION_END"]}, "utterance": {"$ref": "#/$defs/Redacted"}}, "additionalProperties": false}]},
+    "extract_input": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["question_id", "current_question", "user_utterance", "state"], "properties": {"question_id": {"$ref": "#/$defs/Ident"}, "current_question": {"$ref": "#/$defs/Redacted"}, "user_utterance": {"$ref": "#/$defs/Redacted"}, "state": {"type": "object"}}}]},
+    "extract_output": {"oneOf": [{"type": "null"}, {"type": "object", "properties": {
+      "values": {"type": "array", "items": {"type": "object", "properties": {"key": {"$ref": "#/$defs/Redacted"}, "value": {"$ref": "#/$defs/Redacted"}, "precision": {"$ref": "#/$defs/Redacted"}, "status": {"$ref": "#/$defs/Redacted"}, "save": {"type": "boolean"}}}},
+      "action": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,31}$|^\\[MASKED\\]$"}, "next_item": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/Ident"}]}, "reason": {"$ref": "#/$defs/Redacted"}, "note": {"$ref": "#/$defs/Redacted"}, "targets": {"type": "array"}}}]},
+    "extract_attempts": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1, "maximum": 2}]},
+    "extract_status": {"enum": ["OK", "OUTPUT_INVALID", "VIOLATION", "ERROR", null]},
+    "extract_protections": {"$ref": "#/$defs/CountMap"},
+    "validation_ok": {"type": ["boolean", "null"]},
+    "validation_violations": {"type": ["array", "null"]},
+    "response_input": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["action", "topic", "next"], "properties": {"action": {"type": "string"}, "topic": {"$ref": "#/$defs/Redacted"}, "next": {"type": "object"}}}]},
+    "response_output": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/Redacted"}]},
+    "response_outcome": {"enum": ["ok", "fallback", "fixed", null]},
+    "response_protections": {"$ref": "#/$defs/CountMap"},
+    "intervention_decision": {"type": ["object", "null"]}, "orchestrator_input": {"type": ["object", "null"]},
+    "frontend_input": {"type": ["object", "null"]}, "staff_console_input": {"type": ["object", "null"]},
+    "dispatch_input": {"type": ["object", "null"]}, "dispatch_output": {"type": ["object", "null"]},
+    "orchestrator_output": {"type": ["object", "null"]}, "session_before": {"type": ["object", "null"]},
+    "session_after": {"type": ["object", "null"]}, "log_entry": {"type": ["object", "null"]},
+    "persistence_load_request": {"type": ["object", "null"]}, "persistence_load_result": {"type": ["object", "null"]},
+    "persistence_commit_request": {"type": ["object", "null"]}, "persistence_commit_result": {"type": ["object", "null"]}
+  },
+  "$defs": {
+    "Pseudonym": {"type": "string", "pattern": "^p-[0-9a-f]{32}$", "description": "sha256(salt, key, value)[7:39]. 같은 salt·키·값이면 같다. salt는 이 영역만 안다. 소비자는 원 값으로 되돌릴 수 없고 되돌리려 해서도 안 된다."},
+    "Redacted": {"enum": ["[MASKED]", "[DROPPED]"], "description": "자유 문자열 잎의 비식별 결과. 정책 unlisted_string_action이 mask면 [MASKED], drop이면 키를 지우거나 [DROPPED]. 제안: 소비자는 이 값을 내용으로 쓰지 않는다."},
+    "Ident": {"type": "string", "pattern": "^([A-Za-z0-9][A-Za-z0-9_.\\-]{0,63}|\\[MASKED\\])$", "description": "keep 키의 식별자 모양 값(문항 ID 등). 패턴에 맞지 않으면 마스킹된다."},
+    "CountMap": {"oneOf": [{"type": "null"}, {"type": "object", "propertyNames": {"pattern": "^[A-Z][A-Z0-9_]{0,31}$"}, "additionalProperties": {"type": "integer", "minimum": 0}}], "description": "규칙 코드 -> 건수. 정책이 keep_count_map_keys로 허용하지 않으면 {} 또는 제거"}
+  }
+}
