@@ -92,30 +92,33 @@ def _extract_failed(t: dict, params: dict) -> Optional[dict]:
 
 
 def _reask_streak(t: dict, params: dict) -> Optional[dict]:
-    """같은 문항에서 되묻기(REASK)가 연속으로 threshold번 이상이다. 이번 턴을 포함해 센다.
+    """반복 물음: REASK 또는 CONFIRM이 연속으로 나온 턴 수(둘을 합쳐 센다, 문항은 보지 않는다)가 threshold 이상이다. 이번 턴을 포함해 센다.
 
-    v1의 UNRECOGNIZED_STREAK(planner 기록)를 대체한다. 세션 문서의 대화 로그(session_before.dialogue_log, 이번 턴 이전)에서
-    뒤에서부터 같은 action·같은 next_item(문항)인 항목을 센다. 추출 출력이 없는 턴(비발화, 추출 실패)은 연속을 끊는다.
-    params.threshold 필수(기본값 없음). params.actions(기본 ["REASK"])에 CONFIRM 등을 더할 수 있다.
-    next_item이 REASK에서 되묻는 문항을 가리킨다는 것은 문서로 확인하지 못했다(미확인). 같은 값끼리 비교하므로 규칙은 그와 무관하게 일관된다.
+    정의는 survey-service `graph.py`의 `_reask_escalation`과 같다(ADR 0012: 같은 사건을 서비스와 탐지가 다르게 세지 않게 한다).
+    세션 문서의 대화 로그(session_before.dialogue_log, 이번 턴 이전)를 뒤에서부터 본다: COMMITTED가 아닌 턴은 건너뛰고(연속을 끊지 않는다),
+    추출 출력이 없거나 action이 REASK·CONFIRM이 아니면 거기서 센다를 멈춘다(리셋).
+    params.threshold 필수(기본값 없음). params.actions 기본 ["REASK", "CONFIRM"].
     """
     th = params.get("threshold")
     if th is None:
         raise ValueError("REASK_STREAK 규칙은 params.threshold가 필요하다(기본값 없음)")
-    actions = params.get("actions", ["REASK"])
+    actions = params.get("actions", ["REASK", "CONFIRM"])
     cur = _get(t, "extract_output")
-    if not isinstance(cur, dict) or cur.get("action") not in actions or not cur.get("next_item"):
+    if not isinstance(cur, dict) or cur.get("action") not in actions:
         return None
-    q, act = cur["next_item"], cur["action"]
     n = 1
     log = _get(t, "session_before", "dialogue_log")
     for e in reversed(log if isinstance(log, list) else []):
-        eo = e.get("extract_output") if isinstance(e, dict) else None
-        if isinstance(eo, dict) and eo.get("action") == act and eo.get("next_item") == q:
+        if not isinstance(e, dict):
+            break
+        if e.get("turn_result") != "COMMITTED":
+            continue                                       # 서비스와 같게: 실패·무시된 턴은 연속을 끊지 않는다
+        eo = e.get("extract_output")
+        if isinstance(eo, dict) and eo.get("action") in actions:
             n += 1
         else:
             break
-    return {"streak": n, "action": act} if n >= th else None
+    return {"streak": n, "action": cur["action"]} if n >= th else None
 
 
 RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {

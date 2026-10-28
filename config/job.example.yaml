@@ -9,7 +9,7 @@ deid:
   salt_env: OPS_DEID_SALT               # 의사 식별자 salt. 비밀 값은 OPS_DEID_SALT_FILE(파일 경로)로 받는다. 개발용으로 OPS_DEID_SALT도 된다.
   pseudonymize_keys: [session_id, turn_id]
   # 스키마가 열거값으로 정하지 않은 자유 문자열 중 남길 키. 구조 식별자만 둔다.
-  # action·next_item은 EXTRACT_FAILED·REASK_STREAK 규칙이 읽는다(모델 출력의 문자열이라 위반 턴에서는 임의 문자열일 수 있고, 잔존 패턴 검사만 거친다).
+  # action은 EXTRACT_FAILED·REASK_STREAK 규칙이 읽는다(모델 출력의 문자열이라 위반 턴에서는 임의 문자열일 수 있고, 잔존 패턴 검사만 거친다).
   keep_count_map_keys: [extract_protections]   # 규칙 코드별 건수(키는 대문자 식별자 모양, 값은 0 이상 정수인 항목만). docs/adr/0013-extract-protections-counts.md
   keep_string_keys: [question_id, slot_id, repeat_key, code, path, action, next_item]
   scrub_string_keys: []                 # 패턴 치환 후 남길 키(없음)
@@ -36,8 +36,8 @@ detection:
         - {id: INTERVENTION_FAILED}
         # 값이 빈 추출은 REDIRECT만 정상이다. HOLD·SKIP도 계약상 targets(1~4개, 모두 같은 행 values의 key)가 필수라 값이 비면 계약 위반이다(ADR 0012).
         - {id: EXTRACT_FAILED}                  # params.empty_values_ok_actions 기본 [REDIRECT]
-        # 같은 문항(next_item)에서 같은 action이 이번 턴 포함 3번 연속이면 걸린다. 근거: survey-service는 연속 REASK·CONFIRM 3번 뒤 4번째에 직원 호출로 넘긴다
-        # (SURVEY_MAX_CONSECUTIVE_REASK 기본 3, G12). 3은 표준 대화 설계의 '되묻기 2~3회 뒤 사람 연결'과 head FAULT_POLICY의 3회 재시도 관행에서 왔고 측정하지 않았다(docs/adr/0012-reask-streak-threshold.md).
+        # 반복 물음: REASK 또는 CONFIRM이 연속으로 나온 턴 수(합쳐 센다, 다른 action이 나오면 리셋)가 이번 턴 포함 3 이상이면 걸린다. survey-service의 _reask_escalation과 같은 정의다.
+        # 3의 근거: survey-service는 연속 3번 뒤 4번째에 직원 호출로 넘긴다(SURVEY_MAX_CONSECUTIVE_REASK 기본 3, G12). 표준 대화 설계의 '되묻기 2~3회 뒤 사람 연결'과 head FAULT_POLICY의 3회 재시도 관행. 측정하지 않았다(docs/adr/0012-reask-streak-and-empty-values.md).
         - {id: REASK_STREAK, params: {threshold: 3, actions: [REASK, CONFIRM]}}
 
 classification:                         # 분류체계는 미정(O11). 아래 값은 자리표시자다.

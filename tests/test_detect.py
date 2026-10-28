@@ -93,36 +93,51 @@ def streak_trace(history, current="REASK", q="Q1"):
                                       "dispatch_log": []})
 
 
-def test_reask_streak_counts_consecutive_same_question_including_this_turn():
+def test_reask_streak_counts_consecutive_including_this_turn_and_resets_on_other_action():
     d = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 3}}])
     assert d.detect(streak_trace([("REASK", "Q1")])) == []                                   # 2번째
-    (x,) = d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q1")]))                        # 3번째
+    (x,) = d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q1")]))                        # 임계 3번째에서 걸림
     assert x.detail == {"streak": 3, "action": "REASK"}
     (x,) = d.detect(streak_trace([("NEXT", "Q1"), ("REASK", "Q1"), ("REASK", "Q1"), ("REASK", "Q1")]))
     assert x.detail["streak"] == 4                                                           # 앞의 NEXT에서 끊김
-    assert d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q2")])) == []                   # 문항이 다르면 끊김
-    assert d.detect(streak_trace([("REASK", "Q1"), ("NEXT", "Q1"), ("REASK", "Q1")])) == []   # 중간에 다른 action
-    assert d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q1")], current="NEXT")) == []   # 이번 턴이 REASK가 아님
+    assert d.detect(streak_trace([("REASK", "Q1"), ("NEXT", "Q1"), ("REASK", "Q1")])) == []   # 중간 다른 action에서 리셋
+    for other in ("NEXT", "CORRECT", "HOLD", "SKIP", "REDIRECT"):
+        assert d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q1")], current=other)) == []   # 이번 턴이 REASK·CONFIRM이 아님
+        assert d.detect(streak_trace([("REASK", "Q1"), (other, "Q1"), ("REASK", "Q1")])) == []
+
+
+def test_reask_streak_mixes_reask_and_confirm_and_ignores_question():
+    d = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 3}}])      # 서비스 _reask_escalation과 같은 정의
+    (x,) = d.detect(streak_trace([("REASK", "Q1"), ("CONFIRM", "Q1")], current="REASK"))
+    assert x.detail == {"streak": 3, "action": "REASK"}
+    assert d.detect(streak_trace([("CONFIRM", "Q1"), ("REASK", "Q1")], current="CONFIRM"))
+    assert d.detect(streak_trace([("REASK", "Q1"), ("CONFIRM", "Q2")], current="REASK"))   # 문항이 달라도 센다(서비스와 같음)
+
+
+def test_reask_streak_skips_uncommitted_turns_like_service():
+    d = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 3}}])
+    t = streak_trace([("REASK", "Q1"), ("REASK", "Q1")])
+    t["session_before"]["dialogue_log"].insert(1, log_entry(turn_result={"failed_steps": [{"phase": "BEFORE_COMMIT", "step": "LoRA-A"}]}))
+    assert d.detect(t)                                                                   # 실패 턴은 연속을 끊지 않는다
 
 
 def test_reask_streak_broken_by_turn_without_extraction_and_missing_history():
     d = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 3}}])
     t = streak_trace([("REASK", "Q1"), ("REASK", "Q1")])
-    t["session_before"]["dialogue_log"].insert(1, log_entry())          # 추출이 없는 턴
+    t["session_before"]["dialogue_log"].insert(1, log_entry())          # COMMITTED인데 추출이 없는 턴(재개·시작 등)
     assert d.detect(t) == []
     assert d.detect(make_trace(extract_output=ext("REASK", "Q1", V))) == []      # session_before 없음: 이번 턴만(1)
     assert RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 1}}]).detect(make_trace(extract_output=ext("REASK", "Q1", V)))
 
 
 def test_reask_streak_actions_configurable_and_survives_deid():
-    d = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 2, "actions": ["REASK", "CONFIRM"]}}])
-    assert d.detect(streak_trace([("CONFIRM", "Q1")], current="CONFIRM"))
-    assert not d.detect(streak_trace([("REASK", "Q1")], current="CONFIRM"))         # action이 섞이면 끊김
-    # 비식별(action·next_item 보존)을 거친 trace에서도 센다
+    d = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 2, "actions": ["REASK"]}}])
+    assert not d.detect(streak_trace([("REASK", "Q1")], current="CONFIRM"))         # actions를 좁히면 CONFIRM은 세지 않는다
+    # 비식별(action 보존)을 거친 trace에서도 센다
     from ops_feedback.deid import Deidentifier, DeidPolicy
     from conftest import base_config, envelope
     out = Deidentifier(DeidPolicy.from_config(base_config()["deid"]), "salt").deidentify(
-        envelope(streak_trace([("REASK", "Q1"), ("REASK", "Q1")]))).trace
+        envelope(streak_trace([("REASK", "Q1"), ("CONFIRM", "Q1")]))).trace
     assert RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 3}}]).detect(out)
 
 

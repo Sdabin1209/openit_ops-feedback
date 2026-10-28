@@ -72,7 +72,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 - 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
 
 이 세션에서 직접 돌려 확인한 것 (PostgreSQL 대기 상한, FAULT_MATRIX P0-3 D1·D4; 변경 내용은 docs/CHANGELOG.md 0.11.2, 근거와 수치는 docs/boundary.md "DB 대기 상한"):
-- `pytest -q -rs`(2026-10-28, 이 PC 한 환경, PostgreSQL 없음): 410 통과, 138 건너뜀, 0 실패(G14 변경 뒤 재실행). 건너뜀 138건의 사유는 `TEST_DATABASE_URL` 없음으로 PostgreSQL 시험 133건, `TEST_DATABASE_URL`/`TEST_PG_CONTAINER` 없음으로 PostgreSQL 무응답 시험 5건이다. PostgreSQL을 띄운(`scripts/dev-postgres.sh`) 실행은 이번에 하지 않았다. 이전 기록(0.12.0 시점, PostgreSQL 포함 469 통과 0 건너뜀, 없이는 345 통과 124 건너뜀)은 그 뒤 시험이 늘기 전 값이다.
+- `pytest -q`: 건수는 5절 "시험 현황"에만 적는다.
 - 이웃 장애·중복·중단 칸(FAULT_MATRIX D2·D3·D5·D6·A6)의 현재 동작은 docs/boundary.md "장애 칸별 현황"(실제 HTTP 가짜 상류로 시험, 실제 이웃 서비스와는 연결하지 않음).
 - DB를 `docker pause`로 얼렸을 때(기본 상한): `/readyz` 503까지 2.0초 후 복구하면 200, 수집 POST는 7.0초 안에 503 후 복구, 잡은 3.3초에 종료 코드 2.
 - `scripts/smoke.sh`: SMOKE OK(SQLite 구성, WSL 한 환경, 0.11.3 기준).
@@ -94,6 +94,8 @@ scripts/smoke.sh                                                # 이미지 빌�
 | G11 | 문진 스키마 정수 버전 1 안의 비호환 변경. survey-service와 ops-feedback은 같은 잠금으로 함께 배포해야 한다(D79) | 다른 영역 의존(survey-service), 운영 데이터 전에 TurnTrace 버전 필드 검토 |
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
+
+시험 현황(2026-10-28, 0.12.2 제안, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, WSL 한 환경): 412 통과, 138 건너뜀(PostgreSQL 시험), 0 실패. PostgreSQL을 띄운 실행은 이 변경 뒤 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 

@@ -2,7 +2,7 @@
 
 ## 0.12.2 (제안, G14)
 
-- 예시 설정에서 `EXTRACT_FAILED`와 `REASK_STREAK`(threshold 3, actions REASK·CONFIRM)을 켠다. 근거 ADR 0012. HOLD·SKIP의 빈 값은 계약 위반이라 실패로 둔다(코드 변경 없음, 시험 추가).
+- 예시 설정에서 `EXTRACT_FAILED`와 `REASK_STREAK`(threshold 3)을 켠다. 세는 방식은 survey-service `_reask_escalation`과 같다: REASK·CONFIRM 합산 연속 턴 수, 문항 무관, 다른 action에서 리셋(이전의 같은 action·같은 next_item 방식 폐기, `actions` 기본값이 [REASK]에서 [REASK, CONFIRM]으로 바뀜). 근거 ADR 0012. HOLD·SKIP의 빈 값은 계약 위반이라 실패로 둔다(코드 변경 없음, 시험 추가).
 - 비식별: `deid.keep_count_map_keys`(기본 비어 있음 = 이전처럼 비움)에 적은 건수 맵 필드는 식별자 모양 키와 정수만 남긴다(`count_map_key_pattern`). 예시 설정은 `extract_protections`. ADR 0013. 켜면 정책 지문이 바뀐다.
 
 ## 0.12.1 (제안, 독립 재점검 round2)
