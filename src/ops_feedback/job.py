@@ -23,7 +23,7 @@ from boundary_contracts.errors import BoundaryError
 
 from .clock import Clock, fmt_ts, parse_ts, utc_now
 from .config import FOREVER, RETENTION_DEFAULTS, load_config
-from .deid import DeidError, Deidentifier, DeidPolicy
+from .deid import DeidError, Deidentifier, DeidPolicy, check_salt
 from .detect import Classifier, Detector, build_detectors, pause_reason_of
 from .failurestore import FailureStoreImpl
 from .logstore import LogStore
@@ -305,6 +305,7 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     salt = read_secret(salt_name, environ=env)          # NAME_FILE 우선, 없으면 NAME
     if not salt:
         raise ValueError(f"의사 식별자 salt 비밀({salt_name}_FILE 또는 {salt_name})이 없다")
+    check_salt(salt)          # 짧은 salt는 저장소를 열기 전에 거부한다(ADR 0017)
     log = open_log_store(env, cfg["storage"]["log_db"], clock=clock)
     store = open_failure_store(env, cfg["storage"]["failure_db"])
     deid = Deidentifier(policy, salt, log.grant_deidentifier_view())

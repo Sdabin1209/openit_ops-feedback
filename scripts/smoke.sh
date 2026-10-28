@@ -17,14 +17,14 @@ $DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERS
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
 # 비밀은 환경 변수가 아니라 파일로 준다(NAME_FILE, D84). docker inspect/exec env에 값이 보이지 않아야 한다.
 SECDIR=$(mktemp -d); chmod 755 $SECDIR
-printf 'smoke-token' > $SECDIR/ingest; printf 'synthetic-data=read-token' > $SECDIR/read; printf 'reviewer=review-token' > $SECDIR/review; printf 'smoke-salt' > $SECDIR/salt
+printf 'smoke-token' > $SECDIR/ingest; printf 'synthetic-data=read-token' > $SECDIR/read; printf 'reviewer=review-token' > $SECDIR/review; printf 'smoke-salt-0123456789abcdef-0123456789abcdef' > $SECDIR/salt
 chmod 644 $SECDIR/*
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $SECDIR' EXIT
 $DOCKER run -d --name $NAME -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro \
   -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read -e OPS_REVIEW_TOKENS_FILE=/run/secrets/review \
   -e OPS_DEID_SALT_FILE=/run/secrets/salt $IMG >/dev/null
-if $DOCKER inspect $NAME | grep -qE 'smoke-token|read-token|review-token|smoke-salt'; then echo "inspect에 비밀 값이 보인다"; exit 1; fi
-if $DOCKER exec $NAME env | grep -qE 'smoke-token|read-token|review-token|smoke-salt'; then echo "exec env에 비밀 값이 보인다"; exit 1; fi
+if $DOCKER inspect $NAME | grep -qE 'smoke-token|read-token|review-token|smoke-salt-0123456789abcdef-0123456789abcdef'; then echo "inspect에 비밀 값이 보인다"; exit 1; fi
+if $DOCKER exec $NAME env | grep -qE 'smoke-token|read-token|review-token|smoke-salt-0123456789abcdef-0123456789abcdef'; then echo "exec env에 비밀 값이 보인다"; exit 1; fi
 PORT=$($DOCKER port $NAME 8080/tcp | head -1 | sed 's/.*://')
 echo "host port: $PORT"
 for i in $(seq 1 30); do

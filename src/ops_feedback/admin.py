@@ -24,7 +24,7 @@ from datetime import timedelta
 from boundary_contracts import read_secret
 from boundary_contracts.errors import BoundaryError
 
-from .deid import pseudonym_of
+from .deid import check_salt, pseudonym_of
 from .clock import fmt_ts, parse_ts, utc_now
 from .storage import open_failure_store, open_log_store
 
@@ -87,6 +87,11 @@ def main(argv=None) -> int:
             salt = read_secret("OPS_DEID_SALT", environ=env)
             if not salt:
                 print("오류: OPS_DEID_SALT_FILE(또는 OPS_DEID_SALT)이 필요하다", file=sys.stderr)
+                return 2
+            try:
+                check_salt(salt)
+            except ValueError as e:
+                print(f"오류: {e}", file=sys.stderr)
                 return 2
             out = delete_session(log, fail, salt, a.session_id, a.dry_run)
             found = out["raw_rows"] + out["traces"] + out["cases"]

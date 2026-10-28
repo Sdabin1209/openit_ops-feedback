@@ -18,7 +18,7 @@ def test_cli_run_once_twice(tmp_path):
     log = LogStore.sqlite(cfg["storage"]["log_db"])
     log.send(envelope(pii_trace("s-1", "t-1")))
     log.send(envelope(make_trace("s-1", "t-2")))
-    env = {**os.environ, "OPS_DEID_SALT": "x"}
+    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
     def go(*extra):
         r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(cp), *extra], env=env, capture_output=True, text=True)
         assert r.returncode == 0, r.stderr

@@ -355,6 +355,17 @@ def pseudonym_of(salt: str, key: str, value: str) -> str:
     return "p-" + hmac.new(salt.encode("utf-8"), msg, hashlib.sha256).hexdigest()[:32]
 
 
+# 출처: 헤드 결정(표준성 점검 2026-10-29 B6), ADR 0017. 키 길이 하한 32바이트(256비트)는 HMAC-SHA256의 해시 출력 길이와 같게 잡은 값이다(RFC 2104는 키를
+# 해시 출력 길이 이상으로 권한다고 알고 있으나 원문 대조 전). 측정하지 않았다. CSPRNG로 만들었는지는 코드가 알 수 없어 길이만 검사한다.
+MIN_SALT_BYTES = 32
+
+
+def check_salt(salt: str) -> None:
+    """기동 때 salt 길이를 검사한다(UTF-8 바이트). 오류에는 길이 요구만 싣고 값은 싣지 않는다."""
+    if len(salt.encode("utf-8")) < MIN_SALT_BYTES:
+        raise ValueError(f"의사 식별자 salt가 너무 짧다: {MIN_SALT_BYTES}바이트 이상이어야 한다(CSPRNG로 만든 무작위 값, ADR 0017)")
+
+
 class Deidentifier:
     """원본을 읽는 유일한 컴포넌트. view는 LogStore.grant_deidentifier_view()로 받는다."""
 

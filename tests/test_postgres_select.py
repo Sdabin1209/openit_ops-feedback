@@ -76,7 +76,7 @@ def test_job_run_once_on_postgres(tmp_path, request):
     log = LogStore.postgres(log_url)
     log.send(envelope(pii_trace("s-1", "t-1")))
     log.send(envelope(make_trace("s-1", "t-2")))
-    env = _scrub(OPS_DEID_SALT="x", OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", log_url),
+    env = _scrub(OPS_DEID_SALT="test-salt-0123456789abcdef-0123456789abcdef", OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", log_url),
                  OPS_FAILURE_DATABASE_URL_FILE=_file(tmp_path, "fu", fail_url))
 
     def go(*extra):

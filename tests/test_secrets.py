@@ -15,7 +15,7 @@ from conftest import envelope, make_trace, pii_trace, base_config
 from ops_feedback.job import build_from_config
 from ops_feedback.logstore import LogStore
 
-SALT = "SALT-canary-7f3a91"
+SALT = "SALT-canary-7f3a91-0123456789abcdef0123"
 ING, RD, RV = "ing-canary-11aa", "rd-canary-22bb", "rv-canary-33cc"
 
 
@@ -56,9 +56,9 @@ def test_job_reads_salt_from_file_and_never_prints_it(tmp_path):
 
 def test_file_wins_over_env_and_env_still_works(tmp_path):
     cfg, _ = _cfg(tmp_path)
-    f = _secret_file(tmp_path, "salt", "from-file")
-    a = build_from_config(cfg, {"OPS_DEID_SALT_FILE": f, "OPS_DEID_SALT": "from-env"})[2]
-    b = build_from_config(cfg, {"OPS_DEID_SALT": "from-file"})[2]
+    f = _secret_file(tmp_path, "salt", "from-file-0123456789abcdef0123456789abcdef")
+    a = build_from_config(cfg, {"OPS_DEID_SALT_FILE": f, "OPS_DEID_SALT": "from-env-0123456789abcdef0123456789abcdef"})[2]
+    b = build_from_config(cfg, {"OPS_DEID_SALT": "from-file-0123456789abcdef0123456789abcdef"})[2]
     tr = envelope(pii_trace("s-1", "t-1"))
     assert a.deidentify(tr) == b.deidentify(tr)         # 파일 값이 우선
 
@@ -186,5 +186,5 @@ def test_cli_rejects_inline_secret_without_printing_it(tmp_path):
     cfg, p = _cfg(tmp_path)
     cfg["release_reader"] = {"factory": "x:y", "args": {"token": INLINE}}
     p.write_text(yaml.safe_dump(cfg))
-    r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(p)], env=_scrub_env(OPS_DEID_SALT="s"), capture_output=True, text=True)
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(p)], env=_scrub_env(OPS_DEID_SALT="test-salt-0123456789abcdef-0123456789abcdef"), capture_output=True, text=True)
     assert r.returncode != 0 and INLINE not in r.stdout + r.stderr and "release_reader.args.token" in r.stderr

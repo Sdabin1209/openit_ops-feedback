@@ -91,7 +91,7 @@ def test_release_reader_factory_from_config(tmp_path, gate, monkeypatch, cfg):
                              "args": {"base_url": gate.url, "token": {"env": "GATE_READ"}}}
     p = tmp_path / "job.yaml"
     p.write_text(yaml.safe_dump(cfg))
-    env = {"OPS_DEID_SALT": "s", "GATE_READ": "gate-read"}
+    env = {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef", "GATE_READ": "gate-read"}
     log, store, deid, detectors, classifier, planner, reader = build_from_config(load_config(p), env)
     assert isinstance(reader, HttpReleaseReader) and isinstance(reader, ReleaseReader)
     assert reader.get_release("rel-0002")["question_set"] == QS     # 클라이언트 자체가 읽을 수 있어야 한다
@@ -121,7 +121,7 @@ def test_missing_env_for_factory_arg(tmp_path, gate, cfg):
     p = tmp_path / "job.yaml"
     p.write_text(yaml.safe_dump(cfg))
     with pytest.raises(ValueError):
-        build_from_config(load_config(p), {"OPS_DEID_SALT": "s"})
+        build_from_config(load_config(p), {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"})
 
 
 # ---- 우리가 서버 ----

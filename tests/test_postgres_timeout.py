@@ -168,7 +168,7 @@ def test_job_exits_nonzero_when_database_frozen(tmp_path, request, frozen_pg):
     cfg["storage"] = {"log_db": str(tmp_path / "unused-l.db"), "failure_db": str(tmp_path / "unused-f.db")}
     cf = tmp_path / "job.yaml"
     cf.write_text(yaml.safe_dump(cfg))
-    env = _scrub(OPS_DEID_SALT="s", **LIMITS,
+    env = _scrub(OPS_DEID_SALT="test-salt-0123456789abcdef-0123456789abcdef", **LIMITS,
                  OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", _pg_schema_url(request)),
                  OPS_FAILURE_DATABASE_URL_FILE=_file(tmp_path, "fu", _pg_schema_url(request)))
     ok = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(cf), "--no-rollback"], env=env,

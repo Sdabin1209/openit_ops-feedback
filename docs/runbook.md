@@ -56,7 +56,7 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | `OPS_REVIEW_TOKENS` | ingest-api | 검토 게시(`POST /v1/cases/{id}/review`)용 쓰기 토큰, 역할은 보통 `reviewer`. 읽기 면과 같이 켜진다. 수집·읽기·검토 토큰은 서로 달라야 하고 서로의 경로는 403 |
 | `OPS_DB_CONNECT_TIMEOUT`, `OPS_DB_STATEMENT_TIMEOUT`, `OPS_DB_PROBE_TIMEOUT`, `OPS_DB_DDL_TIMEOUT` | ingest-api, 잡 | PostgreSQL일 때만. 초 단위, 기본 3/3/2/30. 의미와 근거는 docs/boundary.md "DB 대기 상한". 잡은 DB 무응답이면 종료 코드 2 |
 | `OPS_MAX_CONNECTIONS`, `OPS_READYZ_CACHE_SECONDS`, `OPS_RAW_RETENTION_DAYS`, `OPS_REVIEW_REQUIRE_USER`, `OPS_DB_SCHEMA` | ingest-api | 동시 연결 상한(64), `/readyz` 결과 공유 초(1.5), 원본 보관 기간 선언(잡 `retention.raw_days`와 같은 값, 없으면 시작 로그와 `/readyz`에 경고), 검토 게시에 `X-Openit-User` 필수(기본 1), 스키마 `apply`(기본)\|`verify`(DDL 안 함). `OPS_DB_SCHEMA`는 잡도 같다 |
-| `OPS_DEID_SALT` | 잡 | 필수. 의사 식별자 salt. 바꾸면 case_id와 trace ref가 모두 바뀌므로 운영 중 바꾸지 않는다 |
+| `OPS_DEID_SALT` | 잡 | 필수. 의사 식별자 HMAC 키(ADR 0016). **32바이트 이상**이어야 기동한다(ADR 0017). `head -c 32 /dev/urandom | base64 > salt`로 만들어 파일로 준다. 바꾸면 case_id와 trace ref가 모두 바뀌므로 운영 중 바꾸지 않는다. 회전 절차는 ADR 0017 |
 
 ## 비밀은 NAME_FILE로 (D84)
 

@@ -213,13 +213,13 @@ def test_admin_cli_delete_session_purge_and_minimize(tmp_path):
     log, fail = LogStore.sqlite(ldb), FailureStoreImpl.sqlite(fdb)
     cfg = base_config()
     from ops_feedback.detect import Classifier, build_detectors
-    deid = Deidentifier(DeidPolicy.from_config(cfg["deid"]), "cli-salt", log.grant_deidentifier_view())
+    deid = Deidentifier(DeidPolicy.from_config(cfg["deid"]), "cli-salt-0123456789abcdef-0123456789abcdef", log.grant_deidentifier_view())
     for sid in ("s-a", "s-b"):
         log.send(envelope(pii_trace(sid, "t-1"), release_id="rel-0002"))
     run_once(cfg=cfg, log=log, store=fail, deid=deid, detectors=build_detectors(cfg["detection"]["detectors"]),
              classifier=Classifier(cfg["classification"]), clock=lambda: NOW)
     assert len(fail.list_cases(latest_only=False)[0]) == 2
-    env = {**os.environ, "OPS_DEID_SALT": "cli-salt"}
+    env = {**os.environ, "OPS_DEID_SALT": "cli-salt-0123456789abcdef-0123456789abcdef"}
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb]
     dry = subprocess.run(base + ["delete-session", "--session-id", "s-a", "--dry-run"], env=env, capture_output=True, text=True)
     assert dry.returncode == 0 and json.loads(dry.stdout)["traces"] == 1 and len(fail.list_cases(latest_only=False)[0]) == 2
@@ -227,7 +227,7 @@ def test_admin_cli_delete_session_purge_and_minimize(tmp_path):
     assert r.returncode == 0 and json.loads(r.stdout) == {"cases": 1, "dry_run": False, "raw_rows": 1, "traces": 1}
     assert "s-a" not in r.stdout
     left = fail.list_cases(latest_only=False)[0]
-    assert len(left) == 1 and fail.get_trace(left[0]["deidentified_trace_ref"])["session_id"] == admin.session_pseudonym("cli-salt", "s-b")
+    assert len(left) == 1 and fail.get_trace(left[0]["deidentified_trace_ref"])["session_id"] == admin.session_pseudonym("cli-salt-0123456789abcdef-0123456789abcdef", "s-b")
     assert log.send(envelope(pii_trace("s-a", "t-1"), release_id="rel-0002"))["status"] == "ACCEPTED"      # 삭제됐으니 새로 받는다
     nosalt = subprocess.run(base + ["delete-session", "--session-id", "s-b"], env={k: v for k, v in os.environ.items() if not k.startswith("OPS_")}, capture_output=True, text=True)
     assert nosalt.returncode == 2
@@ -623,7 +623,7 @@ def test_delete_session_reports_nothing_found_with_exit_3(tmp_path):
     ldb, fdb = str(tmp_path / "l.db"), str(tmp_path / "f.db")
     LogStore.sqlite(ldb)
     FailureStoreImpl.sqlite(fdb)
-    env = {**os.environ, "OPS_DEID_SALT": "x"}
+    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
     r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "none"],
                        env=env, capture_output=True, text=True)
     assert r.returncode == 3 and "NOTHING_FOUND" in r.stdout
@@ -638,7 +638,7 @@ def test_delete_session_finds_raw_session_id_when_policy_does_not_pseudonymize(t
     fail.publish_case(case("fc-raw", deidentified_trace_ref="tr-x"))
     log.send(envelope(t))
     r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "s-raw"],
-                       env={**os.environ, "OPS_DEID_SALT": "x"}, capture_output=True, text=True)
+                       env={**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}, capture_output=True, text=True)
     assert r.returncode == 0 and json.loads(r.stdout)["cases"] == 1 and json.loads(r.stdout)["raw_rows"] == 1
 
 
@@ -711,7 +711,7 @@ def test_delete_session_dry_run_counts_raw_rows(tmp_path):
     FailureStoreImpl.sqlite(fdb)
     log.send(envelope(make_trace("s-only-raw", "t-1")))
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "s-only-raw"]
-    env = {**os.environ, "OPS_DEID_SALT": "x"}
+    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
     dry = subprocess.run(base + ["--dry-run"], env=env, capture_output=True, text=True)
     assert dry.returncode == 0 and json.loads(dry.stdout)["raw_rows"] == 1
     assert log.count_session("s-only-raw") == 1                                # dry-run은 지우지 않는다
