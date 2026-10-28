@@ -299,3 +299,43 @@ def test_dialogue_log_in_session_documents_masked():
         assert r.trace[k]["progress_record"]["open_slots"][0]["key"] == MASK
     assert r.trace["log_entry"]["extract_output"]["action"] == "REASK"
     assert r.trace["log_entry"]["turn_result"] == "COMMITTED"
+
+
+# --- extract_protections 건수 맵(ADR 0013) ---
+def _cfg_counts(**over):
+    cfg = base_config()
+    cfg["deid"]["keep_count_map_keys"] = ["extract_protections"]
+    cfg["deid"].update(over)
+    return cfg
+
+
+def test_count_map_default_still_dropped():
+    t = make_trace(extract_protections={"G5": 1})
+    assert deid().deidentify(envelope(t)).trace["extract_protections"] == {}
+
+
+def test_count_map_kept_only_for_listed_field_and_safe_entries():
+    t = make_trace(extract_protections={"G5": 1, "P2": 0, "홍길동": 3, "john@x.kr": 2, "g5": 1, "SENT<prot-key>": 31337},
+                   response_protections={"G5": 4})
+    r = deid(_cfg_counts()).deidentify(envelope(t)).trace
+    assert r["extract_protections"] == {"G5": 1, "P2": 0}            # 식별자 모양 키 + 정수만
+    assert r["response_protections"] == {}                           # 목록에 없는 필드는 그대로 비운다
+    assert "홍길동" not in json.dumps(r, ensure_ascii=False)
+
+
+def test_count_map_null_and_empty_pass():
+    for v in (None, {}):
+        r = deid(_cfg_counts()).deidentify(envelope(make_trace(extract_protections=v))).trace
+        assert r["extract_protections"] == v
+
+
+def test_count_map_key_pattern_configurable_and_fingerprint():
+    t = make_trace(extract_protections={"G5": 1, "abc": 2})
+    r = deid(_cfg_counts(count_map_key_pattern=r"[a-z]{3}")).deidentify(envelope(t)).trace
+    assert r["extract_protections"] == {"abc": 2}
+    assert DeidPolicy.from_config(base_config()["deid"]).fingerprint() != DeidPolicy.from_config(_cfg_counts()["deid"]).fingerprint()
+
+
+def test_count_map_bad_config_rejected():
+    with pytest.raises(ValueError):
+        DeidPolicy.from_config(_cfg_counts(keep_count_map_keys="extract_protections")["deid"])

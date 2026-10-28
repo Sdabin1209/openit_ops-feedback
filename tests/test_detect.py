@@ -164,3 +164,27 @@ def test_classifier_config_driven():
     assert c.classify([Detection("Z")]).failure_type == "UNCLASSIFIED"
     with pytest.raises(ValueError):
         Classifier({})
+
+
+# --- G14: HOLD·SKIP은 계약상 값이 있어야 한다(ADR 0012) ---
+@pytest.mark.parametrize("action", ["HOLD", "SKIP"])
+def test_hold_skip_with_values_is_normal_and_without_values_is_failure(action):
+    d = RuleDetector([{"id": "EXTRACT_FAILED"}])
+    ok = dict(extract_status="OK", extract_attempts=1)
+    unknown = [{"key": "Q1.a", "value": None, "precision": "unspecified", "status": "UNKNOWN", "save": False}]
+    assert d.detect(make_trace(extract_output=ext(action, values=unknown), **ok)) == []        # 정상 행동은 실패가 아니다
+    (x,) = d.detect(make_trace(extract_output=ext(action), **ok))                              # targets가 가리킬 values가 없다 = 계약 위반
+    assert x.detail == {"reason": "EMPTY_VALUES"}
+
+
+def test_example_config_enables_both_rules_with_threshold_3():
+    import yaml
+    from pathlib import Path
+    cfg = yaml.safe_load((Path(__file__).parent.parent / "config" / "job.example.yaml").read_text("utf-8"))
+    rules = {r["id"]: r for r in cfg["detection"]["detectors"][0]["rules"]}
+    assert rules["EXTRACT_FAILED"].get("enabled", True) is True
+    assert rules["REASK_STREAK"].get("enabled", True) is True and rules["REASK_STREAK"]["params"]["threshold"] == 3
+    assert "extract_protections" in cfg["deid"]["keep_count_map_keys"]
+    d = RuleDetector([r for r in rules.values()])
+    assert d.detect(streak_trace([("REASK", "Q1"), ("REASK", "Q1")]))                     # 3번째 연속
+    assert not d.detect(streak_trace([("REASK", "Q1")]))

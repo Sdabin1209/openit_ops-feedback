@@ -90,7 +90,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 
 | ID | 요약 | 막고 있는 것 |
 | --- | --- | --- |
-| G14 | `REASK_STREAK` 임계값은 자리표시자, `EXTRACT_FAILED`가 값 없는 HOLD·SKIP을 실패로 볼지, `extract_protections` 건수를 비식별에서 남길지 미정 | 사용자 결정(G12와 함께) |
+| G14 | 헤드 결정을 반영함(ADR 0012, 0013): REASK_STREAK 켬 threshold 3(측정 안 함), 빈 값 HOLD·SKIP은 실패, extract_protections 건수 보존. 값이 실데이터로 맞는지는 측정 전 | 운영 데이터 측정 |
 | G11 | 문진 스키마 정수 버전 1 안의 비호환 변경. survey-service와 ops-feedback은 같은 잠금으로 함께 배포해야 한다(D79) | 다른 영역 의존(survey-service), 운영 데이터 전에 TurnTrace 버전 필드 검토 |
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
@@ -114,6 +114,8 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0009](docs/adr/0009-idempotency-key.md) | 수집 멱등 키 (session_id, turn_id) |
 | [0010](docs/adr/0010-stdlib-http-server.md) | 표준 라이브러리 HTTP 서버 |
 | [0011](docs/adr/0011-deid-long-string-windows.md) | 비식별 결과의 긴 문자열: 거부 대신 창 검사 |
+| [0012](docs/adr/0012-reask-streak-and-empty-values.md) | REASK_STREAK 임계값 3(측정 안 함), 빈 값 HOLD·SKIP은 실패 |
+| [0013](docs/adr/0013-extract-protections-counts.md) | extract_protections 건수는 식별자 모양 키+정수만 남김 |
 
 ## 7. 더 자세한 문서
 

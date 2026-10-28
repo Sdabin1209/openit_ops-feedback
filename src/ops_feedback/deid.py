@@ -49,6 +49,11 @@ DEFAULT_KEEP_PATTERNS = {
 }
 
 
+# 출처: docs/adr/0013-extract-protections-counts.md. 건수 맵(규칙 코드 -> 건수)의 키 모양. 코드는 model-runtime이 정하며(boundary-contracts HTTP.md의 예: G5, G2) 계약 밖이라
+# 대문자로 시작하는 짧은 식별자 모양만 남긴다. 길이 한도 32는 근거 기록 없는 보수적 임의값이다. 설정 `deid.count_map_key_pattern`으로 바꾼다.
+DEFAULT_COUNT_MAP_KEY_PATTERN = r"[A-Z][A-Z0-9_]{0,31}"
+
+
 class DeidError(Exception):
     """비식별 결과에 개인정보 의심 패턴이 남았다. 결과를 버린다(fail-closed)."""
 
@@ -67,6 +72,8 @@ class DeidPolicy:
     residual_patterns: dict
     scrub_replacements: dict
     keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(기본 + 설정)
+    count_map_keys: frozenset = frozenset()               # 건수 맵(키 -> 정수)으로 남길 필드 이름(예: extract_protections). 기본은 비어 있어 자유 객체로 비운다
+    count_map_key_pattern: str = DEFAULT_COUNT_MAP_KEY_PATTERN
 
     def unvalidated_keep_keys(self) -> list:
         """값 검증 패턴이 없는 keep 키. 값이 그대로 통과하므로 시작 때 경고한다."""
@@ -86,6 +93,11 @@ class DeidPolicy:
         kp.update(cfg.get("keep_string_patterns") or {})
         for name, p in kp.items():
             re.compile(p)
+        cmk = cfg.get("keep_count_map_keys") or []
+        if not isinstance(cmk, list) or not all(isinstance(x, str) for x in cmk):
+            raise ValueError("deid.keep_count_map_keys는 필드 이름의 목록이어야 한다")
+        cmp_ = cfg.get("count_map_key_pattern", DEFAULT_COUNT_MAP_KEY_PATTERN)
+        re.compile(cmp_)
         return cls(
             policy_id=str(cfg["policy_id"]),
             keep_string_keys=frozenset(cfg.get("keep_string_keys") or []),
@@ -99,10 +111,13 @@ class DeidPolicy:
             residual_patterns=dict(pats),
             scrub_replacements=dict(cfg.get("scrub_patterns") or {}),
             keep_patterns={k: v for k, v in kp.items() if k in frozenset(cfg.get("keep_string_keys") or [])},
+            count_map_keys=frozenset(cmk),
+            count_map_key_pattern=cmp_,
         )
 
     def fingerprint(self) -> str:
-        return sha256_hash({
+        extra = {"count_map_keys": sorted(self.count_map_keys), "count_map_key_pattern": self.count_map_key_pattern} if self.count_map_keys else {}
+        return sha256_hash({**extra,
             "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys), "scrub": sorted(self.scrub_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
             "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys), "unlisted": self.unlisted_string_action,
@@ -140,6 +155,7 @@ class _Walker:
         self.stats: Counter = Counter()
         self._scrub = {n: re.compile(pat) for n, pat in policy.scrub_replacements.items()}
         self._keep = {k: re.compile(p) for k, p in policy.keep_patterns.items()}
+        self._count_key = re.compile(policy.count_map_key_pattern)
 
     # --- 스키마 해석 ---
     def _resolve(self, node: dict, names: tuple = ()) -> tuple[dict, tuple]:
@@ -226,6 +242,8 @@ class _Walker:
             return out
         if isinstance(data, dict):
             props = node.get("properties")
+            if not props and key in self.p.count_map_keys and self._is_count_map(node):
+                return self._count_map(data, path)
             if not props:
                 self.stats["dropped_free_objects"] += 1
                 self.stats[f"path_dropped:{path}"] += 1
@@ -240,6 +258,24 @@ class _Walker:
                     out[k] = r
             return out
         return self._unknown(data, path)
+
+    def _is_count_map(self, node: dict) -> bool:
+        """스키마가 값 형태를 정수(additionalProperties)로 정한 맵인가. 아니면 건수 맵으로 다루지 않고 기존대로 비운다."""
+        ap = node.get("additionalProperties")
+        if not isinstance(ap, dict):
+            return False
+        ap, _ = self._resolve(ap)
+        return ap.get("type") == "integer"
+
+    def _count_map(self, data: dict, path: str) -> dict:
+        """키가 식별자 모양이고 값이 0 이상의 정수인 항목만 남긴다. 그 밖의 항목은 키 이름도 값일 수 있어 기록 없이 버린다."""
+        out = {}
+        for k, v in data.items():
+            if isinstance(k, str) and self._count_key.fullmatch(k) and isinstance(v, int) and not isinstance(v, bool) and v >= 0:
+                out[k] = v
+            else:
+                self.stats["dropped_unknown_keys"] += 1
+        return out
 
     def _unknown(self, data: Any, path: str) -> Any:
         self.stats["dropped_unmatched"] += 1

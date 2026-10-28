@@ -42,7 +42,7 @@
 한 일은 CHANGELOG 0.9.0. 남은 것·미정:
 - [제안] `extract_protections`·`response_protections`·`extract_input.state`·`response_input.next`는 스키마상 자유 객체라 통째로 비워진다. 규칙 코드별 건수는 개인정보가 아니라 남길 가치가 있으나(키 이름도 값일 수 있어 지금은 비움) 허용 정의 목록 방식으로 남기는 것은 사용자 결정이 필요하다.
 - [미정] `action`·`next_item` 등 모델이 낸 문자열을 `keep_string_keys`로 남긴다. 위반 턴에서는 임의 문자열일 수 있고 잔존 패턴 검사만 거친다.
-- [미정] `REASK_STREAK` 임계값, `EXTRACT_FAILED`의 허용 action(HOLD·SKIP 등).
+- [결정됨 2026-10-28] `REASK_STREAK` threshold 3, 빈 값 HOLD·SKIP은 실패: ADR 0012. `extract_protections` 건수 보존: ADR 0013.
 - 이전 정책 지문으로 비식별해 둔 기존 사례는 그대로다(재처리 안 함).
 
 ## 2026-10-27 boundary-contracts v2.0.0 이전 (브랜치 migrate-contracts-2.0.0)
