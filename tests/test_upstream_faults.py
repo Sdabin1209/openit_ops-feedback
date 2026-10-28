@@ -10,6 +10,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts.clients import HttpGateService, HttpReleaseReader
 from boundary_contracts.errors import BoundaryError
 
@@ -23,12 +24,12 @@ from test_conformance_failurestore import case as mk_case, TRACE
 NOW = "2026-10-15T00:00:00Z"
 POLICY = {"window_hours": 24, "min_turns": 4, "max_failure_rate": 0.2, "counted_review_statuses": ["PENDING", "CONFIRMED"],
           "requested_by_role": "ops-feedback", "auto_submit": True}
-POINTER = {"pipeline_schema_version": "2.0", "release_id": "rel-0002", "pointer_version": 1,
+POINTER = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": "rel-0002", "pointer_version": 1,
            "activated_at": "2026-10-15T00:00:00Z", "cause": "ACTIVATE"}
 
 
 def receipt(req):
-    return {"pipeline_schema_version": "2.0", "request_id": req["request_id"], "status": "APPLIED", "decided_at": "2026-10-15T01:00:00Z",
+    return {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "request_id": req["request_id"], "status": "APPLIED", "decided_at": "2026-10-15T01:00:00Z",
             "active_pointer": dict(POINTER, release_id=req["to_release_id"], pointer_version=2, cause="ROLLBACK")}
 
 

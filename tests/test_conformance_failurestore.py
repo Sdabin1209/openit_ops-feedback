@@ -3,6 +3,7 @@ import copy
 from datetime import datetime, timezone
 
 import pytest
+from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts.errors import BoundaryError
 from boundary_contracts.sdk import FailureStore
 
@@ -10,7 +11,7 @@ TRACE = {"session_id": "p-x", "turn_id": "p-y"}
 
 
 def case(cid="fc-1", version=1, **kw):
-    c = {"pipeline_schema_version": "2.0", "case_id": cid, "version": version, "created_at": "2026-10-15T00:00:00Z",
+    c = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "case_id": cid, "version": version, "created_at": "2026-10-15T00:00:00Z",
          "source_release_id": "rel-0001", "runtime_contract_version": 1, "deidentified": True,
          "deidentified_trace_ref": "tr-1", "failure_type": "UNCLASSIFIED", "detection_method": "RULE", "review_status": "PENDING"}
     c.update(kw)

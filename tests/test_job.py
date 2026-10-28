@@ -155,9 +155,9 @@ def test_reads_both_schema_versions(failure_store):
     from test_conformance_failurestore import case
     failure_store.put_trace("tr-1", {})
     failure_store.publish_case(case("fc-a"))                                   # 2.0
-    failure_store.publish_case(case("fc-b", pipeline_schema_version="2.0", question_set=QS))
+    failure_store.publish_case(case("fc-b", pipeline_schema_version=PIPELINE_SCHEMA_VERSION, question_set=QS))
     got = {c["case_id"]: c for c in failure_store.list_cases()[0]}
-    assert got["fc-a"]["pipeline_schema_version"] == "2.0" and got["fc-b"]["question_set"] == QS
+    assert got["fc-a"]["pipeline_schema_version"] == PIPELINE_SCHEMA_VERSION and got["fc-b"]["question_set"] == QS
 
 
 def test_expected_requires_kind(pipeline):

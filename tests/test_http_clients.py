@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts import content_hash, sha256_hash
 from boundary_contracts.clients import HttpFailureStore, HttpReleaseReader, HttpTraceIngest
 from boundary_contracts.errors import BoundaryError
@@ -21,7 +22,7 @@ QS = {"id": "qs-main", "version": "3", "content_hash": "sha256:" + "1" * 64}
 
 
 def _manifest(rid):
-    m = {"pipeline_schema_version": "2.0", "release_id": rid, "created_at": "2026-10-14T00:00:00Z", "gate_decision_id": "gd-1",
+    m = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": rid, "created_at": "2026-10-14T00:00:00Z", "gate_decision_id": "gd-1",
          "question_set": QS,
          "lora_a": {"id": "lora-a", "version": "1", "content_hash": "sha256:" + "2" * 64},
          "lora_b": {"id": "lora-b", "version": "1", "content_hash": "sha256:" + "3" * 64},
@@ -46,16 +47,16 @@ class MiniReleaseServer:
             def do_GET(self):
                 outer.seen.append(self.headers.get("Authorization"))
                 if self.headers.get("Authorization") != "Bearer " + outer.token:
-                    return self._send(403, {"pipeline_schema_version": "2.0", "code": "PERMISSION_DENIED", "message": "no", "retryable": False})
+                    return self._send(403, {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "code": "PERMISSION_DENIED", "message": "no", "retryable": False})
                 if self.path == "/v1/active-pointer":
-                    return self._send(200, {"item": {"pipeline_schema_version": "2.0", "release_id": "rel-0002", "pointer_version": 1,
+                    return self._send(200, {"item": {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": "rel-0002", "pointer_version": 1,
                                                      "activated_at": "2026-10-15T00:00:00Z", "cause": "ACTIVATE"}})
                 if self.path.startswith("/v1/releases/"):
                     rid = self.path.rsplit("/", 1)[1]
                     if rid == "rel-missing":
-                        return self._send(404, {"pipeline_schema_version": "2.0", "code": "NOT_FOUND", "message": "x", "retryable": False})
+                        return self._send(404, {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "code": "NOT_FOUND", "message": "x", "retryable": False})
                     return self._send(200, _manifest(rid))
-                self._send(404, {"pipeline_schema_version": "2.0", "code": "NOT_FOUND", "message": "x", "retryable": False})
+                self._send(404, {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "code": "NOT_FOUND", "message": "x", "retryable": False})
 
             def _send(self, code, body):
                 raw = json.dumps(body).encode()

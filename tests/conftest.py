@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from boundary_contracts import PIPELINE_SCHEMA_VERSION
+
 import copy
 import itertools
 
@@ -42,7 +44,7 @@ def pii_trace(session_id="s-1", turn_id="t-1") -> dict:
 
 def envelope(trace=None, release_id="rel-0002", sent_at="2026-10-14T00:00:00Z") -> dict:
     trace = trace or make_trace()
-    return {"pipeline_schema_version": "2.0", "release_id": release_id, "runtime_contract_version": trace["contract_version"],
+    return {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": release_id, "runtime_contract_version": trace["contract_version"],
             "session_id": trace["session_id"], "turn_id": trace["turn_id"], "sent_at": sent_at, "trace": trace}
 
 
