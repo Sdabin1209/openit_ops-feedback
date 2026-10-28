@@ -1,0 +1,18 @@
+{
+  "status": "ready",
+  "log_store": "sqlite",
+  "failure_store": null,
+  "supported_runtime_contract_versions": [
+    1
+  ],
+  "counters": {
+    "auth_rejected": 0,
+    "ingest_accepted": 0,
+    "ingest_duplicate": 0,
+    "unavailable": 0
+  },
+  "warnings": [
+    "RAW_RETENTION_UNSET",
+    "REVIEW_IDENTITY_NOT_REQUIRED"
+  ]
+}

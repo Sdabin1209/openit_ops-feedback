@@ -1,0 +1,34 @@
+{
+  "detections": [
+    {
+      "rule_id": "RESPONSE_FALLBACK",
+      "detail": {}
+    }
+  ],
+  "primary_rule": "RESPONSE_FALLBACK",
+  "deid_policy_id": "example-conservative-v0",
+  "deid_stats": {
+    "pseudonymized": 3,
+    "masked_strings": 10,
+    "dropped_free_objects": 3,
+    "masked_by_key": 1,
+    "masked_paths": [
+      "extract_input.current_question",
+      "extract_input.user_utterance",
+      "extract_output.note",
+      "extract_output.reason",
+      "extract_output.values[].key",
+      "extract_output.values[].precision",
+      "extract_output.values[].status",
+      "extract_output.values[].value",
+      "frontend_message.utterance",
+      "response_input.topic",
+      "response_output"
+    ],
+    "dropped_paths": [
+      "extract_input.state",
+      "response_input.next",
+      "response_protections"
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "env": {
+    "OPS_INGEST_TOKEN_FILE": "/run/secrets/ingest",
+    "OPS_READ_TOKENS_FILE": "/run/secrets/read",
+    "OPS_REVIEW_TOKENS_FILE": "/run/secrets/review",
+    "OPS_LOG_DATABASE_URL_FILE": "/run/secrets/log_db_url",
+    "OPS_FAILURE_DATABASE_URL_FILE": "/run/secrets/failure_db_url",
+    "OPS_DEID_SALT_FILE": "/run/secrets/deid_salt",
+    "OPS_PORT": "8080",
+    "OPS_MAX_CONNECTIONS": "64",
+    "OPS_RAW_RETENTION_DAYS": "30",
+    "OPS_REVIEW_REQUIRE_USER": "1",
+    "OPS_DB_SCHEMA": "skip"
+  },
+  "build_args": {
+    "COMMIT": "f139ba6",
+    "CONTRACTS_VERSION": "v2.1.1",
+    "SURVEY_SCHEMA_VERSION": "1",
+    "TURN_ENGINE_VERSION": "none",
+    "MODEL_RUNTIME_VERSION": "none"
+  }
+}

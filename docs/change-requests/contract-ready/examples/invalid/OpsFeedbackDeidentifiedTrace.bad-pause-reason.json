@@ -1,0 +1,110 @@
+{
+  "session_id": "p-ef25f07779269994d317b2d38d57c77f",
+  "turn_id": "p-15d6db441aabd7b2ae62c035b803574a",
+  "contract_version": 1,
+  "frontend_message": null,
+  "intervention_decision": null,
+  "orchestrator_input": null,
+  "extract_input": null,
+  "extract_output": null,
+  "extract_attempts": null,
+  "extract_status": null,
+  "extract_protections": null,
+  "validation_ok": null,
+  "validation_violations": null,
+  "response_input": null,
+  "response_output": null,
+  "response_outcome": null,
+  "response_protections": null,
+  "frontend_input": null,
+  "staff_console_input": null,
+  "dispatch_input": null,
+  "dispatch_output": null,
+  "orchestrator_output": {
+    "turn_kind": null,
+    "session_info_created": null,
+    "log_entry": {
+      "input": {
+        "kind": "UTTERANCE",
+        "utterance": "[MASKED]",
+        "intervention_decision": null
+      },
+      "handling": {
+        "handled": "UTTERANCE"
+      },
+      "question_bank_version": 1,
+      "turn_result": {
+        "failed_steps": [
+          {
+            "phase": "BEFORE_COMMIT",
+            "step": "COMMIT"
+          }
+        ]
+      },
+      "extract_output": null,
+      "validation_violations": null,
+      "staff_alert": null,
+      "response_text": null,
+      "staff_alert_delivery": "SUCCESS",
+      "turn_failure_signal": {
+        "session_id": "p-ef25f07779269994d317b2d38d57c77f",
+        "write_committed": "NOT_COMMITTED",
+        "staff_alert": "DELIVERED",
+        "pause_reason": "REASK_LIMIT"
+      },
+      "intervention_result": null
+    },
+    "turn_failure_signal": {
+      "session_id": "p-ef25f07779269994d317b2d38d57c77f",
+      "write_committed": "NOT_COMMITTED",
+      "staff_alert": "DELIVERED",
+      "pause_reason": "BORED"
+    },
+    "intervention_result": null,
+    "dispatch_called": true
+  },
+  "session_before": null,
+  "session_after": null,
+  "log_entry": {
+    "input": {
+      "kind": "UTTERANCE",
+      "utterance": "[MASKED]",
+      "intervention_decision": null
+    },
+    "handling": {
+      "handled": "UTTERANCE"
+    },
+    "question_bank_version": 1,
+    "turn_result": {
+      "failed_steps": [
+        {
+          "phase": "BEFORE_COMMIT",
+          "step": "COMMIT"
+        }
+      ]
+    },
+    "extract_output": null,
+    "validation_violations": null,
+    "staff_alert": null,
+    "response_text": null,
+    "staff_alert_delivery": "SUCCESS",
+    "turn_failure_signal": {
+      "session_id": "p-ef25f07779269994d317b2d38d57c77f",
+      "write_committed": "NOT_COMMITTED",
+      "staff_alert": "DELIVERED",
+      "pause_reason": "REASK_LIMIT"
+    },
+    "intervention_result": null
+  },
+  "persistence_load_request": null,
+  "persistence_load_result": null,
+  "persistence_commit_request": null,
+  "persistence_commit_result": {
+    "session_id": "p-ef25f07779269994d317b2d38d57c77f",
+    "status": "DB_ERROR",
+    "write_outcome": "NOT_APPLIED",
+    "revision": null,
+    "detail": null
+  },
+  "turn_index": 0
+}

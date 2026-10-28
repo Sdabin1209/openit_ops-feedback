@@ -1,0 +1,102 @@
+{
+  "storage": {
+    "log_db": "data/log.db",
+    "failure_db": "data/failures.db"
+  },
+  "deid": {
+    "policy_id": "example-conservative-v0",
+    "salt_env": "OPS_DEID_SALT",
+    "pseudonymize_keys": [
+      "session_id",
+      "turn_id"
+    ],
+    "keep_count_map_keys": [
+      "extract_protections"
+    ],
+    "keep_pause_reason": true,
+    "keep_string_keys": [
+      "question_id",
+      "slot_id",
+      "repeat_key",
+      "code",
+      "path",
+      "action",
+      "next_item"
+    ],
+    "scrub_string_keys": [],
+    "scrub_patterns": {},
+    "unlisted_string_action": "mask",
+    "mask_defs": [
+      "Value"
+    ],
+    "drop_defs": [],
+    "mask_value_keys": [
+      "value"
+    ],
+    "mask_number_keys": [],
+    "residual_patterns": {
+      "email": "[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\\.[A-Za-z]{2,}",
+      "phone_kr": "0\\d{1,2}[- .]?\\d{3,4}[- .]?\\d{4}",
+      "rrn_kr": "\\d{6}[- ]?[1-8]\\d{6}"
+    }
+  },
+  "detection": {
+    "detectors": [
+      {
+        "type": "rule",
+        "rules": [
+          {
+            "id": "TURN_FAILURE_SIGNAL"
+          },
+          {
+            "id": "TURN_FAILED_STEPS"
+          },
+          {
+            "id": "COMMIT_ERROR"
+          },
+          {
+            "id": "RESPONSE_FALLBACK"
+          },
+          {
+            "id": "STAFF_ALERT_DELIVERY_FAILED"
+          },
+          {
+            "id": "INTERVENTION_FAILED"
+          },
+          {
+            "id": "EXTRACT_FAILED"
+          },
+          {
+            "id": "REASK_STREAK",
+            "params": {
+              "threshold": 3,
+              "actions": [
+                "REASK",
+                "CONFIRM"
+              ]
+            }
+          },
+          {
+            "id": "REASK_STREAK",
+            "params": {}
+          }
+        ]
+      }
+    ]
+  },
+  "classification": {
+    "default_failure_type": "UNCLASSIFIED",
+    "rule_to_type": {},
+    "priority": [
+      "TURN_FAILURE_SIGNAL",
+      "COMMIT_ERROR",
+      "TURN_FAILED_STEPS"
+    ]
+  },
+  "retention": {
+    "raw_days": 30,
+    "cases_days": 180,
+    "metrics_days": 365,
+    "raw_after_processing": "keep"
+  }
+}

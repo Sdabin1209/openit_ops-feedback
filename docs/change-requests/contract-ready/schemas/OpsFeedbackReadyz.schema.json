@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "OpsFeedbackReadyz.schema.json",
+  "title": "OpsFeedbackReadyz",
+  "description": "ingest-api GET /readyz 본문. 만드는 쪽: ops-feedback. 읽는 쪽: deploy(상태 확인), gateway. 인증이 없는 경로라 비밀·개인정보·건수 이외의 값을 싣지 않는다. 읽는 쪽은 상태 코드(200/503)로 판단하고 본문은 보조다. 모르는 키: 읽는 쪽 무시(additionalProperties 허용), 쓰는 쪽은 아래 키만 쓴다. warnings는 서버가 켜져 있어도 설정이 열려 있음을 알리는 값이며 상태 코드에 영향이 없다.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "status",
+        "log_store",
+        "failure_store",
+        "supported_runtime_contract_versions",
+        "counters"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "const": "ready"
+        },
+        "log_store": {
+          "enum": [
+            "sqlite",
+            "postgresql",
+            "memory"
+          ],
+          "description": "저장소 구현 이름(코드 backend_kind). 초안은 postgres로 적었으나 실제 코드는 postgresql을 낸다(계약 승격 정리 중 정정). memory는 시험·개발의 프로세스 내 구현"
+        },
+        "failure_store": {
+          "enum": [
+            "sqlite",
+            "postgresql",
+            "memory",
+            null
+          ],
+          "description": "읽기·검토 면이 꺼져 있으면 null"
+        },
+        "supported_runtime_contract_versions": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 1
+        },
+        "counters": {
+          "type": "object",
+          "properties": {
+            "auth_rejected": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ingest_accepted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ingest_duplicate": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unavailable": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "RAW_RETENTION_UNSET",
+              "REVIEW_IDENTITY_NOT_REQUIRED"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "status",
+        "code"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "const": "not-ready"
+        },
+        "code": {
+          "enum": [
+            "UNAVAILABLE",
+            "FAILED_PRECONDITION",
+            "INVALID_RECORD",
+            "INTEGRITY_ERROR",
+            "UNSUPPORTED_VERSION",
+            "NOT_FOUND",
+            "CONFLICT",
+            "PERMISSION_DENIED"
+          ],
+          "description": "BoundaryError 코드. 실제로는 UNAVAILABLE이 대부분(DB 접속·시간 초과), 스키마 미적재는 FAILED_PRECONDITION"
+        }
+      }
+    }
+  ]
+}

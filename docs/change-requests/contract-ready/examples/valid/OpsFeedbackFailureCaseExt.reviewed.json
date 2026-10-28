@@ -1,0 +1,42 @@
+{
+  "detections": [
+    {
+      "rule_id": "COMMIT_ERROR",
+      "detail": {
+        "status": "DB_ERROR"
+      }
+    },
+    {
+      "rule_id": "TURN_FAILED_STEPS",
+      "detail": {
+        "steps": [
+          "BEFORE_COMMIT:COMMIT"
+        ]
+      }
+    },
+    {
+      "rule_id": "TURN_FAILURE_SIGNAL",
+      "detail": {
+        "write_committed": "NOT_COMMITTED",
+        "staff_alert": "DELIVERED",
+        "pause_reason": "REASK_LIMIT"
+      }
+    }
+  ],
+  "primary_rule": "TURN_FAILURE_SIGNAL",
+  "deid_policy_id": "example-conservative-v0",
+  "deid_stats": {
+    "pseudonymized": 6,
+    "masked_strings": 2,
+    "masked_paths": [
+      "log_entry.input.utterance",
+      "orchestrator_output.log_entry.input.utterance"
+    ],
+    "dropped_paths": []
+  },
+  "pause_reason": "REASK_LIMIT",
+  "review": {
+    "reviewer_role": "reviewer"
+  },
+  "reviewed_by": "kim.reviewer"
+}

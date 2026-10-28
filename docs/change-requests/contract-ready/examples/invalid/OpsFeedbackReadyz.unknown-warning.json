@@ -1,0 +1,17 @@
+{
+  "status": "ready",
+  "log_store": "memory",
+  "failure_store": "memory",
+  "supported_runtime_contract_versions": [
+    1
+  ],
+  "counters": {
+    "auth_rejected": 0,
+    "ingest_accepted": 0,
+    "ingest_duplicate": 0,
+    "unavailable": 0
+  },
+  "warnings": [
+    "X"
+  ]
+}
