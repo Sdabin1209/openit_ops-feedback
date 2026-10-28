@@ -22,9 +22,9 @@ import sys
 from datetime import timedelta
 
 from boundary_contracts import read_secret
-from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 
+from .deid import pseudonym_of
 from .clock import fmt_ts, parse_ts, utc_now
 from .storage import open_failure_store, open_log_store
 
@@ -38,8 +38,8 @@ def _open(a, env):
 
 
 def session_pseudonym(salt: str, session_id: str) -> str:
-    """비식별 처리기가 session_id 키에 붙이는 의사 식별자(deid.py `_string`과 같은 식)."""
-    return "p-" + sha256_hash({"salt": salt, "key": "session_id", "value": session_id})[7:39]
+    """비식별 처리기가 session_id 키에 붙이는 의사 식별자. 식은 deid.pseudonym_of 한 곳에만 있다."""
+    return pseudonym_of(salt, "session_id", session_id)
 
 
 def delete_session(log, fail, salt: str, session_id: str, dry_run: bool) -> dict:

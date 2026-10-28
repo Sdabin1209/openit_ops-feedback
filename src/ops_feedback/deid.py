@@ -314,7 +314,7 @@ class _Walker:
     def _string(self, s: str, key: str, path: str) -> Any:
         if key in self.p.pseudonymize_keys:
             self.stats["pseudonymized"] += 1
-            return "p-" + sha256_hash({"salt": self.salt, "key": key, "value": s})[7:39]
+            return pseudonym_of(self.salt, key, s)
         if key in self.p.scrub_string_keys:
             for name, rx in self._scrub.items():
                 s, n = rx.subn(f"[{name}]", s)
@@ -341,6 +341,12 @@ def _leaf_strings(v: Any) -> Iterator[str]:
     elif isinstance(v, dict):
         for x in v.values():
             yield from _leaf_strings(x)
+
+
+def pseudonym_of(salt: str, key: str, value: str) -> str:
+    """의사 식별자 계산의 유일한 정의. 비식별 처리기(_Walker, Deidentifier.pseudonym)와 admin의 세션 삭제가 모두 이 함수를 쓴다.
+    왜: 삭제가 식을 따로 구현하면 한쪽만 바뀔 때 개인정보 삭제가 조용히 0건이 된다(점검 OF-03)."""
+    return "p-" + sha256_hash({"salt": salt, "key": key, "value": value})[7:39]
 
 
 class Deidentifier:
@@ -393,4 +399,4 @@ class Deidentifier:
         return DeidResult(trace=out, stats=stats, policy_fingerprint=self.policy.fingerprint())
 
     def pseudonym(self, key: str, value: str) -> str:
-        return "p-" + sha256_hash({"salt": self._salt, "key": key, "value": value})[7:39]
+        return pseudonym_of(self._salt, key, value)
