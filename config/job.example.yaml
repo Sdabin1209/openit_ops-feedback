@@ -11,6 +11,7 @@ deid:
   # 스키마가 열거값으로 정하지 않은 자유 문자열 중 남길 키. 구조 식별자만 둔다.
   # action은 EXTRACT_FAILED·REASK_STREAK 규칙이 읽는다(모델 출력의 문자열이라 위반 턴에서는 임의 문자열일 수 있고, 잔존 패턴 검사만 거친다).
   keep_count_map_keys: [extract_protections]   # 규칙 코드별 건수(키는 대문자 식별자 모양, 값은 0 이상 정수인 항목만). docs/adr/0013-extract-protections-counts.md
+  keep_pause_reason: true               # 정지 사유 열거(RISK|REASK_LIMIT|OTHER, 계약 2.1.0)를 남긴다. 켜면 정책 지문이 바뀐다(기존 사례는 재처리하지 않는다). docs/adr/0014
   keep_string_keys: [question_id, slot_id, repeat_key, code, path, action, next_item]
   scrub_string_keys: []                 # 패턴 치환 후 남길 키(없음)
   scrub_patterns: {}

@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 
 import pytest
+from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts.clients import HttpFailureStore
 
 from conftest import envelope, pii_trace
@@ -104,7 +105,7 @@ def test_reviewed_input_stored_idempotent_and_read_back(env):
     base, cid = env
     body = {"review_status": "CONFIRMED", "expected": GOOD_PARSER, "expected_kind": "LORA_A", "reviewed_input": GOOD_INPUT}
     st, rec = post(base, cid, body)
-    assert st == 201 and rec["reviewed_input"] == GOOD_INPUT and rec["pipeline_schema_version"] == "2.0"
+    assert st == 201 and rec["reviewed_input"] == GOOD_INPUT and rec["pipeline_schema_version"] == PIPELINE_SCHEMA_VERSION
     assert post(base, cid, body) == (200, rec)                                  # 재전송은 같은 결과
     fs = HttpFailureStore(base, "read-tok")
     assert fs.get_case(cid)["reviewed_input"] == GOOD_INPUT

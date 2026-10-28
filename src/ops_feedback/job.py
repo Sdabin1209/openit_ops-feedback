@@ -24,7 +24,7 @@ from boundary_contracts.errors import BoundaryError
 from .clock import Clock, fmt_ts, parse_ts, utc_now
 from .config import FOREVER, RETENTION_DEFAULTS, load_config
 from .deid import DeidError, Deidentifier, DeidPolicy
-from .detect import Classifier, Detector, build_detectors
+from .detect import Classifier, Detector, build_detectors, pause_reason_of
 from .failurestore import FailureStoreImpl
 from .logstore import LogStore
 from .rollback import RollbackPlanner
@@ -165,6 +165,9 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureStoreImpl, deid: Deident
                 "deid_stats": res.stats,
             }},
         }
+        pr = pause_reason_of(res.trace)
+        if pr is not None:
+            case["ext"]["ops-feedback"]["pause_reason"] = pr          # 식별정보가 아닌 열거값(ADR 0014)
         if qs is not None:
             case["question_set"] = qs
         try:

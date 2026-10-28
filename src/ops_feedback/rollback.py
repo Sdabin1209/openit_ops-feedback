@@ -40,7 +40,7 @@ class RollbackPlanner:
             if cursor is None:
                 return None
 
-    def _failure_counts(self, release_id: str, since: str) -> dict[str, int]:
+    def _failure_counts(self, release_id: str, since: str, by_pause: Optional[dict] = None) -> dict[str, int]:
         counted = set(self._p["counted_review_statuses"])
         by_type: dict[str, int] = {}
         cursor = None
@@ -49,6 +49,9 @@ class RollbackPlanner:
             for c in items:
                 if c["created_at"] >= since and c["review_status"] in counted:
                     by_type[c["failure_type"]] = by_type.get(c["failure_type"], 0) + 1
+                    pr = ((c.get("ext") or {}).get("ops-feedback") or {}).get("pause_reason")
+                    if by_pause is not None and pr is not None:      # 사유가 기록된 사례만 센다(없는 것을 추정해 채우지 않는다)
+                        by_pause[pr] = by_pause.get(pr, 0) + 1
             if cursor is None:
                 return by_type
 
@@ -63,9 +66,10 @@ class RollbackPlanner:
         now = self._clock()
         since = fmt_ts(parse_ts(now) - timedelta(hours=self._p["window_hours"]))
         total = self._log.counts_by_release(since).get(cur, 0)
-        by_type = self._failure_counts(cur, since)
+        by_pause: dict[str, int] = {}
+        by_type = self._failure_counts(cur, since, by_pause)
         failures = sum(by_type.values())
-        out.update(release_id=cur, total_turns=total, failures=failures)
+        out.update(release_id=cur, total_turns=total, failures=failures, by_pause_reason=dict(sorted(by_pause.items())))
         if total < self._p["min_turns"]:
             out["reason"] = "표본 부족"
             return out
@@ -85,6 +89,7 @@ class RollbackPlanner:
             # 요청 id는 (현재, 되돌릴, 포인터 버전)에서만 정해지므로 같은 상황의 재실행·동시 실행은 같은 요청을 가리킨다.
             metric = {"release_id": cur, "window_start": since, "window_end": now, "total_turns": total,
                       "failure_cases": failures, "failure_rate": rate, "by_failure_type": dict(sorted(by_type.items())),
+                      "by_pause_reason": dict(sorted(by_pause.items())),
                       "counted_review_statuses": sorted(self._p["counted_review_statuses"])}
             metric_id = "metric-" + sha256_hash(metric)[7:31]
             self._store.put_aux("metric", metric_id, dict(metric, metric_id=metric_id))

@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.13.0 (제안, boundary-contracts 2.1.0 CR-H002)
+
+- 정지 사유 `pause_reason`(RISK|REASK_LIMIT|OTHER): 비식별 설정 `deid.keep_pause_reason`(기본 false, 예시 설정 true)으로 열거값만 남기고 모르는 값은 OTHER. 사례 `ext.ops-feedback.pause_reason`, 롤백 평가 지표 `by_pause_reason`. 서비스가 REASK_LIMIT로 이미 호출한 턴의 TURN_FAILURE_SIGNAL·REASK_STREAK는 한 탐지로 합친다. 옛 trace(필드 없음)는 사유 없음으로 읽는다. 켜면 정책 지문이 바뀌고 기존 사례는 재처리하지 않는다. ADR 0014.
+- 문진 스키마 스냅샷(`_schemas/survey/v1/TurnTrace.json`)을 survey-service 작업 트리의 `pause_reason` 반영본으로 동기화했다(survey-service 쪽 커밋 전 작업 트리 기준, 아래 태그·커밋 확정 뒤 다시 동기화해야 한다).
+
 ## 0.12.2 (제안, G14)
 
 - 예시 설정에서 `EXTRACT_FAILED`와 `REASK_STREAK`(threshold 3)을 켠다. 세는 방식은 survey-service `_reask_escalation`과 같다: REASK·CONFIRM 합산 연속 턴 수, 문항 무관, 다른 action에서 리셋(이전의 같은 action·같은 next_item 방식 폐기, `actions` 기본값이 [REASK]에서 [REASK, CONFIRM]으로 바뀜). 근거 ADR 0012. HOLD·SKIP의 빈 값은 계약 위반이라 실패로 둔다(코드 변경 없음, 시험 추가).

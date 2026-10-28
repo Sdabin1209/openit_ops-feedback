@@ -95,7 +95,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황(2026-10-28, 0.12.2 제안, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, WSL 한 환경): 412 통과, 138 건너뜀(PostgreSQL 시험), 0 실패. PostgreSQL을 띄운 실행은 이 변경 뒤 하지 않았다.
+시험 현황(2026-10-28, 0.13.0 제안, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, WSL 한 환경, 계약 패키지는 `../boundary-contracts` 작업 트리 2.1.0 editable): 429 통과, 140 건너뜀(PostgreSQL 시험), 0 실패. 계약 태그 v2.1.0 기준 재시험과 PostgreSQL을 띄운 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
@@ -118,6 +118,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0011](docs/adr/0011-deid-long-string-windows.md) | 비식별 결과의 긴 문자열: 거부 대신 창 검사 |
 | [0012](docs/adr/0012-reask-streak-and-empty-values.md) | REASK_STREAK 임계값 3(측정 안 함), 빈 값 HOLD·SKIP은 실패 |
 | [0013](docs/adr/0013-extract-protections-counts.md) | extract_protections 건수는 식별자 모양 키+정수만 남김 |
+| [0014](docs/adr/0014-pause-reason.md) | 정지 사유 pause_reason 보존, 지표 분리, 서비스가 이미 호출한 사건의 중복 방지 |
 
 ## 7. 더 자세한 문서
 

@@ -33,10 +33,29 @@ def _get(d: Any, *path: str) -> Any:
     return d
 
 
+PAUSE_REASONS = ("RISK", "REASK_LIMIT", "OTHER")
+_PAUSE_PATHS = (("orchestrator_output", "turn_failure_signal"), ("frontend_input", "turn_failure_signal"),
+                ("log_entry", "turn_failure_signal"), ("orchestrator_output", "log_entry", "turn_failure_signal"))
+
+
+def pause_reason_of(t: dict) -> Optional[str]:
+    """이 턴의 정지 사유(RISK|REASK_LIMIT|OTHER). 없으면 None: 구버전 trace(필드 없음), 정지하지 않은 턴, 비식별 정책이 남기지 않은 경우.
+    모르는 값은 OTHER로 읽는다(boundary-contracts PUBLIC_API H절). None을 어떤 사유로 추정하지 않는다(CR-H002이 추정을 버린 이유)."""
+    for path in _PAUSE_PATHS:
+        v = _get(t, *path, "pause_reason")
+        if v is not None:
+            return v if v in PAUSE_REASONS else "OTHER"
+    return None
+
+
 def _turn_failure_signal(t: dict, params: dict) -> Optional[dict]:
     sig = _get(t, "orchestrator_output", "turn_failure_signal") or _get(t, "frontend_input", "turn_failure_signal")
     if sig:
-        return {"write_committed": sig.get("write_committed"), "staff_alert": sig.get("staff_alert")}
+        d = {"write_committed": sig.get("write_committed"), "staff_alert": sig.get("staff_alert")}
+        pr = pause_reason_of(t)
+        if pr is not None:
+            d["pause_reason"] = pr
+        return d
     return None
 
 
@@ -118,7 +137,13 @@ def _reask_streak(t: dict, params: dict) -> Optional[dict]:
             n += 1
         else:
             break
-    return {"streak": n, "action": cur["action"]} if n >= th else None
+    if n < th:
+        return None
+    d = {"streak": n, "action": cur["action"]}
+    if pause_reason_of(t) == "REASK_LIMIT":
+        d["service_escalated"] = True                      # 이 턴에 서비스가 이미 되묻기 한도(REASK_LIMIT)로 직원을 호출했다
+        d["pause_reason"] = "REASK_LIMIT"
+    return d
 
 
 RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {
@@ -166,7 +191,20 @@ class RuleDetector:
             detail = RULES[rid](deid_trace, params)
             if detail is not None:
                 out.append(Detection(rule_id=rid, method="RULE", detail=detail))
-        return out
+        return _merge_service_escalation(out)
+
+
+def _merge_service_escalation(dets: list[Detection]) -> list[Detection]:
+    """서비스가 이미 REASK_LIMIT로 직원을 호출한 턴은 같은 사건이 TURN_FAILURE_SIGNAL과 REASK_STREAK 둘로 잡힌다.
+    둘을 별개 탐지로 두면 한 사건이 두 번 센다. 신호 탐지 하나로 합치고 연속 횟수를 detail에 옮긴다(ADR 0014).
+    신호가 없는 턴(REASK_STREAK만 걸림)은 합칠 대상이 없어 그대로 둔다."""
+    by = {d.rule_id: d for d in dets}
+    sig, streak = by.get("TURN_FAILURE_SIGNAL"), by.get("REASK_STREAK")
+    if sig is None or streak is None or not streak.detail.get("service_escalated"):
+        return dets
+    merged = Detection(rule_id=sig.rule_id, method=sig.method,
+                       detail={**sig.detail, "reask_streak": streak.detail["streak"], "service_escalated": True})
+    return [merged if d is sig else d for d in dets if d is not streak]
 
 
 def build_detectors(cfg: list[dict]) -> list[Detector]:

@@ -74,6 +74,7 @@ class DeidPolicy:
     keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(기본 + 설정)
     count_map_keys: frozenset = frozenset()               # 건수 맵(키 -> 정수)으로 남길 필드 이름(예: extract_protections). 기본은 비어 있어 자유 객체로 비운다
     count_map_key_pattern: str = DEFAULT_COUNT_MAP_KEY_PATTERN
+    keep_pause_reason: bool = False                       # 정지 사유 열거(RISK|REASK_LIMIT|OTHER)를 남긴다. docs/adr/0014
 
     def unvalidated_keep_keys(self) -> list:
         """값 검증 패턴이 없는 keep 키. 값이 그대로 통과하므로 시작 때 경고한다."""
@@ -96,6 +97,9 @@ class DeidPolicy:
         cmk = cfg.get("keep_count_map_keys") or []
         if not isinstance(cmk, list) or not all(isinstance(x, str) for x in cmk):
             raise ValueError("deid.keep_count_map_keys는 필드 이름의 목록이어야 한다")
+        kpr = cfg.get("keep_pause_reason", False)
+        if not isinstance(kpr, bool):
+            raise ValueError("deid.keep_pause_reason는 true 또는 false(불리언)여야 한다")
         cmp_ = cfg.get("count_map_key_pattern", DEFAULT_COUNT_MAP_KEY_PATTERN)
         re.compile(cmp_)
         return cls(
@@ -113,15 +117,40 @@ class DeidPolicy:
             keep_patterns={k: v for k, v in kp.items() if k in frozenset(cfg.get("keep_string_keys") or [])},
             count_map_keys=frozenset(cmk),
             count_map_key_pattern=cmp_,
+            keep_pause_reason=kpr,
         )
 
     def fingerprint(self) -> str:
         extra = {"count_map_keys": sorted(self.count_map_keys), "count_map_key_pattern": self.count_map_key_pattern} if self.count_map_keys else {}
+        if self.keep_pause_reason:
+            extra = {**extra, "keep_pause_reason": True}      # 켠 설정만 지문에 넣어, 안 쓰는 기존 설정의 지문은 그대로다(ADR 0013과 같은 방식)
         return sha256_hash({**extra,
             "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys), "scrub": sorted(self.scrub_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
             "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys), "unlisted": self.unlisted_string_action,
             "residual": self.residual_patterns, "scrub_patterns": self.scrub_replacements, "keep_patterns": self.keep_patterns})
+
+
+# 정지 사유(boundary-contracts 2.1.0, CR-H002)가 실릴 수 있는 자리(문진 스키마의 TurnFailureSignal). 스키마 걷기는 열거에 없는 값을 마스킹하고
+# 스키마가 이 필드를 모르는 옛 스냅샷에서는 버리므로, 걷기 밖에서 원본 값을 열거값으로 정규화해 같은 자리에 다시 넣는다(모르는 값은 OTHER).
+PAUSE_REASONS = ("RISK", "REASK_LIMIT", "OTHER")
+PAUSE_REASON_PATHS = (("frontend_input", "turn_failure_signal"), ("orchestrator_output", "turn_failure_signal"),
+                      ("log_entry", "turn_failure_signal"), ("orchestrator_output", "log_entry", "turn_failure_signal"))
+
+
+def normalize_pause_reason(v: Any) -> Optional[str]:
+    """열거값이면 그대로, 값이 있으나 모르는 값이면 OTHER(계약: 읽는 쪽은 모르는 값을 OTHER로). 없음(None)이면 None. 문자열 원문은 남기지 않는다."""
+    if v is None:
+        return None
+    return v if isinstance(v, str) and v in PAUSE_REASONS else "OTHER"
+
+
+def _node(d: Any, path: tuple):
+    for p in path:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(p)
+    return d if isinstance(d, dict) else None
 
 
 @dataclass
@@ -343,6 +372,15 @@ class Deidentifier:
         out = w.walk(envelope["trace"], {"$ref": "#/$defs/TurnTrace"}, "", "")
         if not isinstance(out, dict):
             raise DeidError("trace 전체가 제거되었다")
+        for path in PAUSE_REASON_PATHS:
+            src, dst = _node(envelope["trace"], path), _node(out, path)
+            if dst is None:
+                continue
+            pr = normalize_pause_reason(src.get("pause_reason")) if src is not None and self.policy.keep_pause_reason else None
+            if pr is not None:
+                dst["pause_reason"] = pr
+            else:
+                dst.pop("pause_reason", None)       # 정책이 끄면 스키마가 아는 값도 남기지 않는다(지문이 다른 정책끼리 결과가 같아야 한다)
         for s in _leaf_strings(out):
             if s in (MASK, DROPPED) or _PSEUDONYM.fullmatch(s):
                 continue          # 의사 식별자는 16진 해시라 숫자열이 우연히 전화번호 패턴에 걸릴 수 있다
