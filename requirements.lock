@@ -8,3 +8,4 @@ rpds-py==2026.9.1
 typing_extensions==4.16.0
 psycopg==3.3.6
 psycopg-binary==3.3.6
+waitress==3.0.2

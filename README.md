@@ -93,7 +93,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황(2026-10-29, 0.14.1 제안, 이 WSL 한 환경, 새 venv에 `requirements.lock`과 계약 v2.2.1을 설치하고 문진 스키마는 survey-service 현재 `schema/`를 설치한 상태, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): 558 통과, 147 건너뜀(PostgreSQL 시험 145 + 계약 예시가 없으면 건너뛰는 2), 0 실패. 문진 스키마 태그 `survey-schema-v1.1.0`이 생기기 전이라 `requirements.txt` 핀으로의 새 clone 설치는 확인하지 못했다. PostgreSQL을 띄운 실행과 실제 두 번째 머신에서의 실행은 아직 하지 않았다.
+시험 현황(2026-10-29, 0.15.0 제안, 이 WSL 한 환경, 새 venv에 `requirements.lock`과 계약 v2.2.1을 설치하고 문진 스키마는 survey-service 현재 `schema/`를 설치한 상태, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): 562 통과, 147 건너뜀(PostgreSQL 시험 145 + 계약 예시가 없으면 건너뛰는 2), 0 실패. 문진 스키마 태그 `survey-schema-v1.1.0`이 생기기 전이라 `requirements.txt` 핀으로의 새 clone 설치는 확인하지 못했다. PostgreSQL을 띄운 실행과 실제 두 번째 머신에서의 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
@@ -112,7 +112,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0007](docs/adr/0007-retention-defaults.md) | 보존 기본값(D88/U4) |
 | [0008](docs/adr/0008-db-timeouts.md) | DB 접속·문장·probe 상한과 그 밖의 한도 |
 | [0009](docs/adr/0009-idempotency-key.md) | 수집 멱등 키 (session_id, turn_id) |
-| [0010](docs/adr/0010-stdlib-http-server.md) | 표준 라이브러리 HTTP 서버 |
+| [0010](docs/adr/0010-stdlib-http-server.md) | 표준 라이브러리 HTTP 서버(0020이 대체) |
 | [0011](docs/adr/0011-deid-long-string-windows.md) | 비식별 결과의 긴 문자열: 거부 대신 창 검사 |
 | [0012](docs/adr/0012-reask-streak-and-empty-values.md) | REASK_STREAK 임계값 3(측정 안 함), 빈 값 HOLD·SKIP은 실패 |
 | [0013](docs/adr/0013-extract-protections-counts.md) | extract_protections 건수는 식별자 모양 키+정수만 남김 |
@@ -121,6 +121,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0016](docs/adr/0016-pseudonym-hmac-sha256.md) | 의사 식별자는 HMAC-SHA256(키=salt) |
 | [0017](docs/adr/0017-salt-policy.md) | salt 32바이트 이상, 기동 때 길이 검사, 회전은 재가명화 절차 |
 | [0018](docs/adr/0018-numeric-values-provenance.md) | 숫자 값의 출처 분류(측정·표준·제약·임의), 값은 바꾸지 않음 |
+| [0020](docs/adr/0020-wsgi-waitress.md) | WSGI 앱 + waitress(0010 대체) |
 | [0019](docs/adr/0019-reask-limit-from-trace.md) | 되묻기 한도 정지는 trace의 pause_reason을 읽는다(0012 결정 1 대체) |
 
 ## 7. 더 자세한 문서

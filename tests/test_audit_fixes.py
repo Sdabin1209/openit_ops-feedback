@@ -324,24 +324,6 @@ def test_readyz_shows_counters_and_retention_warning():
         s.shutdown()
 
 
-def test_connection_cap_returns_503_instead_of_spawning_threads():
-    s, port = _server(max_connections=2)
-    held = []
-    try:
-        for _ in range(2):
-            c = socket.create_connection(("127.0.0.1", port))
-            c.sendall(b"POST /v1/traces HTTP/1.1\r\nAuthorization: Bearer tok\r\nContent-Length: 100\r\n\r\n")      # 본문을 덜 보내고 붙들고 있는 연결
-            held.append(c)
-        time.sleep(0.3)
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-        c.request("GET", "/healthz")
-        assert c.getresponse().status == 503
-    finally:
-        for h in held:
-            h.close()
-        s.shutdown()
-
-
 def test_deeply_nested_json_and_non_ascii_token_do_not_drop_the_connection():
     s, port = _server()
     try:
