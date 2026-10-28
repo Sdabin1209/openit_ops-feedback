@@ -81,7 +81,6 @@ scripts/smoke.sh                                                # 이미지 빌�
 - 수집 토큰 불일치(A6 F7)는 서버 로그 경고만 추가했다. `/readyz`에 건수 신호는 없다.
 - v2 TurnTrace 전체 키에 대한 규칙 동작(STATUS: 당시 v2 trace 키를 읽을 수 없었다고 기록. 이후 0.9.0에서 따라갔다는 기록은 있으나 이 세션에서 시험을 돌리지 않았다).
 - 두 번째 깨끗한 환경에서의 시험·스모크. I4/I5 실제 SDK와의 연결. CI 이미지 게시와 digest 제출(D24).
-- `REASK_STREAK`의 `next_item`이 되묻는 문항을 가리키는지(docs/design.md 5절 미확인).
 
 ## 5. 이 영역의 열린 항목
 
@@ -89,12 +88,12 @@ scripts/smoke.sh                                                # 이미지 빌�
 
 | ID | 요약 | 막고 있는 것 |
 | --- | --- | --- |
-| G14 | 헤드 결정을 반영함(ADR 0012, 0013): REASK_STREAK 켬 threshold 3(측정 안 함), 빈 값 HOLD·SKIP은 실패, extract_protections 건수 보존. 값이 실데이터로 맞는지는 측정 전 | 운영 데이터 측정 |
+| G14 | 헤드 결정을 반영함(ADR 0012, 0013, 0019): REASK_STREAK은 서비스의 pause_reason을 읽음(threshold 3은 폐기), 빈 값 HOLD·SKIP은 실패, extract_protections 건수 보존. 값이 실데이터로 맞는지는 측정 전 | 운영 데이터 측정 |
 | G11 | 문진 스키마 정수 버전 1 안의 비호환 변경. survey-service와 ops-feedback은 같은 잠금으로 함께 배포해야 한다(D79) | 다른 영역 의존(survey-service), 운영 데이터 전에 TurnTrace 버전 필드 검토 |
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황(2026-10-29, 0.14.0 제안, 이 WSL 한 환경, 새 venv에 `requirements.lock`과 계약 v2.2.1을 설치하고 문진 스키마는 survey-service 현재 `schema/`를 설치한 상태, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): 554 통과, 147 건너뜀(PostgreSQL 시험 145 + 계약 예시가 없으면 건너뛰는 2), 0 실패. 문진 스키마 태그 `survey-schema-v1.1.0`이 생기기 전이라 `requirements.txt` 핀으로의 새 clone 설치는 확인하지 못했다. PostgreSQL을 띄운 실행과 실제 두 번째 머신에서의 실행은 아직 하지 않았다.
+시험 현황(2026-10-29, 0.14.1 제안, 이 WSL 한 환경, 새 venv에 `requirements.lock`과 계약 v2.2.1을 설치하고 문진 스키마는 survey-service 현재 `schema/`를 설치한 상태, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): 555 통과, 147 건너뜀(PostgreSQL 시험 145 + 계약 예시가 없으면 건너뛰는 2), 0 실패. 문진 스키마 태그 `survey-schema-v1.1.0`이 생기기 전이라 `requirements.txt` 핀으로의 새 clone 설치는 확인하지 못했다. PostgreSQL을 띄운 실행과 실제 두 번째 머신에서의 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
@@ -122,6 +121,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0016](docs/adr/0016-pseudonym-hmac-sha256.md) | 의사 식별자는 HMAC-SHA256(키=salt) |
 | [0017](docs/adr/0017-salt-policy.md) | salt 32바이트 이상, 기동 때 길이 검사, 회전은 재가명화 절차 |
 | [0018](docs/adr/0018-numeric-values-provenance.md) | 숫자 값의 출처 분류(측정·표준·제약·임의), 값은 바꾸지 않음 |
+| [0019](docs/adr/0019-reask-limit-from-trace.md) | 되묻기 한도 정지는 trace의 pause_reason을 읽는다(0012 결정 1 대체) |
 
 ## 7. 더 자세한 문서
 

@@ -7,6 +7,7 @@ Detector 구현을 바꾸려면 설정의 detection.detectors에 `factory: "모�
 from __future__ import annotations
 
 import importlib
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
@@ -32,6 +33,8 @@ def _get(d: Any, *path: str) -> Any:
         d = d.get(p)
     return d
 
+
+log = logging.getLogger("detect")
 
 PAUSE_REASONS = ("RISK", "REASK_LIMIT", "OTHER")
 _PAUSE_PATHS = (("orchestrator_output", "turn_failure_signal"), ("frontend_input", "turn_failure_signal"),
@@ -111,39 +114,12 @@ def _extract_failed(t: dict, params: dict) -> Optional[dict]:
 
 
 def _reask_streak(t: dict, params: dict) -> Optional[dict]:
-    """반복 물음: REASK 또는 CONFIRM이 연속으로 나온 턴 수(둘을 합쳐 센다, 문항은 보지 않는다)가 threshold 이상이다. 이번 턴을 포함해 센다.
-
-    정의는 survey-service `graph.py`의 `_reask_escalation`과 같다(ADR 0012: 같은 사건을 서비스와 탐지가 다르게 세지 않게 한다).
-    세션 문서의 대화 로그(session_before.dialogue_log, 이번 턴 이전)를 뒤에서부터 본다: COMMITTED가 아닌 턴은 건너뛰고(연속을 끊지 않는다),
-    추출 출력이 없거나 action이 REASK·CONFIRM이 아니면 거기서 센다를 멈춘다(리셋).
-    params.threshold 필수(기본값 없음). params.actions 기본 ["REASK", "CONFIRM"].
-    """
-    th = params.get("threshold")
-    if th is None:
-        raise ValueError("REASK_STREAK 규칙은 params.threshold가 필요하다(기본값 없음)")
-    actions = params.get("actions", ["REASK", "CONFIRM"])
-    cur = _get(t, "extract_output")
-    if not isinstance(cur, dict) or cur.get("action") not in actions:
-        return None
-    n = 1
-    log = _get(t, "session_before", "dialogue_log")
-    for e in reversed(log if isinstance(log, list) else []):
-        if not isinstance(e, dict):
-            break
-        if e.get("turn_result") != "COMMITTED":
-            continue                                       # 서비스와 같게: 실패·무시된 턴은 연속을 끊지 않는다
-        eo = e.get("extract_output")
-        if isinstance(eo, dict) and eo.get("action") in actions:
-            n += 1
-        else:
-            break
-    if n < th:
-        return None
-    d = {"streak": n, "action": cur["action"]}
+    """되묻기 한도 정지: 서비스가 이 턴에 REASK_LIMIT로 정지했다고 trace에 남겼다(pause_reason). 연속 횟수는 다시 세지 않는다.
+    왜: 몇 번 되물으면 멈출지는 survey-service의 판단(상한 설정, 문항 세트의 limit 중 최솟값)이다. 이웃 판단을 재구현하면 상한이 바뀔 때
+    어긋나고 실제로 한 칸 어긋나 있었다(구조 규칙 R7, 점검 OF-02, ADR 0019). params(threshold, actions)는 무시한다(폐기 예정)."""
     if pause_reason_of(t) == "REASK_LIMIT":
-        d["service_escalated"] = True                      # 이 턴에 서비스가 이미 되묻기 한도(REASK_LIMIT)로 직원을 호출했다
-        d["pause_reason"] = "REASK_LIMIT"
-    return d
+        return {"pause_reason": "REASK_LIMIT", "service_escalated": True}
+    return None
 
 
 RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {
@@ -161,7 +137,7 @@ RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {
 RETIRED_RULES = {
     "PARSER_EMPTY": "EXTRACT_FAILED (파서 입력·항목이 없어졌다. 조건: extract_status!=OK 또는 값 없는 비REDIRECT 추출)",
     "GENERATOR_FALLBACK": "RESPONSE_FALLBACK (v1 이름. 뜻은 같다: response_outcome==fallback. ADR 0015)",
-    "UNRECOGNIZED_STREAK": "REASK_STREAK (planner가 없어졌다. 같은 문항 REASK 연속 횟수, params.threshold)",
+    "UNRECOGNIZED_STREAK": "REASK_STREAK (planner가 없어졌다. 서비스가 pause_reason=REASK_LIMIT로 남긴 턴)",
 }
 
 
@@ -181,10 +157,9 @@ class RuleDetector:
                 raise ValueError(f"규칙 {rid}의 enabled는 true 또는 false(불리언)여야 한다")
             if en:
                 self._rules.append((rid, r.get("params") or {}))
-        # 설정 오류를 조기에 드러낸다
         for rid, params in self._rules:
-            if rid == "REASK_STREAK" and "threshold" not in params:
-                raise ValueError("REASK_STREAK 규칙은 params.threshold가 필요하다(기본값 없음)")
+            if rid == "REASK_STREAK" and params:
+                log.warning("REASK_STREAK의 params(threshold, actions)는 무시된다(서비스가 trace에 남긴 pause_reason을 읽는다, ADR 0019). 폐기 예정")
 
     def detect(self, deid_trace: dict) -> list[Detection]:
         out = []
@@ -197,14 +172,14 @@ class RuleDetector:
 
 def _merge_service_escalation(dets: list[Detection]) -> list[Detection]:
     """서비스가 이미 REASK_LIMIT로 직원을 호출한 턴은 같은 사건이 TURN_FAILURE_SIGNAL과 REASK_STREAK 둘로 잡힌다.
-    둘을 별개 탐지로 두면 한 사건이 두 번 센다. 신호 탐지 하나로 합치고 연속 횟수를 detail에 옮긴다(ADR 0014).
+    둘을 별개 탐지로 두면 한 사건이 두 번 센다. 신호 탐지 하나로 합친다(ADR 0014).
     신호가 없는 턴(REASK_STREAK만 걸림)은 합칠 대상이 없어 그대로 둔다."""
     by = {d.rule_id: d for d in dets}
     sig, streak = by.get("TURN_FAILURE_SIGNAL"), by.get("REASK_STREAK")
     if sig is None or streak is None or not streak.detail.get("service_escalated"):
         return dets
     merged = Detection(rule_id=sig.rule_id, method=sig.method,
-                       detail={**sig.detail, "reask_streak": streak.detail["streak"], "service_escalated": True})
+                       detail={**sig.detail, "service_escalated": True})
     return [merged if d is sig else d for d in dets if d is not streak]
 
 

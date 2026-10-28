@@ -83,18 +83,18 @@ def test_reask_limit_turn_is_one_detection_not_two():
     out = RuleDetector(RULES).detect(streak_trace("REASK_LIMIT"))
     (d,) = out
     assert d.rule_id == "TURN_FAILURE_SIGNAL"
-    assert d.detail["pause_reason"] == "REASK_LIMIT" and d.detail["reask_streak"] == 4 and d.detail["service_escalated"] is True
+    assert d.detail["pause_reason"] == "REASK_LIMIT" and d.detail["service_escalated"] is True
 
 
-def test_risk_pause_with_streak_stays_two_detections():
+def test_risk_pause_with_streak_is_only_the_signal():
     out = RuleDetector(RULES).detect(streak_trace("RISK"))
-    assert {d.rule_id for d in out} == {"TURN_FAILURE_SIGNAL", "REASK_STREAK"}
+    assert {d.rule_id for d in out} == {"TURN_FAILURE_SIGNAL"}
     assert not any(d.detail.get("service_escalated") for d in out)
 
 
-def test_old_trace_streak_unchanged():
+def test_old_trace_without_pause_reason_has_no_streak_detection():
     out = RuleDetector(RULES).detect(streak_trace(None))
-    assert {d.rule_id for d in out} == {"TURN_FAILURE_SIGNAL", "REASK_STREAK"}
+    assert {d.rule_id for d in out} == {"TURN_FAILURE_SIGNAL"}
 
 
 def test_reask_limit_streak_without_signal_keeps_streak_detection():

@@ -1,5 +1,9 @@
 # 변경 이력
 
+## 0.14.1 (제안, OF-02, ADR 0019)
+
+- `REASK_STREAK`은 대화 로그의 연속 횟수를 다시 세지 않고 trace의 `pause_reason == REASK_LIMIT`을 읽는다. 서비스가 정지한 그 턴에 사례가 생긴다(이전에는 한 칸 일렀다). `params.threshold`·`actions`는 무시하고 시작할 때 경고한다(폐기 예정, 계약 `OpsFeedbackJobConfig`에는 아직 필수).
+
 ## 0.14.0 (제안, 단위 3: 계약 v2.2.1, 경계 스키마 사용, 문진 스키마 패키지)
 
 - 계약 핀 v2.2.1(`requirements.txt`, 이미지는 `scripts/build_wheels.sh`). turn-engine·model-runtime은 이 영역의 코드·이미지에 의존이 없다(import·설치 0건, 이미지 라벨은 `n/a`).

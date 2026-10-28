@@ -1,6 +1,6 @@
 # 0012. REASK_STREAK 임계값 3, EXTRACT_FAILED는 HOLD·SKIP의 빈 값을 실패로 본다
 
-- 상태: 채택(헤드 결정 G12/G14, 2026-10-28). 결정 1의 세는 방식은 같은 날 헤드 결정으로 바뀌었다(아래 "변경 이력"). 0005의 자리표시자 임계값을 대체한다(Supersedes 0005의 "임계값과 기본값의 근거" 중 REASK_STREAK 항목).
+- 상태: 채택(헤드 결정 G12/G14, 2026-10-28). 결정 1은 [0019](0019-reask-limit-from-trace.md)가 대체했다(2026-10-29). 결정 1의 세는 방식은 같은 날 헤드 결정으로 바뀌었다(아래 "변경 이력"). 0005의 자리표시자 임계값을 대체한다(Supersedes 0005의 "임계값과 기본값의 근거" 중 REASK_STREAK 항목).
 - 맥락: 예시 설정의 `REASK_STREAK`은 `enabled: false`, threshold 3이 자리표시자였다. `EXTRACT_FAILED`가 값 없는 HOLD·SKIP을 실패로 볼지도 미정이었다.
 
 ## 결정 1: REASK_STREAK 기본을 켜고 threshold 3, 반복 물음은 REASK·CONFIRM 합산 연속 턴 수

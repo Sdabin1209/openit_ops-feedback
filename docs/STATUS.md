@@ -84,6 +84,10 @@
 - CR-008(비식별 뷰 계약이 정책보다 좁음)은 헤드 결정 대기. 그 전까지 `scrub_*`, `unlisted_string_action: drop` 정책은 `DEID_FAILED`가 된다.
 - 이미 게시된 사례는 재처리하지 않았다(null 값 마스킹 변경이 반영되지 않음).
 
+## 2026-10-29 OF-02 (wo-u3b 브랜치)
+
+REASK_STREAK 재계산을 없애고 trace의 pause_reason을 읽는다(ADR 0019, CHANGELOG 0.14.1). 남은 것: 계약 `OpsFeedbackJobConfig`가 `params.threshold`를 아직 필수로 요구한다(예시 설정에 남김). 서비스가 실제 trace에 `REASK_LIMIT`을 남기는지는 이 영역에서 직접 확인하지 못했다(문진 스키마와 계약 문서만 읽음).
+
 ## 2026-10-28 지시서 2 (wo2 브랜치)
 
 - 한 일: OF-03(의사 식별자 식을 `deid.pseudonym_of` 한 곳으로 통합, admin 세션 삭제가 같은 함수를 씀), CR-007(경계 형식 6개 스키마 초안, `docs/change-requests/schemas/validate.py`로 검증).
