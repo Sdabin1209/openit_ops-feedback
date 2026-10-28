@@ -141,3 +141,19 @@ def test_policy_change_does_not_rewrite_existing_case(pipeline):
     assert (on.cases_published, on.skipped_diff) == (0, 1)
     items, _ = pipeline["store"].list_cases(source_release_id="rel-0002", cursor=None, limit=5)
     assert len(items) == 1 and "pause_reason" not in items[0]["ext"]["ops-feedback"]
+
+
+@pytest.mark.parametrize("reason", ["RISK", "REASK_LIMIT", "OTHER", None])
+def test_ingest_accepts_trace_with_pause_reason_by_survey_schema(log_store, reason):
+    """커밋된 survey-service 스키마(f4c3f9b)로 검증하는 수집 경로(I6)가 pause_reason이 든 trace와 옛 trace(필드 없음)를 받는다."""
+    sig = dict(SIG, pause_reason=reason) if reason else dict(SIG)
+    r = log_store.send(envelope(make_trace("s", "t-ing", orchestrator_output=orch(sig)), release_id="rel-0002"))
+    assert r["status"] == "ACCEPTED"
+
+
+def test_ingest_rejects_value_outside_survey_enum(log_store):
+    """스키마의 닫힌 열거 밖 값은 수집이 거부한다(ADR 0014 감수하는 것). 읽기 쪽 OTHER 규약은 수집을 통과한 trace에만 적용된다."""
+    from boundary_contracts.errors import BoundaryError
+    with pytest.raises(BoundaryError) as e:
+        log_store.send(envelope(make_trace("s", "t-bad", orchestrator_output=orch(dict(SIG, pause_reason="NEW"))), release_id="rel-0002"))
+    assert e.value.code == "INVALID_RECORD"
