@@ -16,7 +16,7 @@ publish_case는 HTTP로 열지 않는다(내부 잡).
 """
 from __future__ import annotations
 
-from boundary_contracts import read_secret
+from boundary_contracts import read_secret, validator
 from boundary_contracts.secrets import SecretError
 import hmac
 import json
@@ -39,9 +39,11 @@ from .logstore import LogStore
 from .review import ReviewQueue
 from .storage import open_failure_store, open_log_store
 from .schemas import validate_record
+from .config import validate_server_env
 from .schemas import supported_trace_versions
 
 log = logging.getLogger("ingest-api")
+_READYZ = validator("OpsFeedbackReadyz")
 HTTP_STATUS = {"NOT_FOUND": 404, "INVALID_RECORD": 400, "UNSUPPORTED_VERSION": 422, "CONFLICT": 409,
                "INTEGRITY_ERROR": 422, "FAILED_PRECONDITION": 412, "PERMISSION_DENIED": 403, "UNAVAILABLE": 503}
 MAX_BODY = 8 * 1024 * 1024
@@ -262,6 +264,10 @@ def make_server(store: LogStore, token: str, host: str = "0.0.0.0", port: int = 
                     warns.append("REVIEW_IDENTITY_NOT_REQUIRED")    # OPS_REVIEW_REQUIRE_USER=0: 검토 게시가 개인 식별 없이 들어올 수 있다(D88/U7 기본은 필수)
                 if warns:
                     body["warnings"] = warns
+                bad = list(_READYZ.iter_errors(body))
+                if bad:
+                    # 자기 검사: 본문 모양이 계약과 어긋나는 것은 코드 버그다. 응답은 막지 않고(상태 코드가 판단 근거) 오류로 남긴다.
+                    log.error("readyz 본문이 OpsFeedbackReadyz를 어긴다: %s", "; ".join(e.validator for e in bad[:3]))
                 return self._json(200, body)
             self._json(404, {"error": "not found"})
 
@@ -344,6 +350,11 @@ def main() -> int:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
     logging.basicConfig(level=logging.INFO, handlers=[handler])
+    try:
+        validate_server_env(os.environ)        # 모르는 OPS_ 변수는 시작을 거부한다(OpsFeedbackServerEnv)
+    except ValueError as e:
+        log.error("%s", e)
+        return 2
     try:
         token = read_secret("OPS_INGEST_TOKEN") or ""
         read_raw = read_secret("OPS_READ_TOKENS")

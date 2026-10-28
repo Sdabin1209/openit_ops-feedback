@@ -7,7 +7,7 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 .venv/bin/python -m pytest -q          # 수용 시험
 ```
 
-이웃 스키마 사본 갱신: `scripts/sync_vendor.sh` (그 뒤 pytest의 `test_schema_sync`가 통과해야 한다).
+문진 스키마(TurnTrace)는 사본이 아니라 패키지 `openit-survey-schema`(requirements.txt의 태그 핀)로 설치한다. 태그를 올리면 `requirements.txt`의 핀 한 줄과 `scripts/setup-env.sh` 재실행으로 끝난다.
 
 ## 한눈에: 서비스와 잡이 쓰는 것
 

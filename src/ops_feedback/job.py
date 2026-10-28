@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from boundary_contracts import read_secret
+from boundary_contracts import read_secret, validator
 
 from .storage import open_failure_store, open_log_store
 import argparse
@@ -75,6 +75,7 @@ def _question_set(reader, release_id: str, cache: dict) -> Optional[dict]:
     return cache[release_id]
 
 
+_JOB_RESULT = validator("OpsFeedbackJobResult")
 DEFAULT_BATCH_SIZE = 500 # 근거: 봉투 최대 8 MiB를 한 번에 올리는 양을 제한하는 임의값, 측정 안 함(ADR 0008).     # 한 번에 메모리에 올리는 미처리 원본 수(봉투 하나 최대 8 MiB). 설정 job.batch_size로 바꾼다
 
 
@@ -341,7 +342,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 2
     for w in rep.warnings:
         print("경고: " + w, file=sys.stderr)
-    print(json.dumps(rep.as_dict(), ensure_ascii=False, sort_keys=True))
+    result = rep.as_dict()
+    bad = list(_JOB_RESULT.iter_errors(result))
+    if bad:
+        # 자기 검사: 스케줄러가 읽는 stdout 한 줄이 계약(OpsFeedbackJobResult)을 어기면 내보내지 않는다. 위반 값은 개인정보일 수 있어 경로와 규칙만 낸다.
+        print("오류: 잡 결과가 OpsFeedbackJobResult를 어긴다: " + "; ".join(f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in bad[:3]), file=sys.stderr)
+        return 2
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 1 if rep.errors else 0
 
 

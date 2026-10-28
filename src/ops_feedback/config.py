@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from boundary_contracts import validator
 
 SECRET_KEY_PARTS = ("token", "secret", "password", "credential", "api_key", "authorization", "private_key")
 
@@ -31,8 +32,11 @@ FOREVER = "forever"
 # failed_raw_days(재시도 대상 DEID_FAILED·PUBLISH_FAILED 원본의 기한)는 기본값이 없다: 적지 않으면 raw_days를 따른다(raw_days가 forever면 forever).
 # 근거 없는 별도 숫자를 채우면 운영자가 정한 raw_days보다 먼저(또는 forever인데도) 재처리 대상이 지워진다(점검 round3 M1). docs/adr/0007.
 RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
-OPTIONAL_RETENTION = ("failed_raw_days",)
-REQUIRED_TOP = ("storage", "deid", "detection", "classification", "retention")
+
+
+def _brief(e) -> str:
+    # 왜: 위반 값이 비밀일 수 있어 경로와 규칙 종류만 낸다(값은 싣지 않는다).
+    return f"{'.'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}"
 
 
 def load_config(path: str | Path) -> dict:
@@ -40,44 +44,24 @@ def load_config(path: str | Path) -> dict:
     if not isinstance(cfg, dict):
         raise ValueError("설정 파일이 객체가 아니다")
     check_inline_secrets(cfg)
-    for k in REQUIRED_TOP:
-        if k not in cfg:
-            raise ValueError(f"설정에 {k} 항목이 없다")
-    st = cfg["storage"]
-    for k in ("log_db", "failure_db"):
-        if k not in st:
-            raise ValueError(f"storage.{k}가 없다")
+    # 키·형식·범위는 계약 스키마가 정한다(OpsFeedbackJobConfig, 모르는 키는 어디서나 거부). 손으로 같은 검사를 되풀이하지 않는다(R7).
+    errs = sorted(validator("OpsFeedbackJobConfig").iter_errors(cfg), key=lambda e: list(map(str, e.absolute_path)))
+    if errs:
+        raise ValueError("설정이 OpsFeedbackJobConfig 스키마를 어긴다: " + "; ".join(_brief(e) for e in errs[:5]))
     ret = cfg["retention"]
-    if not isinstance(ret, dict):
-        raise ValueError("retention은 객체")
-    # D88/U4 최소 보존 기본값: 처리 끝난 원본 30일, 비식별 실패 사례 180일, 지표·롤백 기록 365일. 키를 생략하면 기본값, null은 거부한다
-    # (기본 무기한 금지). 무기한이 정말 필요하면 명시적으로 "forever"를 쓴다(시작 때마다 경고).
-    for key in (*RETENTION_DEFAULTS, *OPTIONAL_RETENTION):
-        if key not in ret:
-            if key in OPTIONAL_RETENTION:
-                continue
-            ret[key] = RETENTION_DEFAULTS[key]
-        v = ret[key]
-        if v == FOREVER:
-            continue
-        if v is None:
-            raise ValueError(f"retention.{key}가 null이다. 기본 무기한은 허용하지 않는다: 일 수를 적거나 명시적으로 \"forever\"를 쓴다")
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
-            raise ValueError(f"retention.{key}는 0보다 큰 일 수 또는 \"forever\"")
-    if ret.get("raw_after_processing", "keep") not in ("keep", "minimize"):
-        raise ValueError("retention.raw_after_processing은 keep 또는 minimize")
-    for flag in ("purge_unprocessed", "cases_purge_confirmed"):
-        # 문자열 "false"는 참으로 평가되어 보호를 끄거나(확정 사례 삭제) 켜 버린다: 불리언만 받는다
-        if flag in ret and not isinstance(ret[flag], bool):
-            raise ValueError(f"retention.{flag}는 true 또는 false(YAML 불리언)여야 한다. 문자열·숫자는 거부한다")
-    bs = (cfg.get("job") or {}).get("batch_size", 1)
-    if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
-        raise ValueError("job.batch_size는 1 이상의 정수")
-    rb = cfg.get("rollback")
-    if rb:
-        for k in ("window_hours", "min_turns", "max_failure_rate", "counted_review_statuses", "requested_by_role", "auto_submit"):
-            if k not in rb:
-                raise ValueError(f"rollback.{k}가 없다. 롤백 기준은 사용자가 정한다")
-        if not isinstance(rb["auto_submit"], bool):      # 문자열 "false"는 참으로 평가되어 실수로 자동 전송된다
-            raise ValueError("rollback.auto_submit은 true 또는 false(YAML 불리언)여야 한다. 문자열은 거부한다")
+    # D88/U4 최소 보존 기본값: 처리 끝난 원본 30일, 비식별 실패 사례 180일, 기록 1년. 키를 생략하면 기본값(null은 스키마가 거부한다: 기본 무기한 금지).
+    # 무기한이 정말 필요하면 명시적으로 "forever"를 쓴다(시작 때마다 경고).
+    for key in RETENTION_DEFAULTS:
+        ret.setdefault(key, RETENTION_DEFAULTS[key])
     return cfg
+
+
+def validate_server_env(environ) -> None:
+    """서버 환경 변수 중 OPS_ 접두 변수를 OpsFeedbackServerEnv로 검증한다(모르는 이름은 거부: 오타로 보관 경고·검토자 신원 필수가 조용히 꺼지는 것을 막는다).
+    범위(0 초과 3600 이하 등)는 스키마가 모양만 보므로 각 읽는 곳이 검사한다."""
+    env = {k: v for k, v in environ.items() if k.startswith("OPS_")}
+    errs = list(validator("OpsFeedbackServerEnv").iter_errors({"env": env}))
+    if errs:
+        bad = sorted(k for k in env if not validator("OpsFeedbackServerEnv").is_valid({"env": {k: env[k]}}))
+        # 값은 비밀일 수 있어 변수 이름만 낸다
+        raise ValueError("환경 변수가 OpsFeedbackServerEnv 스키마를 어긴다: " + ", ".join(bad or [_brief(e) for e in errs[:3]]))

@@ -3,16 +3,15 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
+import survey_schema
 from boundary_contracts import schema_dir
 from boundary_contracts.errors import BoundaryError
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-SCHEMA_ROOT = Path(__file__).parent / "_schemas"
 _BASE = "file:///boundary/"
 
 
@@ -49,18 +48,16 @@ def _brief(e) -> str:
 
 
 def supported_trace_versions() -> list[int]:
-    return sorted(int(p.name[1:]) for p in (SCHEMA_ROOT / "survey").glob("v*") if p.is_dir())
+    """문진 스키마 패키지(openit-survey-schema)가 낸 정수 버전들. 사본을 두지 않고 설치된 패키지를 읽는다."""
+    return survey_schema.available_versions()
 
 
 @lru_cache(maxsize=None)
 def trace_schema(version: int) -> dict:
-    p = SCHEMA_ROOT / "survey" / f"v{version}" / "TurnTrace.json"
-    if not p.exists():
-        raise BoundaryError("UNSUPPORTED_VERSION", f"지원하지 않는 문진 스키마 버전: {version}")
-    declared = int((p.parent / "CONTRACT_VERSION").read_text().strip())
-    if declared != version:
-        raise BoundaryError("UNSUPPORTED_VERSION", f"스키마 폴더 v{version}의 CONTRACT_VERSION이 {declared}")
-    return json.loads(p.read_text("utf-8"))
+    try:
+        return survey_schema.load_schema("TurnTrace", version)
+    except KeyError:
+        raise BoundaryError("UNSUPPORTED_VERSION", f"지원하지 않는 문진 스키마 버전: {version}") from None
 
 
 @lru_cache(maxsize=None)

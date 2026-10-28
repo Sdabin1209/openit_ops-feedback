@@ -17,6 +17,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Optional
 
+from boundary_contracts import validator
 from boundary_contracts.canonical import canonicalize, sha256_hash
 
 from .logstore import DeidentifierView
@@ -244,13 +245,14 @@ class _Walker:
                 return self._unknown(data, path)
         if "const" in node or "enum" in node:
             return data if self._match(node, data) else self._unknown(data, path)
-        if data is None:
-            return None
         if key in self.p.mask_value_keys:
-            # 스키마가 형태를 정하지 않은 값(예: 모델이 낸 추출 값)은 숫자·불리언도 환자 답변일 수 있다
+            # 스키마가 형태를 정하지 않은 값(예: 모델이 낸 추출 값)은 숫자·불리언도 환자 답변일 수 있다.
+            # null도 마스킹한다: 비식별 뷰 계약(OpsFeedbackDeidentifiedTrace)이 이 키의 값을 [MASKED]/[DROPPED]만 허용한다(없다는 사실은 status가 남긴다).
             self.stats["masked_by_key"] += 1
             self.stats[f"path_masked:{path}"] += 1
             return MASK
+        if data is None:
+            return None
         if isinstance(data, str):
             return self._string(data, key, path)
         if isinstance(data, bool):
@@ -344,6 +346,8 @@ def _leaf_strings(v: Any) -> Iterator[str]:
         for x in v.values():
             yield from _leaf_strings(x)
 
+_DEID_VIEW = validator("OpsFeedbackDeidentifiedTrace")
+
 
 def pseudonym_of(salt: str, key: str, value: str) -> str:
     """의사 식별자 계산의 유일한 정의. 비식별 처리기(_Walker, Deidentifier.pseudonym)와 admin의 세션 삭제가 모두 이 함수를 쓴다.
@@ -410,6 +414,12 @@ class Deidentifier:
             for name, rx in self._residual.items():
                 if any(rx.search(s[i:i + SCAN_WINDOW]) for i in range(0, max(len(s) - SCAN_OVERLAP, 1), SCAN_WINDOW - SCAN_OVERLAP)):
                     raise DeidError(f"비식별 결과에 잔존 패턴({name})이 있다")
+        # 자기 검사: 출력이 I7이 약속한 비식별 뷰(OpsFeedbackDeidentifiedTrace)인지 확인한다. 어긋나면 게시하지 않고 닫는다(fail-closed).
+        # 왜 위반 내용을 싣지 않나: 위반 값에 원본 조각이 있을 수 있어 경로와 규칙 종류만 낸다.
+        bad = list(_DEID_VIEW.iter_errors(out))
+        if bad:
+            raise DeidError("비식별 결과가 OpsFeedbackDeidentifiedTrace를 어긴다: "
+                            + "; ".join(f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in bad[:3]))
         stats = {k: v for k, v in w.stats.items() if not k.startswith("path_")}
         stats["masked_paths"] = sorted(k[len("path_masked:"):] for k in w.stats if k.startswith("path_masked:"))
         stats["dropped_paths"] = sorted(k[len("path_dropped:"):] for k in w.stats if k.startswith("path_dropped:"))

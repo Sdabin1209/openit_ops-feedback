@@ -33,7 +33,7 @@
 | `config/job.example.yaml` | 잡 설정 예시(값은 사용자가 정한 기준이 아님) |
 | `tests/` | 수용 시험과 적합성 시험(`tests/fakes.py`는 이웃 대역) |
 | `examples/` | 입출력 예시 JSON |
-| `scripts/` | `smoke.sh`(이미지 스모크), `build_wheels.sh`, `sync_vendor.sh`, `make_examples.py` |
+| `scripts/` | `smoke.sh`(이미지 스모크), `build_wheels.sh`(계약·문진 스키마 wheel), `make_examples.py` |
 | `Dockerfile` | ingest-api 이미지 |
 | `docs/` | 설계, 경계, 런북, 상태, 변경 이력, 변경 요청 |
 
@@ -94,7 +94,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황(2026-10-28, 0.13.0 제안, 이웃 폴더가 없는 깨끗한 clone에서 `scripts/setup-env.sh` 두 번 실행 뒤 `.venv/bin/python -m pytest -q`, PostgreSQL 없이, WSL 한 환경, 계약 패키지는 requirements.txt의 태그 v2.1.1 설치본): 440 통과, 145 건너뜀(PostgreSQL 시험), 2 xfail(`tests/test_vendor_sync.py`: 원본 `../survey-service/schema`가 없어 해시 일치를 확인하지 못함), 0 실패. PostgreSQL을 띄운 실행과 실제 두 번째 머신(진짜 Linux)에서의 실행은 아직 하지 않았다.
+시험 현황(2026-10-29, 0.14.0 제안, 이 WSL 한 환경, 새 venv에 `requirements.lock`과 계약 v2.2.1을 설치하고 문진 스키마는 survey-service 현재 `schema/`를 설치한 상태, `.venv/bin/python -m pytest -q`, PostgreSQL 없이, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): 554 통과, 147 건너뜀(PostgreSQL 시험 145 + 계약 예시가 없으면 건너뛰는 2), 0 실패. 문진 스키마 태그 `survey-schema-v1.1.0`이 생기기 전이라 `requirements.txt` 핀으로의 새 clone 설치는 확인하지 못했다. PostgreSQL을 띄운 실행과 실제 두 번째 머신에서의 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 

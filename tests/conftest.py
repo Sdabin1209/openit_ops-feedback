@@ -16,9 +16,8 @@ FAKE_PII = {"name": "홍길동", "phone": "010-1234-5678", "email": "gildong@exa
 
 
 def make_trace(session_id="s-1", turn_id="t-1", **over) -> dict:
-    from ops_feedback.schemas import SCHEMA_ROOT
-    import json
-    req = json.loads((SCHEMA_ROOT / "survey/v1/TurnTrace.json").read_text())["$defs"]["TurnTrace"]["required"]
+    from ops_feedback.schemas import trace_schema
+    req = trace_schema(1)["$defs"]["TurnTrace"]["required"]
     t = {k: None for k in req}
     t.update(session_id=session_id, turn_id=turn_id, contract_version=1, turn_index=0)
     t.update(over)

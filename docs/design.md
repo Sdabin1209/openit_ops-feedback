@@ -47,7 +47,7 @@ survey-service --I6 send--> [ingest-api] --> LogStore(log.db, 원본)
 
 `LogStore.send(envelope)`:
 1. `TraceEnvelope` 스키마로 검증(실패 시 `INVALID_RECORD`).
-2. `runtime_contract_version`이 지원 목록(`_schemas/survey/v<정수>`)에 없으면 `UNSUPPORTED_VERSION`.
+2. `runtime_contract_version`이 지원 목록(`survey_schema.available_versions()`)에 없으면 `UNSUPPORTED_VERSION`.
 3. `trace`를 그 버전의 `TurnTrace` 스키마로 검증, `trace.session_id/turn_id/contract_version`이 봉투와 같아야 한다(`INVALID_RECORD`).
 4. `(session_id, turn_id)`로 `INSERT OR IGNORE`. 새로 들어가면 `ACCEPTED`, 있으면 `DUPLICATE`(먼저 받은 것 유지, `received_at`도 처음 값).
 5. `IngestResult`를 스키마로 검증해 돌려준다. 저장소 오류는 `UNAVAILABLE`(재시도 가능).

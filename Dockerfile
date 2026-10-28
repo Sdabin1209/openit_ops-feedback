@@ -8,11 +8,12 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.lock \
  && pip install --no-cache-dir --prefix=/install --no-deps /wheels/*.whl /src
 
 FROM python:3.12-slim
-ARG COMMIT=unknown
-ARG CONTRACTS_VERSION=unknown
-ARG SURVEY_SCHEMA_VERSION=unknown
-ARG TURN_ENGINE_VERSION=none
-ARG MODEL_RUNTIME_VERSION=none
+# 값이 없다는 표기는 n/a 하나다(계약 ImageLabels). COMMIT·CONTRACTS_VERSION·SURVEY_SCHEMA_VERSION은 빌드가 실제 값을 넘기며, 안 넘기면 게시 검사가 거부한다.
+ARG COMMIT=n/a
+ARG CONTRACTS_VERSION=n/a
+ARG SURVEY_SCHEMA_VERSION=n/a
+ARG TURN_ENGINE_VERSION=n/a
+ARG MODEL_RUNTIME_VERSION=n/a
 LABEL io.openit.service="ops-feedback" \
       io.openit.revision=$COMMIT \
       io.openit.contracts.boundary=$CONTRACTS_VERSION \

@@ -1,5 +1,13 @@
 # 변경 이력
 
+## 0.14.0 (제안, 단위 3: 계약 v2.2.1, 경계 스키마 사용, 문진 스키마 패키지)
+
+- 계약 핀 v2.2.1(`requirements.txt`, 이미지는 `scripts/build_wheels.sh`). turn-engine·model-runtime은 이 영역의 코드·이미지에 의존이 없다(import·설치 0건, 이미지 라벨은 `n/a`).
+- 문진 스키마 사본(`src/ops_feedback/_schemas`, `scripts/sync_vendor.sh`, `tests/test_vendor_sync.py`)을 없애고 패키지 `openit-survey-schema`(핀 `survey-schema-v1.1.0`)에서 읽는다. 이미지 빌드는 `build_wheels.sh`가 같은 태그에서 wheel을 만들어 설치한다.
+- 계약 경계 스키마(D107)를 코드가 쓴다: 잡 설정은 `OpsFeedbackJobConfig`(모르는 키 거부, 손으로 쓴 형식 검사 제거), 서버 환경 변수는 `OpsFeedbackServerEnv`(모르는 `OPS_` 변수는 시작 거부, 종료 코드 2), 비식별 출력은 `OpsFeedbackDeidentifiedTrace`로 자기 검사(어기면 `DEID_FAILED`로 닫음), `/readyz` 본문은 `OpsFeedbackReadyz`, 잡 stdout은 `OpsFeedbackJobResult`로 자기 검사(어기면 stdout 없이 종료 코드 2).
+- 동작 변경: `mask_value_keys`의 null 값도 `[MASKED]`로 가린다(계약이 허용하는 값이 `[MASKED]|[DROPPED]`뿐). 이미 게시된 사례는 재처리하지 않는다. 계약 뷰에 없는 정책 선택지(`scrub_*`, `unlisted_string_action: drop`, 비표준 `count_map_key_pattern`, 64자 넘는 keep 값)는 자기 검사에서 닫힌다: 변경 요청 CR-008.
+- 이미지 ARG 기본값을 `n/a`로(`none`·`unknown` 제거). `scripts/smoke.sh`가 빌드된 이미지의 라벨을 `ImageLabels`로 검사한다.
+
 ## 0.13.0 (제안, boundary-contracts 2.1.0 CR-H002)
 
 - 정지 사유 `pause_reason`(RISK|REASK_LIMIT|OTHER): 비식별 설정 `deid.keep_pause_reason`(기본 false, 예시 설정 true)으로 열거값만 남기고 모르는 값은 OTHER. 사례 `ext.ops-feedback.pause_reason`, 롤백 평가 지표 `by_pause_reason`. 서비스가 REASK_LIMIT로 이미 호출한 턴의 TURN_FAILURE_SIGNAL·REASK_STREAK는 한 탐지로 합친다. 옛 trace(필드 없음)는 사유 없음으로 읽는다. 켜면 정책 지문이 바뀌고 기존 사례는 재처리하지 않는다. ADR 0014.

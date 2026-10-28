@@ -13,7 +13,7 @@ COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 bash scripts/build_wheels.sh >/dev/null
 CV=$(cat build/wheels/BOUNDARY_TAG)
 $DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" \
-  --build-arg SURVEY_SCHEMA_VERSION="$(cat src/ops_feedback/_schemas/survey/v1/CONTRACT_VERSION)" .
+  --build-arg SURVEY_SCHEMA_VERSION="$(cat build/wheels/SURVEY_SCHEMA_VERSION)" .
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
 # 비밀은 환경 변수가 아니라 파일로 준다(NAME_FILE, D84). docker inspect/exec env에 값이 보이지 않아야 한다.
 SECDIR=$(mktemp -d); chmod 755 $SECDIR
@@ -58,9 +58,12 @@ rd() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -H "Authorization: Bearer 
 c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer read-token" -d "$BODY" http://127.0.0.1:$PORT/v1/traces)
 [ "$c" = "403" ] || { echo "읽기 토큰으로 수집이 거부되지 않음: $c"; exit 1; }
 rm -f /tmp/smoke-$$.out
-for k in service revision contracts.boundary contracts.survey-schema turn-engine model-runtime; do
-  $DOCKER image inspect $IMG --format "{{ index .Config.Labels \"io.openit.$k\" }}" | grep -q . || { echo "라벨 io.openit.$k 없음"; exit 1; }
-done
+# 라벨은 계약 ImageLabels로 검사한다(값 없음은 n/a, revision은 hex, boundary는 v 접두사)
+$DOCKER image inspect $IMG --format '{{ json .Config.Labels }}' | tee /tmp/smoke-labels-$$.json
+$PYBIN -c 'import json,sys;from boundary_contracts import validator
+l=json.load(open(sys.argv[1]));e=sorted(x.message[:120] for x in validator("ImageLabels").iter_errors(l))
+sys.exit("라벨이 ImageLabels를 어긴다: %s"%e if e else 0)' /tmp/smoke-labels-$$.json
+rm -f /tmp/smoke-labels-$$.json
 # 검토 게시: 실패 턴을 보내고 컨테이너 안에서 잡을 한 번 돌려 사례를 만든 뒤 HTTP로 검토한다
 FAIL=$(echo "$BODY" | python3 -c 'import json,sys
 b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"]["response_output"]="x"; b["trace"]["response_outcome"]="fallback"; print(json.dumps(b))')

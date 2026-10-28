@@ -52,11 +52,10 @@ def test_unknown_keys_and_free_objects_dropped():
     tr = pii_trace()
     tr["frontend_message"]["secret_extra"] = "홍길동"      # 스키마에 없는 키
     tr["judge_input"] = None                              # v1 키(없어진 키)
-    r = deid().deidentify(envelope(tr))
-    # 스키마에 없는 키가 있으면 가지가 어느 정의에도 맞지 않아 통째로 버려진다(보수적 제거)
-    assert "frontend_message" not in r.trace
-    assert "judge_input" not in r.trace
-    assert r.stats["dropped_unmatched"] >= 1
+    # 스키마에 없는 키가 있으면 가지가 어느 정의에도 맞지 않아 통째로 버려진다(보수적 제거). 그러면 필수 키가 빠져
+    # 비식별 뷰 계약(OpsFeedbackDeidentifiedTrace)을 어기므로 자기 검사가 이 턴을 닫는다(DEID_FAILED).
+    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
+        deid().deidentify(envelope(tr))
     # 맞는 가지 안의 미지 키는 키만 버려진다
     tr2 = pii_trace()
     tr2["extract_output"]["extra"] = "홍길동"
@@ -64,7 +63,6 @@ def test_unknown_keys_and_free_objects_dropped():
     r2 = deid().deidentify(envelope(tr2))
     assert "홍길동" not in json.dumps(r2.trace, ensure_ascii=False)
     assert r2.stats["dropped_unknown_keys"] >= 2
-    assert "홍길동" not in json.dumps(r.trace, ensure_ascii=False)
 
 
 def test_mask_def_value_and_value_key():
@@ -82,11 +80,11 @@ def test_mask_def_value_and_value_key():
                         "action": "NEXT", "next_item": "Q2"})
     r = deid().deidentify(envelope(tr))
     vals = r.trace["extract_output"]["values"]
-    assert [v["value"] for v in vals] == [MASK, MASK, MASK, None]
+    assert [v["value"] for v in vals] == [MASK, MASK, MASK, MASK]       # null도 마스킹: 비식별 뷰 계약이 값을 [MASKED]|[DROPPED]만 허용
     assert "7731" not in json.dumps(r.trace) and "4242" not in json.dumps(r.trace)
     if "persistence_commit_request" in r.trace:
         assert r.trace["persistence_commit_request"]["writes"]["answer_updates"][0]["value"] == MASK
-    assert r.stats["masked_by_key"] == 3
+    assert r.stats["masked_by_key"] == 4
 
 
 def test_policy_naming_a_missing_def_fails_closed():
@@ -108,8 +106,9 @@ def test_scrub_keys_replace_patterns():
     cfg = base_config()
     cfg["deid"]["scrub_string_keys"] = ["utterance"]
     cfg["deid"]["scrub_patterns"] = {"PHONE": r"0\d{1,2}-\d{3,4}-\d{4}", "EMAIL": r"[\w.]+@[\w.]+\.\w+"}
-    t = deid(cfg).deidentify(envelope(pii_trace())).trace
-    assert "[PHONE]" in t["frontend_message"]["utterance"] and "010-1234-5678" not in t["frontend_message"]["utterance"]
+    # 치환 문자열([PHONE])은 비식별 뷰 계약(자유 문자열은 [MASKED]|[DROPPED]만)에 없다: scrub 정책은 지금 자기 검사에서 닫힌다. 계약 변경 요청 CR-008.
+    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
+        deid(cfg).deidentify(envelope(pii_trace()))
 
 
 def test_policy_has_no_defaults():
@@ -122,8 +121,9 @@ def test_policy_has_no_defaults():
 def test_unlisted_drop_action():
     cfg = base_config()
     cfg["deid"]["unlisted_string_action"] = "drop"
-    t = deid(cfg).deidentify(envelope(pii_trace())).trace
-    assert "utterance" not in t["frontend_message"]
+    # drop은 키를 없애는데 계약은 필수 문자열 칸을 요구한다: 자기 검사에서 닫힌다(CR-008).
+    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
+        deid(cfg).deidentify(envelope(pii_trace()))
 
 
 def test_pseudonyms_not_flagged_as_residual_pii():
@@ -201,8 +201,8 @@ def _leaves(defs: dict, node: dict, path: str, out: set, seen=()) -> None:
 
 def test_every_new_key_leaf_is_classified():
     import json as _j
-    from ops_feedback.schemas import SCHEMA_ROOT
-    defs = _j.loads((SCHEMA_ROOT / "survey/v1/TurnTrace.json").read_text("utf-8"))["$defs"]
+    from ops_feedback.schemas import trace_schema
+    defs = trace_schema(1)["$defs"]
     props = defs["TurnTrace"]["properties"]
     found: set = set()
     for k in NEW_KEYS:
@@ -331,8 +331,9 @@ def test_count_map_null_and_empty_pass():
 
 def test_count_map_key_pattern_configurable_and_fingerprint():
     t = make_trace(extract_protections={"G5": 1, "abc": 2})
-    r = deid(_cfg_counts(count_map_key_pattern=r"[a-z]{3}")).deidentify(envelope(t)).trace
-    assert r["extract_protections"] == {"abc": 2}
+    # 계약은 규칙 코드 키를 ^[A-Z][A-Z0-9_]{0,31}$로 정한다. 소문자 패턴으로 남긴 키는 자기 검사에서 닫힌다(CR-008).
+    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
+        deid(_cfg_counts(count_map_key_pattern=r"[a-z]{3}")).deidentify(envelope(t))
     assert DeidPolicy.from_config(base_config()["deid"]).fingerprint() != DeidPolicy.from_config(_cfg_counts()["deid"]).fingerprint()
 
 

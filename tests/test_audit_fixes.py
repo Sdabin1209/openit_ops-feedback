@@ -538,11 +538,12 @@ def test_deid_scans_long_strings_in_windows_instead_of_rejecting_them():
     cfg["deid"]["keep_string_patterns"] = {"next_item": r".*"}                 # 값 검증을 느슨하게 둔 정책
     long_ok = "가" * 100_000
     t0 = time.perf_counter()
-    r = _deid(cfg).deidentify(envelope(_trace_with(next_item=long_ok)))        # 정상 trace는 닫히지 않는다
-    assert r.trace is not None
+    # 긴 keep 값은 잔존 패턴 창 검사는 통과하지만, 비식별 뷰 계약(Ident: 64자 이하)을 어겨 자기 검사에서 닫힌다. 닫히는 이유가 창 검사가 아님을 아래 이메일 사례와 구분한다.
+    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
+        _deid(cfg).deidentify(envelope(_trace_with(next_item=long_ok)))
     for pos in (0, 4000, 50_000, 99_000):                                     # 창 경계 근처를 포함해 어디에 있어도 잡는다
         s_ = long_ok[:pos] + "a@example.com" + long_ok[pos:]
-        with pytest.raises(DeidError):
+        with pytest.raises(DeidError, match="잔존 패턴"):
             _deid(cfg).deidentify(envelope(_trace_with(next_item=s_)))
     assert time.perf_counter() - t0 < 5
 

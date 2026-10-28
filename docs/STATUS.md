@@ -77,6 +77,13 @@
 - 독립 재점검 round2(0.12.1): 이메일 패턴 제곱 시간, 보존 불리언 엄격, 재시도 대상 원본 보호, delete-session 0건 신호, readyz 경고를 고쳤다. deploy 설정의 이메일 잔존 패턴 길이 제한은 deploy에 요청한다.
 - 위험: 확정 사례도 180일 뒤 지워진다(보호하려면 `cases_purge_confirmed: false`).
 
+## 2026-10-29 단위 3 (wo-u3 브랜치)
+
+한 일은 CHANGELOG 0.14.0. 남은 것:
+- 문진 스키마 태그 `survey-schema-v1.1.0`은 헤드가 단다. 그 전까지 시험은 `pip install --no-deps --force-reinstall <survey-service>/schema`로 설치한 패키지로 돌렸고(이 환경), `requirements.txt` 핀은 아직 설치할 수 없다(미확인: 태그가 생긴 뒤 새 clone 설치).
+- CR-008(비식별 뷰 계약이 정책보다 좁음)은 헤드 결정 대기. 그 전까지 `scrub_*`, `unlisted_string_action: drop` 정책은 `DEID_FAILED`가 된다.
+- 이미 게시된 사례는 재처리하지 않았다(null 값 마스킹 변경이 반영되지 않음).
+
 ## 2026-10-28 지시서 2 (wo2 브랜치)
 
 - 한 일: OF-03(의사 식별자 식을 `deid.pseudonym_of` 한 곳으로 통합, admin 세션 삭제가 같은 함수를 씀), CR-007(경계 형식 6개 스키마 초안, `docs/change-requests/schemas/validate.py`로 검증).

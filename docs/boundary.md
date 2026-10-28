@@ -31,13 +31,13 @@ I7 상세(구현이 정한 것):
 | 계약 | 용도 | 지원 |
 | --- | --- | --- |
 | `TraceEnvelope` | I6 입력 | 경계 계약 `pipeline_schema_version` `1.x`(스냅샷 기준). 스키마가 `additionalProperties: false`이므로 MINOR 추가는 스냅샷 갱신 후 반영 |
-| `TurnTrace`(문진 스키마) | 수집 검증, 비식별의 걷기 기준 | 정수 버전 **1**. 폴더 `src/ops_feedback/_schemas/survey/v<정수>/`를 추가하면 여러 버전을 동시에 읽는다. 목록에 없는 `runtime_contract_version`은 `UNSUPPORTED_VERSION` |
+| `TurnTrace`(문진 스키마) | 수집 검증, 비식별의 걷기 기준 | 정수 버전 **1**. 설치된 `survey_schema` 패키지가 낸 정수 버전을 모두 읽는다(`survey_schema.available_versions()`). 목록에 없는 `runtime_contract_version`은 `UNSUPPORTED_VERSION` |
 | `IngestResult`, `FailureCase`, `RollbackRequest`, `RollbackReceipt`, `ActivePointer` | 쓰기 전 검증 | `1.x` |
 | `ReleaseManifest`, `GateDecision` | I4 SDK로만 읽음(현재 코드는 `release_id`만 사용) | `1.x` |
 | I4 ReleaseReader | 활성 포인터, 릴리스 목록 | `boundary_contracts.sdk.ReleaseReader` Protocol |
 | I5 `request_rollback` | 롤백 요청 전달 | `boundary_contracts.sdk.GateService` Protocol |
 
-경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그는 `../deploy/scripts/lib.sh`의 기준표, 설치본 값은 `boundary_contracts.PIPELINE_SCHEMA_VERSION`, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마만 `scripts/sync_vendor.sh`로 만든 스냅샷(`_schemas/survey/v<정수>/`)을 쓰고 `tests/test_vendor_sync.py`가 원본과의 해시 일치를 확인한다(원본이 없으면 "확인 못 함"으로 xfail)(survey-service가 패키지로 내면 교체). 이미지는 `scripts/build_wheels.sh`가 `git archive v2.0.2`으로 만든 wheel을 설치한다.
+경계 계약 스키마와 코드는 `boundary-contracts` 패키지(태그는 `../deploy/scripts/lib.sh`의 기준표, 설치본 값은 `boundary_contracts.PIPELINE_SCHEMA_VERSION`, `boundary_contracts.schema_dir()`)에서 읽는다. 문진 스키마는 survey-service가 내는 패키지 `openit-survey-schema`(태그 핀은 `requirements.txt`, 사본 없음, D110)에서 `survey_schema.load_schema("TurnTrace", 버전)`으로 읽는다.
 
 ## 보장하는 것
 

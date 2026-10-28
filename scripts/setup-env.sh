@@ -10,7 +10,7 @@ PIP=.venv/bin/pip
 
 install_all() {
   # 왜: 오래된 설치(예: 이웃 폴더 editable)가 남아 있어도 핀과 같아지게, 계약과 이 패키지는 지우고 다시 깐다.
-  "$PIP" uninstall -y boundary-contracts ops-feedback >/dev/null 2>&1 || true
+  "$PIP" uninstall -y boundary-contracts openit-survey-schema ops-feedback >/dev/null 2>&1 || true
   "$PIP" install -r requirements.lock -r requirements.txt -e '.[dev]'
 }
 
