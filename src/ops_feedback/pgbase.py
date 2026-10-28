@@ -1,7 +1,7 @@
 """PostgreSQL 공통(접속·스키마 멱등 생성·오류 변환). 원본 쪽 백엔드는 logstore.py, 실패 사례 쪽은 failurestore.py에 있어 저장소 분리가 소스에서도 유지된다. SQLite 백엔드와 같은 인터페이스·같은 의미이고 같은 적합성 시험을 통과한다.
 
 접속 문자열(암호 포함 가능)은 이 모듈 밖으로 나가지 않는다. 오류·로그·/readyz에는 예외 클래스 이름만 쓴다.
-스키마는 시작 시 멱등으로 만든다(advisory lock으로 서버와 잡이 동시에 떠도 안전). JSON은 TEXT로 저장해 SQLite와 바이트까지 같다.
+스키마는 시작 시 마이그레이션(yoyo, migrate.py)으로 만든다(yoyo 잠금으로 서버와 잡이 동시에 떠도 안전). JSON은 TEXT로 저장해 SQLite와 바이트까지 같다.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import time
 
 from boundary_contracts.errors import BoundaryError
 
-_LOCK_KEY = 7264001   # 스키마 생성용 advisory lock 키(이 영역 고정값)
+from .migrate import migrate_postgres
 
 # 대기 상한(초). 근거·출처·측정 여부는 docs/adr/0008-db-timeouts.md(probe 2초는 FAULT_POLICY 원칙 5, 나머지는 측정하지 않은 추정). 환경 변수로 바꾼다(비밀이 아니므로 NAME_FILE 없이 값 그대로). 근거는 docs/boundary.md 장애 절:
 # 이 영역의 문장은 인덱스 있는 단건 INSERT/SELECT와 잡의 한 배치 조회로 정상일 때 수 ms~수십 ms이므로 3초면 느린 디스크·잠깐의 잠금은 견딘다.
@@ -20,7 +20,7 @@ _LOCK_KEY = 7264001   # 스키마 생성용 advisory lock 키(이 영역 고정�
 DEFAULTS = {"OPS_DB_CONNECT_TIMEOUT": 3.0,     # 접속 상한. libpq는 정수 초로 올림한다(최소 1)
             "OPS_DB_STATEMENT_TIMEOUT": 3.0,   # 문장 하나. 서버 쪽 statement_timeout + 클라이언트 쪽 강제 끊기(서버가 얼어도 끝난다)
             "OPS_DB_PROBE_TIMEOUT": 2.0,       # /readyz의 DB 확인 전체 상한
-            "OPS_DB_DDL_TIMEOUT": 30.0}        # 시작 때 스키마 생성(다른 인스턴스의 advisory lock을 기다릴 수 있다)
+            "OPS_DB_DDL_TIMEOUT": 30.0}        # 시작 때 스키마 마이그레이션(다른 인스턴스의 yoyo 잠금을 기다릴 수 있다)
 
 
 def _setting(name: str) -> float:
@@ -71,7 +71,7 @@ def _connect(url: str, what: str, connect_secs: float, stmt_secs: float):
 class PgBase:
     KIND = "postgresql"
     WHAT = "저장소"
-    DDL = ""
+    SCOPE = ""              # 마이그레이션 묶음 이름(log|failure)
     TABLES: tuple = ()      # OPS_DB_SCHEMA=verify일 때 존재를 확인할 표
 
     def __init__(self, url: str) -> None:
@@ -81,22 +81,13 @@ class PgBase:
         self.statement_timeout = _setting("OPS_DB_STATEMENT_TIMEOUT")
         self.probe_timeout = _setting("OPS_DB_PROBE_TIMEOUT")
         ddl_timeout = _setting("OPS_DB_DDL_TIMEOUT")
-        def ddl():
-            self._db.execute(f"SET statement_timeout = {int(ddl_timeout * 1000)}")
-            try:
-                self._db.execute("SELECT pg_advisory_lock(%s)", (_LOCK_KEY,))
-                try:
-                    self._db.execute(self.DDL)
-                finally:
-                    self._db.execute("SELECT pg_advisory_unlock(%s)", (_LOCK_KEY,))
-            finally:
-                self._db.execute(f"SET statement_timeout = {int(self.statement_timeout * 1000)}")
         self._db = self._open()
         mode = (os.environ.get("OPS_DB_SCHEMA") or "apply").strip()
         if mode not in ("apply", "verify"):
             raise BoundaryError("INVALID_RECORD", "OPS_DB_SCHEMA는 apply 또는 verify")
         if mode == "apply":
-            self._x(ddl, limit=ddl_timeout)
+            # 스키마는 마이그레이션(yoyo)이 만든다. 접속·문장 상한은 DDL 상한을 쓰고, 동시 기동은 yoyo 잠금이 직렬화한다(ADR 0021).
+            migrate_postgres(self.SCOPE, self._url, self.connect_timeout, ddl_timeout)
         else:
             # verify: 앱은 스키마를 만들지 않는다(DDL 권한이 필요 없다). 표가 없으면 시작을 거부하고 `python -m ops_feedback.admin migrate`를 안내한다.
             try:
@@ -113,7 +104,7 @@ class PgBase:
     def _x(self, fn, limit=None):
         """한 번의 호출. 연결이 끊긴 경우(서버 재시작, 연결 강제 종료)에만 연결을 다시 열고 같은 호출을 한 번 재시도한다.
 
-        재시도의 근거: 모든 호출은 자동 커밋 단일 문장이거나(DDL은 전체가 멱등) 멱등 쓰기다. 끊긴 순간 서버가 이미 커밋했을 수 있는
+        재시도의 근거: 모든 호출은 자동 커밋 단일 문장이거나 멱등 쓰기다. 끊긴 순간 서버가 이미 커밋했을 수 있는
         불확실한 쓰기도 재시도하면 같은 상태로 수렴한다(INSERT는 ON CONFLICT, UPDATE·DELETE는 같은 조건). 달라질 수 있는 것은
         반환 건수뿐이다(예: 이미 들어간 원본을 재시도에서 '이미 있음'으로 보아 DUPLICATE). 데이터는 한 건도 잃거나 늘지 않는다.
         SQL 오류(제약, 문법 등)는 재시도하지 않는다. 재접속도 실패하면 UNAVAILABLE(retryable)이다.

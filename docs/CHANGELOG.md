@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.15.1 (제안, 단위 4a-B, ADR 0021)
+
+- 시작 때 DDL을 yoyo-migrations 버전 마이그레이션으로 교체(log.db, failures.db 둘 다, SQLite·PostgreSQL). 기존 DB는 그대로 받아들인다. SQLite `:memory:` 경로는 더 이상 열 수 없다.
+- 계약 핀 v2.2.2(waitress가 내는 413/414/431을 계약 클라이언트가 INVALID_RECORD로 읽는다).
+
 ## 0.15.0 (제안, 단위 4a-A, ADR 0020)
 
 - HTTP 서버를 `http.server` + 직접 만든 `BoundedServer`에서 WSGI 앱 + waitress 3.0.2로 교체. `OPS_MAX_CONNECTIONS`는 같은 이름으로 연결 상한이 된다.

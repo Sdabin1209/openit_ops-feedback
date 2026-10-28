@@ -18,6 +18,7 @@ from boundary_contracts.errors import BoundaryError
 
 from .pgbase import PgBase
 from .clock import Clock, utc_now
+from .migrate import migrate_sqlite
 from .schemas import supported_trace_versions, validate_record, validate_trace
 
 from boundary_contracts import PIPELINE_SCHEMA_VERSION  # 새 레코드는 이 버전으로 쓴다(1.1). 읽기는 1.0·1.1 모두
@@ -133,23 +134,11 @@ class MemoryBackend(_RawBackend):
 class SqliteBackend(_RawBackend):
     def __init__(self, path: str | Path) -> None:
         self._path = str(path)
-        if self._path != ":memory:":
-            Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        migrate_sqlite("log", self._path)       # 스키마는 마이그레이션(yoyo)이 만든다(ADR 0021)
         self._lock = threading.Lock()
         self._db = sqlite3.connect(self._path, check_same_thread=False, isolation_level=None)
-        if self._path != ":memory:":
-            self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA busy_timeout=5000")
-        self._db.executescript("""
-            CREATE TABLE IF NOT EXISTS raw_traces(
-              seq INTEGER PRIMARY KEY AUTOINCREMENT,
-              session_id TEXT NOT NULL, turn_id TEXT NOT NULL, release_id TEXT NOT NULL,
-              received_at TEXT NOT NULL, envelope TEXT NOT NULL, envelope_hash TEXT NOT NULL,
-              status TEXT, config_hash TEXT, processed_at TEXT,
-              UNIQUE(session_id, turn_id));
-            CREATE INDEX IF NOT EXISTS raw_status ON raw_traces(status, seq);
-            CREATE INDEX IF NOT EXISTS raw_release ON raw_traces(release_id, received_at);
-        """)
 
     def _x(self, fn):
         try:
@@ -232,16 +221,7 @@ class SqliteBackend(_RawBackend):
 class PostgresRawBackend(PgBase, _RawBackend):
     WHAT = "로그 저장소"
     TABLES = ("raw_traces",)
-    DDL = """
-        CREATE TABLE IF NOT EXISTS raw_traces(
-          seq BIGSERIAL PRIMARY KEY,
-          session_id TEXT NOT NULL, turn_id TEXT NOT NULL, release_id TEXT NOT NULL,
-          received_at TEXT NOT NULL, envelope TEXT NOT NULL, envelope_hash TEXT NOT NULL,
-          status TEXT, config_hash TEXT, processed_at TEXT,
-          UNIQUE(session_id, turn_id));
-        CREATE INDEX IF NOT EXISTS raw_status ON raw_traces(status, seq);
-        CREATE INDEX IF NOT EXISTS raw_release ON raw_traces(release_id, received_at);
-    """
+    SCOPE = "log"
 
     def insert_if_absent(self, session_id, turn_id, release_id, received_at, envelope, envelope_hash) -> bool:
         return self._x(lambda: self._db.execute(

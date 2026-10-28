@@ -99,13 +99,21 @@ class Server:
                                            channel_timeout=channel_timeout, cleanup_interval=min(5.0, channel_timeout), max_request_body_size=MAX_BODY, ident="ops-feedback-ingest",
                                            clear_untrusted_proxy_headers=False)
         self.server_address = (self._srv.effective_host, self._srv.effective_port)
+        self._closing = False
 
     def serve_forever(self) -> None:
-        self._srv.run()
+        try:
+            self._srv.run()
+        except (OSError, ValueError):
+            # 종료 때 다른 스레드가 소켓을 닫으면 이 스레드의 select가 EBADF로 끝난다(waitress 단일 서버는 다른 스레드에서의 close를 안전하게 받지 않는다).
+            # 종료 중일 때만 정상으로 보고, 그 밖의 오류는 그대로 올린다.
+            if not self._closing:
+                raise
 
     def shutdown(self, grace: float = SHUTDOWN_GRACE_SECONDS) -> None:
         """새 연결을 멈추고, 진행 중 요청을 마친 뒤(최대 grace초) 응답이 나가는 것을 기다려 연결을 닫는다."""
         srv = self._srv
+        self._closing = True
         srv.close()                                                       # 듣는 소켓만 닫는다(waitress 단일 서버의 close)
         srv.task_dispatcher.shutdown(cancel_pending=False, timeout=grace)  # 일꾼이 지금 하던 요청을 끝내고 나간다
         deadline = time.monotonic() + SHUTDOWN_FLUSH_SECONDS

@@ -70,7 +70,7 @@ I7 상세(구현이 정한 것):
 | `OPS_DB_CONNECT_TIMEOUT` | 3 | 접속 상한(libpq는 정수 초로 올림). 이전에는 10초 고정 |
 | `OPS_DB_STATEMENT_TIMEOUT` | 3 | 문장 하나의 상한. 서버 쪽 `statement_timeout`으로 걸고, 서버가 얼어 그 설정을 듣지 못하면 +1초 뒤 클라이언트가 소켓을 닫아 끝낸다 |
 | `OPS_DB_PROBE_TIMEOUT` | 2 | `/readyz`의 DB 확인 전체(접속+문장) 상한 |
-| `OPS_DB_DDL_TIMEOUT` | 30 | 시작 때 스키마 생성 한정. 다른 인스턴스가 쥔 advisory lock을 기다릴 수 있어 길다 |
+| `OPS_DB_DDL_TIMEOUT` | 30 | 시작 때 스키마 마이그레이션 한정. 다른 인스턴스가 쥔 yoyo 잠금을 기다릴 수 있어 길다 |
 
 기본값의 근거: 이 영역의 문장은 인덱스 있는 단건 INSERT/SELECT와 잡의 한 배치 조회라 정상일 때 수 ms~수십 ms다(측정한 값이 아니라 문장 종류에서 본 추정). 3초면 느린 디스크나 잠깐의 잠금은 견디고, 수집 호출자가 `UNAVAILABLE`을 재시도하므로 오래 매달리는 것보다 빨리 실패하는 편이 안전하다. 0 이하·숫자 아님은 시작 때 거부한다.
 

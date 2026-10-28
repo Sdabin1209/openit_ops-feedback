@@ -7,7 +7,7 @@ name = "ops-feedback"
 version = "0.1.0"
 requires-python = ">=3.10"
 description = "문진 시스템 운영 관측·피드백 영역: 수집(I6), 실패 사례 저장소(I7), 비식별, 실패 탐지"
-dependencies = ["boundary-contracts", "openit-survey-schema", "jsonschema>=4.18", "PyYAML>=6", "psycopg[binary]==3.3.6", "waitress==3.0.2"]
+dependencies = ["boundary-contracts", "openit-survey-schema", "jsonschema>=4.18", "PyYAML>=6", "psycopg[binary]==3.3.6", "waitress==3.0.2", "yoyo-migrations==9.0.0"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
@@ -18,6 +18,9 @@ ops-feedback-ingest-api = "ops_feedback.api:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+ops_feedback = ["migrations/**/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

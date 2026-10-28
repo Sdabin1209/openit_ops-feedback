@@ -17,6 +17,7 @@ from boundary_contracts.errors import BoundaryError
 
 from .pgbase import PgBase
 from .clock import fmt_ts, parse_ts
+from .migrate import migrate_sqlite
 from .schemas import validate_record
 
 
@@ -143,23 +144,11 @@ class MemoryBackend(_Backend):
 class SqliteBackend(_Backend):
     def __init__(self, path: str | Path) -> None:
         self._path = str(path)
-        if self._path != ":memory:":
-            Path(self._path).parent.mkdir(parents=True, exist_ok=True)
+        migrate_sqlite("failure", self._path)       # 스키마는 마이그레이션(yoyo)이 만든다(ADR 0021)
         self._lock = threading.RLock()
         self._db = sqlite3.connect(self._path, check_same_thread=False, isolation_level=None)
-        if self._path != ":memory:":
-            self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA busy_timeout=5000")
-        self._db.executescript("""
-            CREATE TABLE IF NOT EXISTS cases(
-              seq INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, version INTEGER NOT NULL,
-              review_status TEXT NOT NULL, failure_type TEXT NOT NULL, source_release_id TEXT NOT NULL,
-              created_at TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(case_id, version));
-            CREATE INDEX IF NOT EXISTS cases_filter ON cases(review_status, failure_type, source_release_id);
-            CREATE INDEX IF NOT EXISTS cases_release ON cases(source_release_id, created_at);
-            CREATE TABLE IF NOT EXISTS traces(ref TEXT PRIMARY KEY, trace TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS aux(kind TEXT NOT NULL, key TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind, key));
-        """)
 
     def _x(self, fn):
         try:
@@ -238,16 +227,7 @@ class SqliteBackend(_Backend):
 class PostgresFailureBackend(PgBase, _Backend):
     WHAT = "실패 사례 저장소"
     TABLES = ("cases", "traces", "aux")
-    DDL = """
-        CREATE TABLE IF NOT EXISTS cases(
-          seq BIGSERIAL PRIMARY KEY, case_id TEXT NOT NULL, version INTEGER NOT NULL,
-          review_status TEXT NOT NULL, failure_type TEXT NOT NULL, source_release_id TEXT NOT NULL,
-          created_at TEXT NOT NULL, record TEXT NOT NULL, UNIQUE(case_id, version));
-        CREATE INDEX IF NOT EXISTS cases_filter ON cases(review_status, failure_type, source_release_id);
-        CREATE INDEX IF NOT EXISTS cases_release ON cases(source_release_id, created_at);
-        CREATE TABLE IF NOT EXISTS traces(ref TEXT PRIMARY KEY, trace TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS aux(kind TEXT NOT NULL, key TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind, key));
-    """
+    SCOPE = "failure"
 
     def insert_case(self, record):
         return self._x(lambda: self._db.execute(

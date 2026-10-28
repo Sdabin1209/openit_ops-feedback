@@ -9,3 +9,8 @@ typing_extensions==4.16.0
 psycopg==3.3.6
 psycopg-binary==3.3.6
 waitress==3.0.2
+yoyo-migrations==9.0.0           # 스키마 마이그레이션(ADR 0021)
+sqlparse==0.6.0
+tabulate==0.10.0
+importlib_metadata==10.1.0
+zipp==4.1.2
