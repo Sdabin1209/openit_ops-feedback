@@ -121,6 +121,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0015](docs/adr/0015-response-fallback-rule-id.md) | 규칙 ID GENERATOR_FALLBACK을 RESPONSE_FALLBACK으로 개명, 기존 사례는 skipped_diff |
 | [0016](docs/adr/0016-pseudonym-hmac-sha256.md) | 의사 식별자는 HMAC-SHA256(키=salt) |
 | [0017](docs/adr/0017-salt-policy.md) | salt 32바이트 이상, 기동 때 길이 검사, 회전은 재가명화 절차 |
+| [0018](docs/adr/0018-numeric-values-provenance.md) | 숫자 값의 출처 분류(측정·표준·제약·임의), 값은 바꾸지 않음 |
 
 ## 7. 더 자세한 문서
 
