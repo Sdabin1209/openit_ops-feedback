@@ -1,7 +1,7 @@
 # 개발·CI 의존. 이미지는 requirements.lock(서드파티 고정)과 scripts/build_wheels.sh가 만든 wheel을 쓴다.
 git+ssh://git@github.com/Sdabin1209/openit_boundary-contracts.git@v3.0.0
 # 문진 스키마 패키지(TurnTrace). 사본을 두지 않고 태그로 설치한다(D110)
-openit-survey-schema @ git+ssh://git@github.com/Sdabin1209/openit_survey-service.git@survey-schema-v1.1.0#subdirectory=schema
+openit-survey-schema @ git+ssh://git@github.com/Sdabin1209/openit_survey-service.git@survey-schema-v2.0.0#subdirectory=schema
 psycopg[binary]==3.3.6          # PostgreSQL 드라이버(운영 저장소). libpq 내장 wheel
 waitress==3.0.2               # WSGI 서버(ADR 0020)
 # scripts/build-image.sh가 wheel을 `pip wheel --no-build-isolation`으로 만들 때 쓰는 빌드 의존(ADR 0022). 이미지(requirements.lock)에는 넣지 않는다.

@@ -14,7 +14,7 @@ from boundary_contracts import validator
 
 ROOT = Path(__file__).resolve().parents[1]
 WS = Path(os.environ.get("WORKSPACE_DIR") or ROOT.parent)
-BC_TAG, SS_TAG = "v3.0.0", "survey-schema-v1.1.0"
+BC_TAG, SS_TAG = "v3.0.0", "survey-schema-v2.0.0"
 SCRIPT = ROOT / "scripts" / "build-image.sh"
 
 
@@ -36,7 +36,7 @@ def trees(tmp_path_factory):
 
 
 def request(trees, **over):
-    req = {"source_dir": str(ROOT), "revision": "abcdef1", "versions": {"boundary": BC_TAG, "survey_schema": "v1.1.0"},
+    req = {"source_dir": str(ROOT), "revision": "abcdef1", "versions": {"boundary": BC_TAG, "survey_schema": "v2.0.0"},
            "dependency_sources": {"boundary": str(trees["boundary"]), "survey_schema": str(trees["survey_schema"])},
            "image_tag": "ops-feedback-buildtest:t1"}
     req.update(over)
@@ -95,7 +95,7 @@ def test_survey_schema_request_different_from_the_pinned_one_fails(trees, tmp_pa
     req["versions"]["survey_schema"] = "v1.3.0"
     req["dependency_sources"]["survey_schema"] = str(other)
     r = run(tmp_path, req)
-    assert r.returncode == 2 and "고정 버전" in r.stderr and "v1.1.0" in r.stderr, r.stderr[-300:]
+    assert r.returncode == 2 and "고정 버전" in r.stderr and "v2.0.0" in r.stderr, r.stderr[-300:]
 
 
 def test_unreadable_request_file_fails(tmp_path):
