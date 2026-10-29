@@ -1,5 +1,5 @@
 {
-  "pipeline_schema_version": "2.2",
+  "pipeline_schema_version": "2.3",
   "release_id": "rel-0002",
   "runtime_contract_version": 1,
   "session_id": "s-001",
