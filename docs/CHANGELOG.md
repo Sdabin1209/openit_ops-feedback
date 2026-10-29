@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.17.0 (제안, 계약 3.0.0 전환)
+
+- 계약 핀 v3.0.0, 예시 `pipeline_schema_version` "3.0".
+- turn-engine 표지 제거: Dockerfile ARG·라벨 `io.openit.turn-engine`, build-image 인자, 시험의 `turn_engine_version`(→ `action_rules_version`, 값은 계약 규칙 데이터 `load_rules()["rules_version"]`).
+- U50: build-image.sh 라벨은 실제 wheel 버전에서, 요청이 고정 버전과 다르면 실패.
+- 비식별 설정에서 `scrub_*`, `unlisted_string_action: drop`, `count_map_key_pattern` 경로 제거(ADR 0023). 정책 지문이 바뀐다.
+
 ## 0.16.3 (제안, U49: 승격된 계약 스키마의 영역 사본 정리)
 
 `docs/change-requests/` 아래 스키마 파일 53개를 분류해 모두 지웠다. `contract-ready/schemas/`의 6개는 계약 패키지(v2.7.0)의 `OpsFeedback*` 6개와 바이트까지 같은 것을 `cmp`로 확인했다.

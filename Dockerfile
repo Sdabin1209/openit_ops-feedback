@@ -12,13 +12,11 @@ FROM python:3.12-slim
 ARG COMMIT=n/a
 ARG CONTRACTS_VERSION=n/a
 ARG SURVEY_SCHEMA_VERSION=n/a
-ARG TURN_ENGINE_VERSION=n/a
 ARG MODEL_RUNTIME_VERSION=n/a
 LABEL io.openit.service="ops-feedback" \
       io.openit.revision=$COMMIT \
       io.openit.contracts.boundary=$CONTRACTS_VERSION \
       io.openit.contracts.survey-schema=$SURVEY_SCHEMA_VERSION \
-      io.openit.turn-engine=$TURN_ENGINE_VERSION \
       io.openit.model-runtime=$MODEL_RUNTIME_VERSION
 COPY --from=build /install /usr/local
 RUN useradd --system --uid 10001 --no-create-home app && mkdir /data && chown app /data

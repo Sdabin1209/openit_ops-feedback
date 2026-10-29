@@ -53,8 +53,8 @@ DEFAULT_KEEP_PATTERNS = {
 
 
 # 출처: docs/adr/0013-extract-protections-counts.md. 건수 맵(규칙 코드 -> 건수)의 키 모양. 코드는 model-runtime이 정하며(boundary-contracts HTTP.md의 예: G5, G2) 계약 밖이라
-# 대문자로 시작하는 짧은 식별자 모양만 남긴다. 길이 한도 32는 근거 기록 없는 보수적 임의값이다. 설정 `deid.count_map_key_pattern`으로 바꾼다.
-DEFAULT_COUNT_MAP_KEY_PATTERN = r"[A-Z][A-Z0-9_]{0,31}"
+# 대문자로 시작하는 짧은 식별자 모양만 남긴다. 길이 한도 32는 근거 기록 없는 보수적 임의값이다. 계약 OpsFeedbackDeidentifiedTrace의 CountMap 키 패턴과 같다(3.0.0에서 설정으로 바꾸는 길을 없앴다: 계약 밖 출력을 내던 선택지, U25).
+COUNT_MAP_KEY_PATTERN = r"[A-Z][A-Z0-9_]{0,31}"
 
 
 class DeidError(Exception):
@@ -65,18 +65,14 @@ class DeidError(Exception):
 class DeidPolicy:
     policy_id: str
     keep_string_keys: frozenset
-    scrub_string_keys: frozenset
     pseudonymize_keys: frozenset
     mask_defs: frozenset
     drop_defs: frozenset
     mask_number_keys: frozenset
     mask_value_keys: frozenset           # 타입과 상관없이(숫자·불리언·객체·배열 포함) 값을 통째로 마스킹할 키
-    unlisted_string_action: str          # "mask" | "drop"
     residual_patterns: dict
-    scrub_replacements: dict
     keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(기본 + 설정)
     count_map_keys: frozenset = frozenset()               # 건수 맵(키 -> 정수)으로 남길 필드 이름(예: extract_protections). 기본은 비어 있어 자유 객체로 비운다
-    count_map_key_pattern: str = DEFAULT_COUNT_MAP_KEY_PATTERN
     keep_pause_reason: bool = False                       # 정지 사유 열거(RISK|REASK_LIMIT|OTHER)를 남긴다. docs/adr/0014
 
     def unvalidated_keep_keys(self) -> list:
@@ -88,8 +84,11 @@ class DeidPolicy:
         for k in ("policy_id", "keep_string_keys", "unlisted_string_action"):
             if k not in cfg:
                 raise ValueError(f"deid 설정에 {k}가 없다. 비식별 기준은 사용자가 정하며 기본값이 없다.")
-        if cfg["unlisted_string_action"] not in ("mask", "drop"):
-            raise ValueError("deid.unlisted_string_action은 mask 또는 drop")
+        if cfg["unlisted_string_action"] != "mask":
+            raise ValueError("deid.unlisted_string_action은 mask만 허용한다(계약 3.0.0: drop은 비식별 뷰 계약 밖의 출력을 낸다)")
+        for gone in ("scrub_string_keys", "scrub_patterns", "count_map_key_pattern"):
+            if gone in cfg:
+                raise ValueError(f"deid.{gone}는 계약 3.0.0에서 없어졌다")
         pats = cfg.get("residual_patterns") or {}
         for name, p in pats.items():
             re.compile(p)
@@ -103,35 +102,29 @@ class DeidPolicy:
         kpr = cfg.get("keep_pause_reason", False)
         if not isinstance(kpr, bool):
             raise ValueError("deid.keep_pause_reason는 true 또는 false(불리언)여야 한다")
-        cmp_ = cfg.get("count_map_key_pattern", DEFAULT_COUNT_MAP_KEY_PATTERN)
-        re.compile(cmp_)
         return cls(
             policy_id=str(cfg["policy_id"]),
             keep_string_keys=frozenset(cfg.get("keep_string_keys") or []),
-            scrub_string_keys=frozenset(cfg.get("scrub_string_keys") or []),
             pseudonymize_keys=frozenset(cfg.get("pseudonymize_keys") or []),
             mask_defs=frozenset(cfg.get("mask_defs") or []),
             drop_defs=frozenset(cfg.get("drop_defs") or []),
             mask_number_keys=frozenset(cfg.get("mask_number_keys") or []),
             mask_value_keys=frozenset(cfg.get("mask_value_keys") or []),
-            unlisted_string_action=cfg["unlisted_string_action"],
             residual_patterns=dict(pats),
-            scrub_replacements=dict(cfg.get("scrub_patterns") or {}),
             keep_patterns={k: v for k, v in kp.items() if k in frozenset(cfg.get("keep_string_keys") or [])},
             count_map_keys=frozenset(cmk),
-            count_map_key_pattern=cmp_,
             keep_pause_reason=kpr,
         )
 
     def fingerprint(self) -> str:
-        extra = {"count_map_keys": sorted(self.count_map_keys), "count_map_key_pattern": self.count_map_key_pattern} if self.count_map_keys else {}
+        extra = {"count_map_keys": sorted(self.count_map_keys)} if self.count_map_keys else {}
         if self.keep_pause_reason:
             extra = {**extra, "keep_pause_reason": True}      # 켠 설정만 지문에 넣어, 안 쓰는 기존 설정의 지문은 그대로다(ADR 0013과 같은 방식)
         return sha256_hash({**extra,
-            "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys), "scrub": sorted(self.scrub_string_keys),
+            "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
-            "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys), "unlisted": self.unlisted_string_action,
-            "residual": self.residual_patterns, "scrub_patterns": self.scrub_replacements, "keep_patterns": self.keep_patterns})
+            "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys),
+            "residual": self.residual_patterns, "keep_patterns": self.keep_patterns})
 
 
 # 정지 사유(boundary-contracts 2.1.0, CR-H002)가 실릴 수 있는 자리(문진 스키마의 TurnFailureSignal). 스키마 걷기는 열거에 없는 값을 마스킹하고
@@ -185,9 +178,8 @@ class _Walker:
         self.p = policy
         self.salt = salt
         self.stats: Counter = Counter()
-        self._scrub = {n: re.compile(pat) for n, pat in policy.scrub_replacements.items()}
         self._keep = {k: re.compile(p) for k, p in policy.keep_patterns.items()}
-        self._count_key = re.compile(policy.count_map_key_pattern)
+        self._count_key = re.compile(COUNT_MAP_KEY_PATTERN)
 
     # --- 스키마 해석 ---
     def _resolve(self, node: dict, names: tuple = ()) -> tuple[dict, tuple]:
@@ -319,11 +311,6 @@ class _Walker:
         if key in self.p.pseudonymize_keys:
             self.stats["pseudonymized"] += 1
             return pseudonym_of(self.salt, key, s)
-        if key in self.p.scrub_string_keys:
-            for name, rx in self._scrub.items():
-                s, n = rx.subn(f"[{name}]", s)
-                self.stats["scrubbed"] += n
-            return s
         if key in self.p.keep_string_keys:
             rx = self._keep.get(key)
             if rx is not None and not rx.fullmatch(s):       # 식별자 모양이 아니면 원문을 남기지 않는다
@@ -333,7 +320,7 @@ class _Walker:
             return s
         self.stats["masked_strings"] += 1
         self.stats[f"path_masked:{path}"] += 1
-        return MASK if self.p.unlisted_string_action == "mask" else _DROP
+        return MASK
 
 
 def _leaf_strings(v: Any) -> Iterator[str]:

@@ -86,7 +86,7 @@ HTTP 형식은 CR-005. 토큰은 `OPS_INGEST_TOKEN_FILE`(파일 경로, D84)이 
 1. 정책 `drop_defs`에 든 정의(v2 TurnTrace에는 쓸 곳이 없어 예시 설정은 빈 목록)는 `"[DROPPED]"`, `mask_defs`에 든 정의(예: `Value`)는 `"[MASKED]"`로 통째로 바꾼다. 환자 답변 값은 숫자 객체까지 이 경로로 가린다.
 2. `oneOf/anyOf`는 값의 모양(상수, 열거, 타입, 필수 키, 상수 판별 필드)으로 가지를 고른다. **맞는 가지가 없으면 제거**한다(문자열이면 마스킹).
 3. 열거값·상수 문자열은 남긴다(구조 정보: `Action`, `intent`, `status` 등).
-4. 그 밖의 문자열은 키 이름으로 판단한다. `pseudonymize_keys`(`session_id`, `turn_id`)는 `p-` + salt를 넣은 `canonical.sha256_hash`로 바꾼다(같은 입력은 같은 값, salt는 환경 변수). `keep_string_keys`(구조 식별자: `question_id`, `slot_id` 등)는 남긴다. `scrub_string_keys`는 정책이 준 패턴으로 치환해 남긴다. 나머지는 `unlisted_string_action`(`mask` 또는 `drop`)에 따라 `"[MASKED]"` 또는 키 제거. 어느 쪽이든 길이를 남기지 않는다.
+4. 그 밖의 문자열은 키 이름으로 판단한다. `pseudonymize_keys`(`session_id`, `turn_id`)는 `p-` + salt를 넣은 `canonical.sha256_hash`로 바꾼다(같은 입력은 같은 값, salt는 환경 변수). `keep_string_keys`(구조 식별자: `question_id`, `slot_id` 등)는 남긴다. 나머지는 `"[MASKED]"`로 바꾼다(`unlisted_string_action`은 `mask`만: 3.0.0에서 `scrub_*`와 `drop`이 계약 밖 출력이라 없어졌다, ADR 0023). 어느 쪽이든 길이를 남기지 않는다.
 5. 키가 `mask_value_keys`에 있으면 타입과 상관없이(숫자·불리언·객체 포함) 값을 `"[MASKED]"`로 바꾼다. v2의 `extract_output.values[].value`는 스키마가 형태를 정하지 않아(모델이 낸 값) 숫자·불리언 환자 답변이 `Value` 정의를 거치지 않고 지나가므로 이 키(`value`)를 지목한다. 정책이 지목한 `mask_defs`·`drop_defs` 정의가 문진 스키마에 없으면 `DeidError`(스키마가 바뀌었는데 정책이 조용히 효력을 잃는 것을 막는다).
 5-1. 숫자·불리언·null은 남긴다(인덱스, 오프셋, 횟수). 키가 `mask_number_keys`에 있으면 null로 바꾼다.
 6. 스키마에 없는 키는 제거한다(키 이름도 값일 수 있어 기록하지 않고 개수만 센다). `properties`가 없는 자유 객체는 `{}`로 비운다.

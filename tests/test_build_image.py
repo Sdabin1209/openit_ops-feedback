@@ -14,7 +14,7 @@ from boundary_contracts import validator
 
 ROOT = Path(__file__).resolve().parents[1]
 WS = Path(os.environ.get("WORKSPACE_DIR") or ROOT.parent)
-BC_TAG, SS_TAG = "v2.8.0", "survey-schema-v1.1.0"
+BC_TAG, SS_TAG = "v3.0.0", "survey-schema-v1.1.0"
 SCRIPT = ROOT / "scripts" / "build-image.sh"
 
 
@@ -74,6 +74,30 @@ def test_bad_requests_fail_without_docker(trees, tmp_path, name, fn, needle):
     assert r.stdout == ""
 
 
+def _tree_of(repo, tag, dest, path=None):
+    return _extract(repo, tag, dest, path)
+
+
+def test_request_version_different_from_the_pinned_one_fails_without_a_label(trees, tmp_path):
+    """U50: 라벨은 실제로 설치·사용한 버전을 말해야 한다. 요청이 이 리포의 고정 버전(requirements.txt)과 다르면 이미지를 만들지 않고 실패한다."""
+    other = _tree_of("boundary-contracts", "v2.8.0", tmp_path / "bc280")
+    req = request(trees)
+    req["versions"]["boundary"] = "v2.8.0"
+    req["dependency_sources"]["boundary"] = str(other)           # 트리도 요청과 같은 버전이라 '트리 버전' 검사는 통과한다
+    r = run(tmp_path, req)
+    assert r.returncode == 2 and "고정 버전" in r.stderr and "v3.0.0" in r.stderr, r.stderr[-300:]
+    assert r.stdout == ""
+
+
+def test_survey_schema_request_different_from_the_pinned_one_fails(trees, tmp_path):
+    other = _tree_of("survey-service", "survey-schema-v1.3.0", tmp_path / "ss13", "schema")
+    req = request(trees)
+    req["versions"]["survey_schema"] = "v1.3.0"
+    req["dependency_sources"]["survey_schema"] = str(other)
+    r = run(tmp_path, req)
+    assert r.returncode == 2 and "고정 버전" in r.stderr and "v1.1.0" in r.stderr, r.stderr[-300:]
+
+
 def test_unreadable_request_file_fails(tmp_path):
     p = tmp_path / "nope.json"
     r = subprocess.run(["bash", str(SCRIPT), str(p)], capture_output=True, text=True)
@@ -97,7 +121,7 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         lb = res["labels"]
         assert lb["io.openit.revision"] == "0123abc" and lb["io.openit.contracts.boundary"] == BC_TAG
         assert lb["io.openit.contracts.survey-schema"] == "1" and lb["io.openit.service"] == "ops-feedback"
-        assert lb["io.openit.turn-engine"] == "n/a" and lb["io.openit.model-runtime"] == "n/a"
+        assert "io.openit.turn-engine" not in lb and lb["io.openit.model-runtime"] == "n/a"      # 3.0.0: turn-engine 라벨이 없어졌다
         exposure = json.loads(lb["io.openit.exposure"])                 # 노출 선언 라벨(U47): 리포의 deploy-exposure.json 그대로
         assert not list(validator("Exposure").iter_errors(exposure))
         assert exposure == json.loads((ROOT / "deploy-exposure.json").read_text(encoding="utf-8"))

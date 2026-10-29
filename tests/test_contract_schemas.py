@@ -108,7 +108,7 @@ def test_dockerfile_build_args_and_labels_follow_contract():
         assert v not in ("none", "unknown", "unset"), f"ARG {k} 기본값 {v}: 값 없음 표기는 n/a 하나다"
     labels = dict(re.findall(r'(io\.openit\.[\w.-]+)="?\$(\w+)"?', text))
     assert set(labels) == {"io.openit.service", "io.openit.revision", "io.openit.contracts.boundary", "io.openit.contracts.survey-schema",
-                           "io.openit.turn-engine", "io.openit.model-runtime"} or "io.openit.service" in text
+                           "io.openit.model-runtime"} or "io.openit.service" in text
     # 실제 값으로 채운 라벨이 ImageLabels를 지키는지: 기본값이 있는 선택 라벨은 기본값 그대로, 나머지는 빌드가 넘기는 형식의 값으로
     given = {"COMMIT": "6e830e8", "CONTRACTS_VERSION": "v2.2.1", "SURVEY_SCHEMA_VERSION": "1"}
     filled = {"io.openit.service": "ops-feedback"}

@@ -102,13 +102,13 @@ def test_residual_pattern_fails_closed():
         deid(cfg).deidentify(envelope(pii_trace()))
 
 
-def test_scrub_keys_replace_patterns():
-    cfg = base_config()
-    cfg["deid"]["scrub_string_keys"] = ["utterance"]
-    cfg["deid"]["scrub_patterns"] = {"PHONE": r"0\d{1,2}-\d{3,4}-\d{4}", "EMAIL": r"[\w.]+@[\w.]+\.\w+"}
-    # 치환 문자열([PHONE])은 비식별 뷰 계약(자유 문자열은 [MASKED]|[DROPPED]만)에 없다: scrub 정책은 지금 자기 검사에서 닫힌다. 계약 변경 요청 CR-008.
-    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
-        deid(cfg).deidentify(envelope(pii_trace()))
+def test_scrub_options_are_gone_in_3_0_0():
+    # scrub_string_keys·scrub_patterns는 계약 3.0.0 OpsFeedbackJobConfig에서 빠졌다(비식별 뷰 계약 밖의 출력을 냈다, U25). 정책도 받지 않는다
+    for key, val in (("scrub_string_keys", ["utterance"]), ("scrub_patterns", {"PHONE": r"0\d{1,2}-\d{3,4}-\d{4}"})):
+        cfg = base_config()
+        cfg["deid"][key] = val
+        with pytest.raises(ValueError, match=key):
+            DeidPolicy.from_config(cfg["deid"])
 
 
 def test_policy_has_no_defaults():
@@ -118,12 +118,11 @@ def test_policy_has_no_defaults():
         DeidPolicy.from_config({"policy_id": "x", "keep_string_keys": [], "unlisted_string_action": "keep"})
 
 
-def test_unlisted_drop_action():
+def test_unlisted_drop_action_is_gone_in_3_0_0():
     cfg = base_config()
     cfg["deid"]["unlisted_string_action"] = "drop"
-    # drop은 키를 없애는데 계약은 필수 문자열 칸을 요구한다: 자기 검사에서 닫힌다(CR-008).
-    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
-        deid(cfg).deidentify(envelope(pii_trace()))
+    with pytest.raises(ValueError, match="mask만"):
+        DeidPolicy.from_config(cfg["deid"])
 
 
 def test_pseudonyms_not_flagged_as_residual_pii():
@@ -329,11 +328,12 @@ def test_count_map_null_and_empty_pass():
         assert r["extract_protections"] == v
 
 
-def test_count_map_key_pattern_configurable_and_fingerprint():
+def test_count_map_key_pattern_is_fixed_to_the_contract_pattern_and_fingerprint():
     t = make_trace(extract_protections={"G5": 1, "abc": 2})
-    # 계약은 규칙 코드 키를 ^[A-Z][A-Z0-9_]{0,31}$로 정한다. 소문자 패턴으로 남긴 키는 자기 검사에서 닫힌다(CR-008).
-    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
-        deid(_cfg_counts(count_map_key_pattern=r"[a-z]{3}")).deidentify(envelope(t))
+    r = deid(_cfg_counts()).deidentify(envelope(t)).trace
+    assert r["extract_protections"] == {"G5": 1}                      # 계약 CountMap 키 패턴 ^[A-Z][A-Z0-9_]{0,31}$ 밖의 키는 버린다
+    with pytest.raises(ValueError, match="count_map_key_pattern"):
+        DeidPolicy.from_config(_cfg_counts(count_map_key_pattern=r"[a-z]{3}")["deid"])
     assert DeidPolicy.from_config(base_config()["deid"]).fingerprint() != DeidPolicy.from_config(_cfg_counts()["deid"]).fingerprint()
 
 

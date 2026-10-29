@@ -27,9 +27,9 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | 키 | 필수 | 뜻 |
 | --- | --- | --- |
 | `storage.log_db`, `storage.failure_db` | 예 | SQLite 파일 경로(PostgreSQL URL 환경 변수가 있으면 무시) |
-| `deid.policy_id`, `deid.keep_string_keys`, `deid.unlisted_string_action`(mask\|drop) | 예 | 비식별 정책의 필수 부분. 기본값 없음 |
+| `deid.policy_id`, `deid.keep_string_keys`, `deid.unlisted_string_action`(mask만) | 예 | 비식별 정책의 필수 부분. 기본값 없음 |
 | `deid.salt_env` | 아니오(기본 `OPS_DEID_SALT`) | salt를 담은 환경 변수 이름 |
-| `deid.pseudonymize_keys`, `scrub_string_keys`, `scrub_patterns`, `mask_defs`, `drop_defs`, `mask_number_keys`, `mask_value_keys`, `residual_patterns` | 아니오 | 4절 처리 방식의 정책 값 |
+| `deid.pseudonymize_keys`, `mask_defs`, `drop_defs`, `mask_number_keys`, `mask_value_keys`, `residual_patterns` | 아니오 | 4절 처리 방식의 정책 값 |
 | `detection.detectors[]` | 예 | `{type: rule, rules: [{id, enabled, params}]}` 또는 `{factory: "모듈:함수", args}` |
 | `classification.default_failure_type` | 예 | 나머지(`rule_to_type`, `priority`)는 선택 |
 | `retention.raw_days` | 예 | 숫자 또는 null(삭제 안 함) |

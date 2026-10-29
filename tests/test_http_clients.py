@@ -11,6 +11,7 @@ from boundary_contracts.clients import HttpFailureStore, HttpReleaseReader, Http
 from boundary_contracts.errors import BoundaryError
 from boundary_contracts.sdk import FailureStore, ReleaseReader, TraceIngest
 
+from boundary_contracts.action_rules import load_rules
 from conftest import envelope, make_trace, pii_trace
 from ops_feedback.api import make_server, parse_read_tokens
 from ops_feedback.config import load_config
@@ -18,8 +19,7 @@ from ops_feedback.job import build_from_config, run_once
 from ops_feedback.failurestore import FailureStoreImpl
 from ops_feedback.logstore import LogStore
 
-# 시험용 임의 값(실제 turn-engine·model-runtime 버전이 아니다). 계약은 형식만 본다.
-FAKE_TURN_ENGINE_VERSION = "0.0.0+fake-test"
+# 시험용 임의 값(실제 model-runtime 버전이 아니다). 계약은 형식만 본다.
 FAKE_MODEL_RUNTIME_VERSION = "0.0.0+fake-test"
 QS = {"id": "qs-main", "version": "3", "content_hash": "sha256:" + "1" * 64}
 
@@ -29,7 +29,7 @@ def _manifest(rid):
          "question_set": QS,
          "lora_a": {"id": "lora-a", "version": "1", "content_hash": "sha256:" + "2" * 64},
          "lora_b": {"id": "lora-b", "version": "1", "content_hash": "sha256:" + "3" * 64},
-         "runtime_contract_version": 1, "turn_engine_version": FAKE_TURN_ENGINE_VERSION, "model_runtime_version": FAKE_MODEL_RUNTIME_VERSION,
+         "runtime_contract_version": 1, "action_rules_version": load_rules()["rules_version"], "model_runtime_version": FAKE_MODEL_RUNTIME_VERSION,
          "adapters": {r: {"adapter_hash": "sha256:" + "4" * 64, "serving_config": {"k": 1},
                           "serving_config_hash": sha256_hash({"k": 1}),
                           "system_prompt": {"path": "system_prompt.txt", "sha256": "sha256:" + "5" * 64}} for r in ("LORA_A", "LORA_B")}}

@@ -46,6 +46,15 @@ for name, tree, want in (("boundary", bsrc, v["boundary"]), ("survey_schema", ss
     got = pkg_version(tree)
     if got != want.lstrip("v"):
         die(f"dependency_sources.{name}의 패키지 버전({got})이 versions.{name}({want})과 다르다")
+# U50(라벨 정직성): 라벨은 요청이 아니라 실제로 설치·사용하는 버전을 말해야 한다. 이 리포의 고정 버전(requirements.txt)과 요청이 다르면 라벨을 찍지 않고 실패한다.
+reqs = open(os.path.join(here, "requirements.txt"), encoding="utf-8").read()
+pin_b = re.search(r"openit_boundary-contracts\.git@(v[0-9.]+)", reqs)
+pin_s = re.search(r"openit_survey-service\.git@survey-schema-(v[0-9.]+)", reqs)
+if not pin_b or not pin_s:
+    die("requirements.txt에서 고정 버전(boundary-contracts, 문진 스키마)을 읽지 못했다")
+for name, want, pin in (("boundary", v["boundary"], pin_b.group(1)), ("survey_schema", v["survey_schema"], pin_s.group(1))):
+    if want != pin:
+        die(f"요청 versions.{name}({want})가 이 리포의 고정 버전({pin}, requirements.txt)과 다르다. 이미지는 고정 버전을 쓰므로 라벨을 찍지 않고 실패한다. 고정을 올리는 것은 영역의 일이다")
 sv = open(os.path.join(ssrc, "CONTRACT_VERSION"), encoding="utf-8").read().strip()      # 라벨 io.openit.contracts.survey-schema는 문진 스키마의 정수 계약 버전
 # 노출 선언(라벨 io.openit.exposure): 리포의 deploy-exposure.json이 정본이다. 계약 Exposure로 검증한 뒤 한 줄 JSON으로 라벨에 단다.
 try:
@@ -70,10 +79,18 @@ for t in boundary survey-schema; do
   "$PY" -m pip wheel -q --no-deps --no-build-isolation -w build/wheels "build/src/$t" >&2
 done
 
-# 3) 이미지. 인자 이름은 이 영역의 Dockerfile이 정한다(여기에만 있다). turn-engine·model-runtime은 이 이미지에 들어 있지 않아 n/a다.
+# 라벨 값은 방금 만든 wheel의 실제 버전에서 읽는다(요청 값을 그대로 찍지 않는다). 위 검사로 요청·고정·소스 트리는 이미 같다.
+BC=$("$PY" - <<'PYEOF'
+import glob, re, sys
+w = glob.glob("build/wheels/boundary_contracts-*.whl")
+m = re.match(r"boundary_contracts-([0-9]+\.[0-9]+\.[0-9]+)-", w[0].split("/")[-1]) if len(w) == 1 else None
+sys.exit("build-image: boundary-contracts wheel의 버전을 읽지 못했다") if not m else print("v" + m.group(1))
+PYEOF
+)
+# 3) 이미지. 인자 이름은 이 영역의 Dockerfile이 정한다(여기에만 있다). model-runtime은 이 이미지에 들어 있지 않아 n/a다(turn-engine 라벨은 3.0.0에서 없어졌다).
 log "docker build $TAG"
 "$DOCKER" build -q -t "$TAG" --build-arg COMMIT="$REV" --build-arg CONTRACTS_VERSION="$BC" --build-arg SURVEY_SCHEMA_VERSION="$SS_INT" \
-  --build-arg TURN_ENGINE_VERSION=n/a --build-arg MODEL_RUNTIME_VERSION=n/a --label "io.openit.exposure=$EXPOSURE" "$HERE" >&2
+  --build-arg MODEL_RUNTIME_VERSION=n/a --label "io.openit.exposure=$EXPOSURE" "$HERE" >&2
 
 # 4) 결과: 이미지에 실제로 붙은 라벨을 docker inspect로 읽고 BuildImageResult로 검증한 한 줄을 마지막에 낸다.
 IID=$("$DOCKER" image inspect "$TAG" --format '{{.Id}}')
