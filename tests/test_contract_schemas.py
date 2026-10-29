@@ -15,6 +15,7 @@ import pytest
 import yaml
 from boundary_contracts import validator
 
+import deps
 from conftest import base_config, envelope, make_trace, pii_trace
 from ops_feedback.config import load_config, validate_server_env
 from ops_feedback.deid import DeidError, Deidentifier, DeidPolicy
@@ -22,17 +23,12 @@ from ops_feedback.deid import DeidError, Deidentifier, DeidPolicy
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _conformance() -> Path | None:
-    for c in (os.environ.get("OPENIT_CONFORMANCE_DIR"), ROOT.parent / "boundary-contracts" / "conformance"):
-        if c and (Path(c) / "examples_invalid").is_dir():
-            return Path(c)
-    return None
+def _conformance() -> Path:
+    return deps.conformance()
 
 
 def _examples(kind: str, prefix: str):
     d = _conformance()
-    if d is None:
-        return []
     return sorted((d / kind).glob(prefix + ".*json"))
 
 

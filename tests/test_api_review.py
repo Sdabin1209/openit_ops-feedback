@@ -234,9 +234,8 @@ def test_review_body_violating_the_contract_schema_is_rejected_400(env, body):
 def test_review_body_contract_examples(env):
     import os
     from pathlib import Path
-    d = os.environ.get("OPENIT_CONFORMANCE_DIR")
-    if not d:
-        pytest.skip("OPENIT_CONFORMANCE_DIR 없음")
+    import deps
+    d = deps.conformance()
     base, cid = env
     for p in sorted((Path(d) / "examples_invalid").glob("CaseReviewRequest.*.json")):
         assert post(base, cid, json.loads(p.read_text()))[0] == 400, p.name

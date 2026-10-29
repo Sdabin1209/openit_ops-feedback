@@ -5,38 +5,25 @@ import json
 import os
 import shutil
 import subprocess
-import tarfile
-import io
 from pathlib import Path
 
 import pytest
 from boundary_contracts import validator
 
+import deps
+
 ROOT = Path(__file__).resolve().parents[1]
-WS = Path(os.environ.get("WORKSPACE_DIR") or ROOT.parent)
-BC_TAG, SS_TAG = "v3.0.0", "survey-schema-v2.0.0"
+BC_TAG, SS_TAG = deps.pinned_boundary_tag(), deps.pinned_survey_tag()      # 고정(requirements.txt)에서 읽는다: 올릴 때 시험 상수를 따로 고치지 않는다
 SCRIPT = ROOT / "scripts" / "build-image.sh"
 
 
-def _extract(repo: str, tag: str, dest: Path, path: str | None = None) -> Path:
-    cmd = ["git", "-C", str(WS / repo), "archive", tag] + ([path] if path else [])
-    r = subprocess.run(cmd, capture_output=True)
-    if r.returncode != 0:
-        pytest.skip(f"{repo} {tag}를 꺼내지 못했다(WORKSPACE_DIR={WS})")
-    dest.mkdir(parents=True)
-    tarfile.open(fileobj=io.BytesIO(r.stdout)).extractall(dest, filter="data")
-    return dest / path if path else dest
-
-
 @pytest.fixture(scope="module")
-def trees(tmp_path_factory):
-    base = tmp_path_factory.mktemp("deps")
-    return {"boundary": _extract("boundary-contracts", BC_TAG, base / "bc"),
-            "survey_schema": _extract("survey-service", SS_TAG, base / "ss", "schema")}
+def trees():
+    return {"boundary": deps.boundary(), "survey_schema": deps.survey_schema()}
 
 
 def request(trees, **over):
-    req = {"source_dir": str(ROOT), "revision": "abcdef1", "versions": {"boundary": BC_TAG, "survey_schema": "v2.0.0"},
+    req = {"source_dir": str(ROOT), "revision": "abcdef1", "versions": {"boundary": BC_TAG, "survey_schema": SS_TAG.removeprefix("survey-schema-")},
            "dependency_sources": {"boundary": str(trees["boundary"]), "survey_schema": str(trees["survey_schema"])},
            "image_tag": "ops-feedback-buildtest:t1"}
     req.update(over)
@@ -74,28 +61,24 @@ def test_bad_requests_fail_without_docker(trees, tmp_path, name, fn, needle):
     assert r.stdout == ""
 
 
-def _tree_of(repo, tag, dest, path=None):
-    return _extract(repo, tag, dest, path)
-
-
 def test_request_version_different_from_the_pinned_one_fails_without_a_label(trees, tmp_path):
     """U50: 라벨은 실제로 설치·사용한 버전을 말해야 한다. 요청이 이 리포의 고정 버전(requirements.txt)과 다르면 이미지를 만들지 않고 실패한다."""
-    other = _tree_of("boundary-contracts", "v2.8.0", tmp_path / "bc280")
+    other = deps.boundary("v2.8.0")
     req = request(trees)
     req["versions"]["boundary"] = "v2.8.0"
     req["dependency_sources"]["boundary"] = str(other)           # 트리도 요청과 같은 버전이라 '트리 버전' 검사는 통과한다
     r = run(tmp_path, req)
-    assert r.returncode == 2 and "고정 버전" in r.stderr and "v3.0.0" in r.stderr, r.stderr[-300:]
+    assert r.returncode == 2 and "고정 버전" in r.stderr and BC_TAG in r.stderr, r.stderr[-300:]
     assert r.stdout == ""
 
 
 def test_survey_schema_request_different_from_the_pinned_one_fails(trees, tmp_path):
-    other = _tree_of("survey-service", "survey-schema-v1.3.0", tmp_path / "ss13", "schema")
+    other = deps.survey_schema("survey-schema-v1.3.0")
     req = request(trees)
     req["versions"]["survey_schema"] = "v1.3.0"
     req["dependency_sources"]["survey_schema"] = str(other)
     r = run(tmp_path, req)
-    assert r.returncode == 2 and "고정 버전" in r.stderr and "v2.0.0" in r.stderr, r.stderr[-300:]
+    assert r.returncode == 2 and "고정 버전" in r.stderr and SS_TAG.removeprefix("survey-schema-") in r.stderr, r.stderr[-300:]
 
 
 def test_unreadable_request_file_fails(tmp_path):
@@ -120,7 +103,8 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert res["image"] == "ops-feedback-buildtest:t42"
         lb = res["labels"]
         assert lb["io.openit.revision"] == "0123abc" and lb["io.openit.contracts.boundary"] == BC_TAG
-        assert lb["io.openit.contracts.survey-schema"] == "1" and lb["io.openit.service"] == "ops-feedback"
+        # 라벨은 실제로 쓴 문진 스키마 패키지에서 온다: 그 트리의 CONTRACT_VERSION(정수 계약 버전). 옛 기본값이 아님을 트리 값과의 일치로 본다
+        assert lb["io.openit.contracts.survey-schema"] == (trees["survey_schema"] / "CONTRACT_VERSION").read_text().strip() and lb["io.openit.service"] == "ops-feedback"
         assert "io.openit.turn-engine" not in lb and lb["io.openit.model-runtime"] == "n/a"      # 3.0.0: turn-engine 라벨이 없어졌다
         exposure = json.loads(lb["io.openit.exposure"])                 # 노출 선언 라벨(U47): 리포의 deploy-exposure.json 그대로
         assert not list(validator("Exposure").iter_errors(exposure))
@@ -134,3 +118,20 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert layers() == first
     finally:
         subprocess.run(["docker", "rmi", "-f", "ops-feedback-buildtest:t42"], capture_output=True)
+
+
+@pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
+def test_survey_schema_label_comes_from_the_tree_that_was_installed_not_from_a_default(trees, tmp_path):
+    """U50: 라벨 io.openit.contracts.survey-schema는 이미지에 들어간 문진 스키마 패키지의 CONTRACT_VERSION에서 온다.
+    같은 버전 표지(pyproject)의 트리에서 CONTRACT_VERSION만 바꾸면 라벨이 따라 바뀌어야 한다(옛 기본값이면 안 바뀐다)."""
+    tree = tmp_path / "ss-modified"
+    shutil.copytree(trees["survey_schema"], tree)
+    (tree / "CONTRACT_VERSION").write_text("7\n")
+    req = request(trees, revision="0123abd", image_tag="ops-feedback-buildtest:t43")
+    req["dependency_sources"]["survey_schema"] = str(tree)
+    try:
+        r = run(tmp_path, req, docker="docker")
+        assert r.returncode == 0, r.stderr[-600:]
+        assert json.loads(r.stdout.strip().splitlines()[-1])["labels"]["io.openit.contracts.survey-schema"] == "7"
+    finally:
+        subprocess.run(["docker", "rmi", "-f", "ops-feedback-buildtest:t43"], capture_output=True)
