@@ -8,7 +8,7 @@
   - `variant`는 모른다(이미지가 하나다): 주면 실패.
   - 소스 트리의 패키지 버전(`pyproject.toml`)이 요청한 버전과 다르면 실패한다. 기준표와 어긋난 트리에 라벨만 맞춰 찍는 것을 막는다.
   - turn-engine·model-runtime은 이 이미지에 들어 있지 않아 라벨이 `n/a`다(요청의 `turn_engine`은 폐기라 무시).
-  - 라벨 `contracts.survey-schema`는 문진 스키마의 정수 계약 버전(`CONTRACT_VERSION`)이다(`ImageLabels`가 정수 또는 `n/a`만 허용).
+  - 라벨 `contracts.survey-schema`는 이미지에 들어간 문진 스키마 패키지(`openit-survey-schema`)의 버전 주 번호다(2.0.0 → `2`, 방금 만든 wheel의 버전에서 읽는다). 정수 `CONTRACT_VERSION`은 모델 런타임 호환 번호라 라벨 값이 아니다(헤드 결정, survey-service ADR-0044). `ImageLabels`는 정수 또는 `n/a`만 허용한다.
   - 이웃 리포 경로와 빌드 중 네트워크(SSH)는 쓰지 않는다. wheel은 `dependency_sources` 트리를 `build/src`에 복사해 만든다(요청이 준 트리에 빌드 부산물을 남기지 않는다).
 - 왜: 인자 이름·산출 파일은 영역이 정하고 deploy는 계약 모양의 요청과 결과로만 만난다(구조 규칙 1, 6). 요청 검증을 계약 validator로 하면 손으로 같은 검사를 되풀이하지 않는다(R7).
 - 같은 요청 → 같은 이미지: wheel을 `SOURCE_DATE_EPOCH=315532800`(reproducible-builds의 표준 환경 변수, 값은 임의)로 만들어 같은 요청이 같은 wheel이 되는 것을 확인했다(해시 비교). 이미지 층(`RootFS.Layers`)은 같다. **이미지 ID는 같지 않다**: BuildKit이 설정에 시각을 넣어 같은 입력에도 매번 달라진다(실측). 시험은 층이 같음을 확인한다.

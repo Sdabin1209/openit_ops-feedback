@@ -103,8 +103,8 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert res["image"] == "ops-feedback-buildtest:t42"
         lb = res["labels"]
         assert lb["io.openit.revision"] == "0123abc" and lb["io.openit.contracts.boundary"] == BC_TAG
-        # 라벨은 실제로 쓴 문진 스키마 패키지에서 온다: 그 트리의 CONTRACT_VERSION(정수 계약 버전). 옛 기본값이 아님을 트리 값과의 일치로 본다
-        assert lb["io.openit.contracts.survey-schema"] == (trees["survey_schema"] / "CONTRACT_VERSION").read_text().strip() and lb["io.openit.service"] == "ops-feedback"
+        # 라벨은 이미지에 들어간 문진 스키마 패키지(openit-survey-schema) 버전의 주 번호다(2.0.0 -> "2"). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다
+        assert lb["io.openit.contracts.survey-schema"] == SS_TAG.removeprefix("survey-schema-v").split(".")[0] and lb["io.openit.service"] == "ops-feedback"
         assert "io.openit.turn-engine" not in lb and lb["io.openit.model-runtime"] == "n/a"      # 3.0.0: turn-engine 라벨이 없어졌다
         exposure = json.loads(lb["io.openit.exposure"])                 # 노출 선언 라벨(U47): 리포의 deploy-exposure.json 그대로
         assert not list(validator("Exposure").iter_errors(exposure))
@@ -121,9 +121,9 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
 
 
 @pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
-def test_survey_schema_label_comes_from_the_tree_that_was_installed_not_from_a_default(trees, tmp_path):
-    """U50: 라벨 io.openit.contracts.survey-schema는 이미지에 들어간 문진 스키마 패키지의 CONTRACT_VERSION에서 온다.
-    같은 버전 표지(pyproject)의 트리에서 CONTRACT_VERSION만 바꾸면 라벨이 따라 바뀌어야 한다(옛 기본값이면 안 바뀐다)."""
+def test_survey_schema_label_is_the_package_major_not_the_integer_contract_version(trees, tmp_path):
+    """U50(헤드 결정): 라벨 io.openit.contracts.survey-schema는 설치된 문진 스키마 패키지 버전의 주 번호다. 같은 트리에서 CONTRACT_VERSION만 7로 바꿔도
+    라벨은 패키지 주 번호 그대로여야 한다(CONTRACT_VERSION에서 읽으면 "7"이 된다)."""
     tree = tmp_path / "ss-modified"
     shutil.copytree(trees["survey_schema"], tree)
     (tree / "CONTRACT_VERSION").write_text("7\n")
@@ -132,6 +132,7 @@ def test_survey_schema_label_comes_from_the_tree_that_was_installed_not_from_a_d
     try:
         r = run(tmp_path, req, docker="docker")
         assert r.returncode == 0, r.stderr[-600:]
-        assert json.loads(r.stdout.strip().splitlines()[-1])["labels"]["io.openit.contracts.survey-schema"] == "7"
+        label = json.loads(r.stdout.strip().splitlines()[-1])["labels"]["io.openit.contracts.survey-schema"]
+        assert label == SS_TAG.removeprefix("survey-schema-v").split(".")[0] and label != "7"
     finally:
         subprocess.run(["docker", "rmi", "-f", "ops-feedback-buildtest:t43"], capture_output=True)

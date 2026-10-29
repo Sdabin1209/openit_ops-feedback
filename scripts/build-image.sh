@@ -55,7 +55,6 @@ if not pin_b or not pin_s:
 for name, want, pin in (("boundary", v["boundary"], pin_b.group(1)), ("survey_schema", v["survey_schema"], pin_s.group(1))):
     if want != pin:
         die(f"요청 versions.{name}({want})가 이 리포의 고정 버전({pin}, requirements.txt)과 다르다. 이미지는 고정 버전을 쓰므로 라벨을 찍지 않고 실패한다. 고정을 올리는 것은 영역의 일이다")
-sv = open(os.path.join(ssrc, "CONTRACT_VERSION"), encoding="utf-8").read().strip()      # 라벨 io.openit.contracts.survey-schema는 문진 스키마의 정수 계약 버전
 # 노출 선언(라벨 io.openit.exposure): 리포의 deploy-exposure.json이 정본이다. 계약 Exposure로 검증한 뒤 한 줄 JSON으로 라벨에 단다.
 try:
     exposure = json.load(open(os.path.join(here, "deploy-exposure.json"), encoding="utf-8"))
@@ -64,7 +63,7 @@ except (OSError, ValueError) as e:
 eerrs = [e for e in validator("Exposure").iter_errors(exposure)]
 if eerrs:
     die("deploy-exposure.json이 Exposure를 어긴다: " + "; ".join(f"{'.'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in eerrs[:3]))
-for k, val in dict(EXPOSURE=json.dumps(exposure, ensure_ascii=False, separators=(",", ":"), sort_keys=True), SRC_B=bsrc, SRC_S=ssrc, REV=req["revision"], BC=v["boundary"], SS_INT=sv, TAG=req["image_tag"]).items():
+for k, val in dict(EXPOSURE=json.dumps(exposure, ensure_ascii=False, separators=(",", ":"), sort_keys=True), SRC_B=bsrc, SRC_S=ssrc, REV=req["revision"], BC=v["boundary"], TAG=req["image_tag"]).items():
     print(f"{k}={shlex.quote(val)}")
 PYEOF
 )"
@@ -85,6 +84,14 @@ import glob, re, sys
 w = glob.glob("build/wheels/boundary_contracts-*.whl")
 m = re.match(r"boundary_contracts-([0-9]+\.[0-9]+\.[0-9]+)-", w[0].split("/")[-1]) if len(w) == 1 else None
 sys.exit("build-image: boundary-contracts wheel의 버전을 읽지 못했다") if not m else print("v" + m.group(1))
+PYEOF
+)
+# 라벨 io.openit.contracts.survey-schema는 문진 스키마 패키지(openit-survey-schema)의 주 번호다(2.0.0 -> 2). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다.
+SS_INT=$("$PY" - <<'PYEOF'
+import glob, re, sys
+w = glob.glob("build/wheels/openit_survey_schema-*.whl")
+m = re.match(r"openit_survey_schema-([0-9]+)\.[0-9]+\.[0-9]+-", w[0].split("/")[-1]) if len(w) == 1 else None
+sys.exit("build-image: 문진 스키마 wheel의 버전을 읽지 못했다") if not m else print(m.group(1))
 PYEOF
 )
 # 3) 이미지. 인자 이름은 이 영역의 Dockerfile이 정한다(여기에만 있다). model-runtime은 이 이미지에 들어 있지 않아 n/a다(turn-engine 라벨은 3.0.0에서 없어졌다).
