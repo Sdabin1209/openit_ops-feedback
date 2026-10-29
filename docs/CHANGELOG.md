@@ -1,5 +1,20 @@
 # 변경 이력
 
+## 0.16.3 (제안, U49: 승격된 계약 스키마의 영역 사본 정리)
+
+`docs/change-requests/` 아래 스키마 파일 53개를 분류해 모두 지웠다. `contract-ready/schemas/`의 6개는 계약 패키지(v2.7.0)의 `OpsFeedback*` 6개와 바이트까지 같은 것을 `cmp`로 확인했다.
+
+| 파일(묶음) | 분류 | 처리 | 근거 |
+| --- | --- | --- | --- |
+| `schemas/ops-feedback-{deidentified-trace,failurecase-ext,job-config,job-result,readyz,server-env}.schema.json` (6) | (가) 승격된 초안 | 지움 | 계약에 `OpsFeedbackDeidentifiedTrace` 등 같은 6개가 있다(D107). 초안은 이름만 다른 이전 단계 |
+| `schemas/examples/*.json` (4), `schemas/validate.py` (1) | 초안의 예시·검증 스크립트 | 지움 | 초안만 읽었다. 코드는 계약 validator를 쓴다(단위 3). 예시는 계약 `conformance/examples`에 있다 |
+| `contract-ready/schemas/OpsFeedback*.schema.json` (6) | (가) 계약 사본 | 지움 | 계약 패키지 스키마와 같다(cmp) |
+| `contract-ready/examples/valid/*.json` (12), `invalid/*.json` (21) | (가) 계약 예시 사본 | 지움 | 계약 `conformance/examples`, `examples_invalid`가 정본 |
+| `contract-ready/{MANIFEST.json,generate_examples.py,validate.py}` (3) | 승격 작업 도구 | 지움 | 승격이 끝났다(계약 `conformance/promoted/ops-feedback.MANIFEST.json`) |
+| (나) 계약에 없는 스키마 | 없음 | 남긴 것 없음 | 이 영역은 영역 소유 형식 스키마를 따로 두지 않았다 |
+
+이 사본을 읽는 시험·스크립트·문서 링크: 시험과 스크립트는 없었다. CR-007에 지운 사실을 적었고 README의 CR 개수 표기를 고쳤다.
+
 ## 0.16.2 (제안, U47)
 
 - 노출 선언 `deploy-exposure.json`(정본)과 이미지 라벨 `io.openit.exposure`(build-image.sh가 계약 Exposure로 검증해 단다). 시험이 파일과 라우트의 일치를 본다.

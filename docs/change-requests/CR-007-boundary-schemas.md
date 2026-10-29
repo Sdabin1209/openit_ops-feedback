@@ -1,6 +1,8 @@
 # CR-007: 영역 경계를 넘는 형식 6개의 스키마 초안 (점검 OF-01, OF-09, OF-11)
 
 상태: 제안(헤드 결정 필요). 작성: ops-feedback, 2026-10-28. 근거: 지시서 1의 B, 점검 보고서 `docs/audit/structure-rules-2026-10-28.md` 6절(E)과 OF-11.
+> U49(2026-10-30): 이 CR의 스키마 초안·예시·`validate.py`(`docs/change-requests/schemas/`, `contract-ready/`)는 계약 v2.x로 승격돼 사본이 됐으므로 지웠다(내용은 git 기록에 있다). 정본은 boundary-contracts 패키지의 `OpsFeedback*` 스키마이고 아래 본문의 경로는 당시 기록이다.
+
 이 CR은 **스키마 초안만** 낸다. 영역 코드는 아직 이 스키마를 쓰지 않는다(헤드가 계약에 올린 뒤의 다음 단계). 초안 파일은 `docs/change-requests/schemas/`에 있다.
 
 ## 검증 방법과 결과

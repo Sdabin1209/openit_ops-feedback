@@ -1,8 +1,0 @@
-{
-  "status": "ready",
-  "log_store": "memory",
-  "failure_store": "memory",
-  "supported_runtime_contract_versions": [
-    1
-  ]
-}

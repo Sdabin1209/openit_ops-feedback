@@ -137,5 +137,5 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | `docs/runbook.md` | 설치·실행, 환경 변수, 잡 설정 키, 비밀 NAME_FILE, 장애 대응 |
 | `docs/STATUS.md` | 한 일, 시험 결과, 남은 일 |
 | `docs/CHANGELOG.md` | 변경 이력 |
-| `docs/change-requests/` | 헤드에게 낸 변경 요청 CR-001~005 |
+| `docs/change-requests/` | 헤드에게 낸 변경 요청 CR-001~008 |
 | `CLAUDE.md` | 이 영역 에이전트용 지침 |
