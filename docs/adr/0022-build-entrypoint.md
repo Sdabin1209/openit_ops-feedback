@@ -14,6 +14,7 @@
 - 같은 요청 → 같은 이미지: wheel을 `SOURCE_DATE_EPOCH=315532800`(reproducible-builds의 표준 환경 변수, 값은 임의)로 만들어 같은 요청이 같은 wheel이 되는 것을 확인했다(해시 비교). 이미지 층(`RootFS.Layers`)은 같다. **이미지 ID는 같지 않다**: BuildKit이 설정에 시각을 넣어 같은 입력에도 매번 달라진다(실측). 시험은 층이 같음을 확인한다.
 - 이전 빌드와 같은지: 이전 deploy 블록은 `build_wheels.sh`(git archive + pip wheel) 뒤 `docker build`에 COMMIT, CONTRACTS_VERSION, SURVEY_SCHEMA_VERSION, TURN_ENGINE_VERSION=n/a, MODEL_RUNTIME_VERSION=n/a를 넘겼다. 같은 Dockerfile과 같은 인자를 넘기므로 이미지 내용과 라벨은 같다(라벨 값 비교 외에 이전 이미지와의 층 비교는 하지 않았다).
 - 옛 `scripts/build_wheels.sh`: 옛 deploy 스크립트가 아직 부르므로 남겨 두고 폐기 예정으로 표시했다. deploy가 새 진입점으로 바꾼 뒤 지운다.
+- wheel 빌드 방식: `pip wheel --no-deps --no-build-isolation`이다. 격리 빌드(PEP 517 기본)는 빌드 때마다 setuptools를 PyPI에서 받아야 해서, 계약이 빌드 중 네트워크를 쓰지 말라고 한 것과 어긋나고 같은 요청이 때에 따라 다른 빌드 도구로 만들어질 수 있다. 그래서 격리하지 않고 빌드 의존(`setuptools==84.2.1`, `wheel==0.48.0`)을 `requirements.txt`에 고정해 `scripts/setup-env.sh`가 설치한다(이미지용 `requirements.lock`에는 넣지 않는다). 깨끗한 clone에서 setup-env 없이 부르면 setuptools가 없어 실패했다(헤드 재현): 우연히 설치돼 있던 venv에서만 통과한 것이었다.
 - 검토한 대안: Dockerfile 안에서 이웃 태그를 받기(빌드 중 SSH 필요, 계약이 금지), 요청 검증을 bash로 직접 쓰기(손코드 중복).
 - 결과: 얻는 것은 deploy가 영역 내부(Dockerfile 인자, 산출 파일)를 몰라도 되는 것. 감수하는 것은 요청 검증에 쓰는 파이썬이 필요한 것(영역 `.venv` 또는 `PYTHON`, `jsonschema` 필요)과 위 이미지 ID 비재현.
 - 되돌리는 조건: 계약이 BuildImageRequest를 바꾸면 이 진입점을 따라 바꾼다.

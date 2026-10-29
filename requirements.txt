@@ -4,3 +4,6 @@ git+ssh://git@github.com/Sdabin1209/openit_boundary-contracts.git@v2.5.1
 openit-survey-schema @ git+ssh://git@github.com/Sdabin1209/openit_survey-service.git@survey-schema-v1.1.0#subdirectory=schema
 psycopg[binary]==3.3.6          # PostgreSQL 드라이버(운영 저장소). libpq 내장 wheel
 waitress==3.0.2               # WSGI 서버(ADR 0020)
+# scripts/build-image.sh가 wheel을 `pip wheel --no-build-isolation`으로 만들 때 쓰는 빌드 의존(ADR 0022). 이미지(requirements.lock)에는 넣지 않는다.
+setuptools==84.2.1
+wheel==0.48.0
