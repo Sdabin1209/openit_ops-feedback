@@ -64,13 +64,13 @@ def test_dismiss_and_reopen(env):
 def test_invalid_expected_cases(env):
     base, cid = env
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_PARSER})
-    assert st == 400 and "expected_kind" in e["message"]
+    assert st == 400 and "CaseReviewRequest" in e["message"]        # expected_kind 없음: 계약 스키마가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": {"items": "x"}, "expected_kind": "LORA_A"})
     assert st == 400 and "ActionExtraction" in e["message"]
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_PARSER, "expected_kind": "LORA_B"})
-    assert st == 400 and "ResponseText" in e["message"]            # 객체는 LORA_B의 정답(문자열)이 아니다
+    assert st == 400 and "CaseReviewRequest" in e["message"]       # 객체는 LORA_B의 정답(문자열)이 아니다: 계약 스키마가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_TEXT, "expected_kind": "LORA_A"})
-    assert st == 400 and "ActionExtraction" in e["message"]
+    assert st == 400 and "CaseReviewRequest" in e["message"]       # 문자열은 LORA_A의 정답(객체)이 아니다
     assert post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_TEXT, "expected_kind": "PARSER"})[0] == 400   # v1 값
     assert post(base, cid, {"review_status": "CONFIRMED", "expected": 7, "expected_kind": "LORA_B"})[0] == 400
     assert post(base, cid, {"review_status": "DISMISSED", "expected": GOOD_PARSER, "expected_kind": "LORA_A"})[0] == 400
@@ -126,7 +126,7 @@ def test_reviewed_input_rejections(env):
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "LORA_A", "reviewed_input": {"user_utterance": 1}})
     assert st == 400 and "ActionExtractionInput" in e["message"]
     st, e = post(base, cid, {"review_status": "CONFIRMED", "reviewed_input": GOOD_INPUT})
-    assert st == 400 and "expected_kind" in e["message"]
+    assert st == 400 and "CaseReviewRequest" in e["message"]
     # LORA_B용 입력(ResponseRequest)이 아니다
     assert post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "LORA_B", "reviewed_input": GOOD_INPUT})[0] == 400
     assert post(base, cid, {"review_status": "DISMISSED", "expected_kind": "LORA_A", "reviewed_input": GOOD_INPUT})[0] == 400
@@ -212,3 +212,31 @@ def test_lora_b_expected_string_and_request_roundtrip(env):
     assert post(base, cid, dict(body, reviewed_input=GOOD_INPUT))[0] == 400
     # 빈 문자열은 ResponseText(minLength 1) 위반
     assert post(base, cid, dict(body, expected=""))[0] == 400
+
+
+# ---- 요청 본문은 계약 CaseReviewRequest가 정한다 (U44: 손 검사 대신 validator) ----
+
+@pytest.mark.parametrize("body", [
+    {"review_status": "DISMISSED", "expected_kind": "LORA_B", "expected": GOOD_TEXT},      # 기각인데 정답을 보냄
+    {"review_status": "CONFIRMED", "expected": GOOD_PARSER},                                # expected_kind 없음
+    {"review_status": "CONFIRMED", "expected_kind": "LORA_A", "expected": GOOD_TEXT},      # LORA_A인데 문자열
+    {"review_status": "CONFIRMED", "expected_kind": "LORA_B", "expected": ""},             # LORA_B인데 빈 문자열
+    {"review_status": "CONFIRMED", "expected_kind": "PARSER", "expected": GOOD_PARSER},    # 없어진 종류
+    {"review_status": "MAYBE"},                                                             # 모르는 결정
+    {"review_status": "CONFIRMED", "surprise": 1},                                          # 모르는 키
+])
+def test_review_body_violating_the_contract_schema_is_rejected_400(env, body):
+    base, cid = env
+    st, rec = post(base, cid, body)
+    assert st == 400 and rec["code"] == "INVALID_RECORD"
+
+
+def test_review_body_contract_examples(env):
+    import os
+    from pathlib import Path
+    d = os.environ.get("OPENIT_CONFORMANCE_DIR")
+    if not d:
+        pytest.skip("OPENIT_CONFORMANCE_DIR 없음")
+    base, cid = env
+    for p in sorted((Path(d) / "examples_invalid").glob("CaseReviewRequest.*.json")):
+        assert post(base, cid, json.loads(p.read_text()))[0] == 400, p.name

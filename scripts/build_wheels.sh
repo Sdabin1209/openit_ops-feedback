@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 폐기 예정: deploy가 영역 빌드 진입점(scripts/build-image.sh, ADR 0022)으로 바꾸면 지운다. 그때까지 옛 build-images.sh가 이 스크립트를 부르므로 남겨 둔다(같은 일을 하는 경로가 둘이다).
 # 지정 태그 시점의 boundary-contracts와 문진 스키마 패키지 소스를 git archive로 꺼내 wheel을 만든다(docker 안 ssh가 어려워서).
 # 결과(build/wheels)는 빌드 산출물이라 커밋하지 않는다.
 set -euo pipefail

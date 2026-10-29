@@ -9,17 +9,28 @@ if ! $DOCKER info >/dev/null 2>&1; then
 fi
 IMG=ops-feedback-ingest:smoke-$$
 NAME=ops-feedback-smoke-$$
-COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
-bash scripts/build_wheels.sh >/dev/null
-CV=$(cat build/wheels/BOUNDARY_TAG)
-$DOCKER build -q -t $IMG --build-arg COMMIT="$COMMIT" --build-arg CONTRACTS_VERSION="$CV" \
-  --build-arg SURVEY_SCHEMA_VERSION="$(cat build/wheels/SURVEY_SCHEMA_VERSION)" .
-trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true' EXIT
+# 이미지는 영역 빌드 진입점(scripts/build-image.sh)으로 만든다. 요청의 버전은 requirements.txt 핀에서, 소스 트리는 이웃 리포의 그 태그에서 꺼낸다(deploy가 하는 일의 개발용 대역).
+WS=${WORKSPACE_DIR:-..}
+BC=$(sed -n 's/.*openit_boundary-contracts\.git@\([^ #]*\).*/\1/p' requirements.txt | head -1)
+SSTAG=$(sed -n 's/.*openit_survey-service\.git@\([^#]*\)#.*/\1/p' requirements.txt | head -1)
+DEPS=$(mktemp -d)
+git -C "$WS/boundary-contracts" archive "$BC" | { mkdir -p "$DEPS/bc" && tar -x -C "$DEPS/bc"; }
+git -C "$WS/survey-service" archive "$SSTAG" schema | { mkdir -p "$DEPS/ss" && tar -x -C "$DEPS/ss"; }
+PYBIN=${PYBIN:-.venv/bin/python}
+REQ="$DEPS/request.json"
+$PYBIN - "$REQ" "$DEPS" "$BC" "${SSTAG#survey-schema-}" "$(git rev-parse --short HEAD)" "$IMG" <<'PY'
+import json, sys
+path, deps, bc, ss, rev, img = sys.argv[1:]
+json.dump({"source_dir": __import__("os").getcwd(), "revision": rev, "versions": {"boundary": bc, "survey_schema": ss},
+           "dependency_sources": {"boundary": deps + "/bc", "survey_schema": deps + "/ss/schema"}, "image_tag": img}, open(path, "w"))
+PY
+bash scripts/build-image.sh "$REQ" | tail -1 | tee "$DEPS/result.json"
+trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $DEPS' EXIT
 # 비밀은 환경 변수가 아니라 파일로 준다(NAME_FILE, D84). docker inspect/exec env에 값이 보이지 않아야 한다.
 SECDIR=$(mktemp -d); chmod 755 $SECDIR
 printf 'smoke-token' > $SECDIR/ingest; printf 'synthetic-data=read-token' > $SECDIR/read; printf 'reviewer=review-token' > $SECDIR/review; printf 'smoke-salt-0123456789abcdef-0123456789abcdef' > $SECDIR/salt
 chmod 644 $SECDIR/*
-trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $SECDIR' EXIT
+trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $SECDIR $DEPS' EXIT
 $DOCKER run -d --name $NAME -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro \
   -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read -e OPS_REVIEW_TOKENS_FILE=/run/secrets/review \
   -e OPS_DEID_SALT_FILE=/run/secrets/salt $IMG >/dev/null

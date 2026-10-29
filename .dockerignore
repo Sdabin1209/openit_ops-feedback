@@ -5,3 +5,4 @@ data
 *.db
 tests
 docs
+build/src

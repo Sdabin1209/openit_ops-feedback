@@ -33,7 +33,7 @@
 | `config/job.example.yaml` | 잡 설정 예시(값은 사용자가 정한 기준이 아님) |
 | `tests/` | 수용 시험과 적합성 시험(`tests/fakes.py`는 이웃 대역) |
 | `examples/` | 입출력 예시 JSON |
-| `scripts/` | `smoke.sh`(이미지 스모크), `build_wheels.sh`(계약·문진 스키마 wheel), `make_examples.py` |
+| `scripts/` | `smoke.sh`(이미지 스모크), `build-image.sh`(영역 빌드 진입점), `build_wheels.sh`(폐기 예정), `make_examples.py` |
 | `Dockerfile` | ingest-api 이미지 |
 | `docs/` | 설계, 경계, 런북, 상태, 변경 이력, 변경 요청 |
 
@@ -93,7 +93,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황(2026-10-29, 0.15.1 제안, 이 WSL 한 환경, 계약 v2.4.1·문진 스키마 survey-schema-v1.1.0 설치, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): PostgreSQL 없이 `.venv/bin/python -m pytest -q` 567 통과 148 건너뜀, `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너) 714 통과 1 건너뜀, 0 실패. 두 번째 머신에서의 실행은 아직 하지 않았다.
+시험 현황(2026-10-29, 0.16.0 제안, 이 WSL 한 환경, 계약 v2.5.1·문진 스키마 survey-schema-v1.1.0 설치, 계약 예시 폴더는 `OPENIT_CONFORMANCE_DIR`로 지정): PostgreSQL 없이 `.venv/bin/python -m pytest -q` 596 통과 156 건너뜀(PostgreSQL 시험 등). 이전 PostgreSQL 포함 실행(714)은 이번에 다시 하지 않았다. 두 번째 머신에서의 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
@@ -121,6 +121,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0016](docs/adr/0016-pseudonym-hmac-sha256.md) | 의사 식별자는 HMAC-SHA256(키=salt) |
 | [0017](docs/adr/0017-salt-policy.md) | salt 32바이트 이상, 기동 때 길이 검사, 회전은 재가명화 절차 |
 | [0018](docs/adr/0018-numeric-values-provenance.md) | 숫자 값의 출처 분류(측정·표준·제약·임의), 값은 바꾸지 않음 |
+| [0022](docs/adr/0022-build-entrypoint.md) | 영역 빌드 진입점 scripts/build-image.sh(계약 2.5.0 U42) |
 | [0021](docs/adr/0021-yoyo-migrations.md) | 스키마는 yoyo-migrations(0001의 시작 DDL 대체) |
 | [0020](docs/adr/0020-wsgi-waitress.md) | WSGI 앱 + waitress(0010 대체) |
 | [0019](docs/adr/0019-reask-limit-from-trace.md) | 되묻기 한도 정지는 trace의 pause_reason을 읽는다(0012 결정 1 대체) |

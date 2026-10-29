@@ -46,6 +46,7 @@ from .schemas import supported_trace_versions
 
 log = logging.getLogger("ingest-api")
 _READYZ = validator("OpsFeedbackReadyz")
+_REVIEW_BODY = validator("CaseReviewRequest")
 HTTP_STATUS = {"NOT_FOUND": 404, "INVALID_RECORD": 400, "UNSUPPORTED_VERSION": 422, "CONFLICT": 409,
                "INTEGRITY_ERROR": 422, "FAILED_PRECONDITION": 412, "PERMISSION_DENIED": 403, "UNAVAILABLE": 503}
 MAX_BODY = 8 * 1024 * 1024
@@ -303,16 +304,11 @@ def make_app(store: LogStore, token: str, *, failures: Optional[FailureStoreImpl
                 body = json.loads(r.body(n))
             except (ValueError, UnicodeDecodeError, RecursionError):
                 raise BoundaryError("INVALID_RECORD", "JSON이 아니다") from None
-            if not isinstance(body, dict) or set(body) - {"review_status", "expected", "expected_kind", "reviewed_input"} or "review_status" not in body:
-                raise BoundaryError("INVALID_RECORD", "본문은 {review_status, expected?, expected_kind?}")
-            exp = body.get("expected")
-            if exp is not None and not isinstance(exp, (dict, str)):
-                raise BoundaryError("INVALID_RECORD", "expected는 객체(LORA_A) 또는 문자열(LORA_B)")
-            ri = body.get("reviewed_input")
-            if ri is not None and not isinstance(ri, dict):
-                raise BoundaryError("INVALID_RECORD", "reviewed_input은 객체")
-            if exp is None and ri is None and body.get("expected_kind") is not None:
-                raise BoundaryError("INVALID_RECORD", "expected_kind는 expected 또는 reviewed_input과 함께만 쓴다")
+            # 본문의 키·형식은 계약 CaseReviewRequest가 정한다(손으로 같은 검사를 되풀이하지 않는다, R7). expected 내용 검증은 ReviewQueue의 일이다.
+            if bad := list(_REVIEW_BODY.iter_errors(body)):
+                raise BoundaryError("INVALID_RECORD", "본문이 CaseReviewRequest를 어긴다: " + "; ".join(
+                    f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in bad[:3]))
+            exp, ri = body.get("expected"), body.get("reviewed_input")
             before = failures.get_case(case_id)                       # 없으면 NOT_FOUND(404)
             rec = queue.review(case_id, body["review_status"], role, expected=exp, expected_kind=body.get("expected_kind"), reviewed_input=ri, reviewed_by=user)
             validate_record("FailureCase", rec)

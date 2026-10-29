@@ -1,5 +1,11 @@
 # 변경 이력
 
+## 0.16.0 (제안, U42·U44, 계약 v2.5.1)
+
+- 영역 빌드 진입점 `scripts/build-image.sh`(계약 BuildImageRequest/Result, ADR 0022). `smoke.sh`가 이것으로 이미지를 만든다. `build_wheels.sh`는 폐기 예정.
+- 검토 게시 본문의 키·형식 검사를 계약 `CaseReviewRequest` validator로 교체(손 검사 제거). 거부 상태는 같은 400이고 오류 메시지가 `CaseReviewRequest` 위반으로 바뀌는 경우가 있다.
+- 계약 핀 v2.5.1, 예시의 `pipeline_schema_version` "2.5"로 재생성.
+
 ## 0.15.1 (제안, 단위 4a-B, ADR 0021)
 
 - 시작 때 DDL을 yoyo-migrations 버전 마이그레이션으로 교체(log.db, failures.db 둘 다, SQLite·PostgreSQL). 기존 DB는 그대로 받아들인다. SQLite `:memory:` 경로는 더 이상 열 수 없다.

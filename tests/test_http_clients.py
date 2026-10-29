@@ -128,7 +128,12 @@ def test_missing_env_for_factory_arg(tmp_path, gate, cfg):
 @pytest.fixture
 def ours(failure_store, tmp_path):
     from test_conformance_failurestore import case
-    failure_store.put_trace("tr-1", {"session_id": "p-x", "turn_id": "p-y"})
+    # 계약 클라이언트(2.5.1)가 get_trace 응답을 OpsFeedbackDeidentifiedTrace로 검증하므로 장난감 dict가 아니라 실제 비식별 결과를 쓴다
+    from conftest import base_config, make_trace
+    from ops_feedback.deid import Deidentifier, DeidPolicy
+    global REAL_TRACE
+    REAL_TRACE = Deidentifier(DeidPolicy.from_config(base_config()["deid"]), "test-salt-0123456789abcdef-0123456789abcdef").deidentify(envelope(make_trace())).trace
+    failure_store.put_trace("tr-1", REAL_TRACE)
     for i in range(3):
         failure_store.publish_case(case(f"fc-{i}", failure_type="A" if i < 2 else "B"))
     failure_store.publish_case(case("fc-0", version=2, review_status="CONFIRMED", created_at="2026-10-16T00:00:00Z"))
@@ -171,7 +176,7 @@ def test_failure_store_client_reads(ours):
         if cur is None:
             break
     assert sorted(seen) == ["fc-0", "fc-1", "fc-2"]
-    assert fs.get_trace("tr-1") == {"session_id": "p-x", "turn_id": "p-y"}
+    assert fs.get_trace("tr-1") == REAL_TRACE
     with pytest.raises(BoundaryError) as x:
         fs.get_trace("zzz")
     assert x.value.code == "NOT_FOUND"
