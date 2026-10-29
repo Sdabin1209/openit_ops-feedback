@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.16.2 (제안, U47)
+
+- 노출 선언 `deploy-exposure.json`(정본)과 이미지 라벨 `io.openit.exposure`(build-image.sh가 계약 Exposure로 검증해 단다). 시험이 파일과 라우트의 일치를 본다.
+- `FailureCase.ext["ops-feedback"]`(잡·검토 게시가 쓴 것)가 계약 `OpsFeedbackFailureCaseExt`를 지키고 계약이 이름 붙인 키 밖을 쓰지 않는다는 것을 시험으로 확인(`tests/test_failurecase_ext.py`). 실행 코드는 바꾸지 않았다.
+
 ## 0.16.1 (제안, U43, 계약 v2.6.0)
 
 - `scripts/setup-env.sh`가 표준 출력 마지막 줄에 계약 `SetupEnvReport` 한 줄(area, status, exit_code, seconds, environment{kind, path, test_command})을 낸다. pip 등 진행 기록은 표준 오류로 옮겼다. 실패해도 `status: fail` 보고를 낸 뒤 종료 1. 재시도 대기는 `SETUP_ENV_RETRY_WAIT`(기본 10초)로 줄일 수 있다.

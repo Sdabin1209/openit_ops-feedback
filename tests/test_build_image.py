@@ -98,6 +98,9 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert lb["io.openit.revision"] == "0123abc" and lb["io.openit.contracts.boundary"] == BC_TAG
         assert lb["io.openit.contracts.survey-schema"] == "1" and lb["io.openit.service"] == "ops-feedback"
         assert lb["io.openit.turn-engine"] == "n/a" and lb["io.openit.model-runtime"] == "n/a"
+        exposure = json.loads(lb["io.openit.exposure"])                 # 노출 선언 라벨(U47): 리포의 deploy-exposure.json 그대로
+        assert not list(validator("Exposure").iter_errors(exposure))
+        assert exposure == json.loads((ROOT / "deploy-exposure.json").read_text(encoding="utf-8"))
         def layers():
             out = subprocess.run(["docker", "image", "inspect", "ops-feedback-buildtest:t42", "--format", "{{json .RootFS.Layers}}"], capture_output=True, text=True)
             return json.loads(out.stdout)
