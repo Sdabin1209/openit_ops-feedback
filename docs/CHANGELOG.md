@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.16.1 (제안, U43, 계약 v2.6.0)
+
+- `scripts/setup-env.sh`가 표준 출력 마지막 줄에 계약 `SetupEnvReport` 한 줄(area, status, exit_code, seconds, environment{kind, path, test_command})을 낸다. pip 등 진행 기록은 표준 오류로 옮겼다. 실패해도 `status: fail` 보고를 낸 뒤 종료 1. 재시도 대기는 `SETUP_ENV_RETRY_WAIT`(기본 10초)로 줄일 수 있다.
+- 계약 핀 v2.6.0, 예시의 `pipeline_schema_version` "2.6"으로 재생성.
+
 ## 0.16.0 (제안, U42·U44, 계약 v2.5.1)
 
 - 영역 빌드 진입점 `scripts/build-image.sh`(계약 BuildImageRequest/Result, ADR 0022). `smoke.sh`가 이것으로 이미지를 만든다. `build_wheels.sh`는 폐기 예정.

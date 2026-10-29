@@ -14,7 +14,7 @@ from boundary_contracts import validator
 
 ROOT = Path(__file__).resolve().parents[1]
 WS = Path(os.environ.get("WORKSPACE_DIR") or ROOT.parent)
-BC_TAG, SS_TAG = "v2.5.1", "survey-schema-v1.1.0"
+BC_TAG, SS_TAG = "v2.6.0", "survey-schema-v1.1.0"
 SCRIPT = ROOT / "scripts" / "build-image.sh"
 
 
