@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeidStats",
+  "description": "비식별 통계: 처리 종류별 건수와 가려진·버려진 경로(값은 싣지 않는다).",
+  "type": "object",
+  "properties": {
+    "masked_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dropped_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "masked_paths",
+    "dropped_paths"
+  ],
+  "additionalProperties": {
+    "type": "integer",
+    "minimum": 0
+  }
+}

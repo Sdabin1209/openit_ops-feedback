@@ -1,0 +1,26 @@
+{
+  "deid": {
+    "keep_pause_reason": true
+  },
+  "detection": {
+    "detectors": [
+      {
+        "type": "rule",
+        "rules": [
+          {
+            "id": "REASK_STREAK"
+          }
+        ]
+      }
+    ]
+  },
+  "release_reader": {
+    "factory": "a:b",
+    "args": {
+      "token": {
+        "secret": "T"
+      },
+      "base_url_env": "X"
+    }
+  }
+}

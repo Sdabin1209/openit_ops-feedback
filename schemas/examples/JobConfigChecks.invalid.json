@@ -1,0 +1,8 @@
+{
+  "release_reader": {
+    "factory": "a:b",
+    "args": {
+      "api_token": "abc"
+    }
+  }
+}

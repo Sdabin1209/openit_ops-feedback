@@ -1,72 +1,64 @@
-"""설정 파일 로더. 비식별 기준, 보관 기간, 분류체계, 롤백 기준은 사용자가 정하므로 코드에 기본값이 없다."""
+"""설정 읽기(업무 규칙 없음). 비식별 기준, 보관 기간, 분류체계, 롤백 기준은 사용자가 정하므로 코드에 기본값이 없다.
+받아들이는 조건은 모두 스키마가 정한다: 계약 OpsFeedbackJobConfig(키·형식·범위, 모르는 키 거부)와 영역 스키마 JobConfigChecks(비밀 직접 기입 금지, REASK_STREAK 조합)."""
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
-from typing import Any
 
 import yaml
 from boundary_contracts import validator
 
-SECRET_KEY_PARTS = ("token", "secret", "password", "credential", "api_key", "authorization", "private_key")
+from .wiring.validate import brief, validator as area_validator
 
 
-def check_inline_secrets(value: Any, path: str = "config") -> None:
-    """키 이름이 비밀처럼 보이는데 문자열 값이 직접 적혀 있으면 시작을 거부한다(D84).
-    허용: {secret: NAME} / {env: NAME}(이름만), 이름만 받는 `*_env` 키. 오류에는 키 경로만 싣고 값은 싣지 않는다."""
-    if isinstance(value, dict):
-        if set(value) in ({"secret"}, {"env"}):
-            return
-        for k, v in value.items():
-            low = str(k).lower()
-            if isinstance(v, str) and not low.endswith("_env") and any(p in low for p in SECRET_KEY_PARTS):
-                raise ValueError(f"설정 {path}.{k}: 비밀 값을 설정 파일에 직접 적을 수 없다. "
-                                 f"비밀은 NAME_FILE로 주고 설정에는 {{secret: NAME}}만 쓴다")
-            check_inline_secrets(v, f"{path}.{k}")
-    elif isinstance(value, list):
-        for i, v in enumerate(value):
-            check_inline_secrets(v, f"{path}[{i}]")
+def _path(e) -> str:
+    out = ""
+    for p in e.absolute_path:
+        out += f"[{p}]" if isinstance(p, int) else (("." if out else "") + str(p))
+    return out or "<root>"
 
 
-FOREVER = "forever"
-# 출처: D88/U4 최소 보존 잠정 기본값(원본 30일, 사례 180일, 기록 1년). docs/adr/0007-retention-defaults.md
-# failed_raw_days(재시도 대상 DEID_FAILED·PUBLISH_FAILED 원본의 기한)는 기본값이 없다: 적지 않으면 raw_days를 따른다(raw_days가 forever면 forever).
-# 근거 없는 별도 숫자를 채우면 운영자가 정한 raw_days보다 먼저(또는 forever인데도) 재처리 대상이 지워진다(점검 round3 M1). docs/adr/0007.
-RETENTION_DEFAULTS = {"raw_days": 30, "cases_days": 180, "metrics_days": 365}
-
-
-def _brief(e) -> str:
-    # 왜: 위반 값이 비밀일 수 있어 경로와 규칙 종류만 낸다(값은 싣지 않는다).
-    return f"{'.'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}"
+def _check(v, cfg, what: str) -> None:
+    # 왜 값을 싣지 않나: 위반 값이 비밀일 수 있어 경로와 규칙 종류만 낸다.
+    errs = sorted(v.iter_errors(cfg), key=lambda e: list(map(str, e.absolute_path)))
+    if errs:
+        hint = " (비밀은 NAME_FILE로 주고 설정에는 {secret: NAME}만 쓴다)" if what == "JobConfigChecks" else ""
+        raise ValueError(f"설정이 {what} 스키마를 어긴다: " + "; ".join(_path(e) + ": " + e.validator for e in errs[:5]) + hint)
 
 
 def load_config(path: str | Path) -> dict:
     cfg = yaml.safe_load(Path(path).read_text("utf-8"))
     if not isinstance(cfg, dict):
         raise ValueError("설정 파일이 객체가 아니다")
-    check_inline_secrets(cfg)
-    # 키·형식·범위는 계약 스키마가 정한다(OpsFeedbackJobConfig, 모르는 키는 어디서나 거부). 손으로 같은 검사를 되풀이하지 않는다(R7).
-    errs = sorted(validator("OpsFeedbackJobConfig").iter_errors(cfg), key=lambda e: list(map(str, e.absolute_path)))
-    if errs:
-        raise ValueError("설정이 OpsFeedbackJobConfig 스키마를 어긴다: " + "; ".join(_brief(e) for e in errs[:5]))
-    # 조합 검사(스키마로 표현하지 못하는 불변식): REASK_STREAK은 trace의 pause_reason을 읽는데(ADR 0019) 비식별이 그것을 지우면 아무것도 못 잡는 조용한 실패가 된다.
-    rules = [r for d in cfg["detection"]["detectors"] if d.get("type") == "rule" for r in d.get("rules", [])]
-    if any(r["id"] == "REASK_STREAK" and r.get("enabled", True) for r in rules) and not cfg["deid"].get("keep_pause_reason", False):
-        raise ValueError("REASK_STREAK 규칙이 켜져 있는데 deid.keep_pause_reason이 꺼져 있다: 비식별이 pause_reason을 지워 이 규칙은 아무것도 잡지 못한다. "
-                         "deid.keep_pause_reason: true로 하거나 REASK_STREAK을 끈다(ADR 0019)")
-    ret = cfg["retention"]
-    # D88/U4 최소 보존 기본값: 처리 끝난 원본 30일, 비식별 실패 사례 180일, 기록 1년. 키를 생략하면 기본값(null은 스키마가 거부한다: 기본 무기한 금지).
-    # 무기한이 정말 필요하면 명시적으로 "forever"를 쓴다(시작 때마다 경고).
-    for key in RETENTION_DEFAULTS:
-        ret.setdefault(key, RETENTION_DEFAULTS[key])
+    _check(area_validator("JobConfigChecks"), cfg, "JobConfigChecks")
+    _check(validator("OpsFeedbackJobConfig"), cfg, "OpsFeedbackJobConfig")
     return cfg
 
 
 def validate_server_env(environ) -> None:
-    """서버 환경 변수 중 OPS_ 접두 변수를 OpsFeedbackServerEnv로 검증한다(모르는 이름은 거부: 오타로 보관 경고·검토자 신원 필수가 조용히 꺼지는 것을 막는다).
-    범위(0 초과 3600 이하 등)는 스키마가 모양만 보므로 각 읽는 곳이 검사한다."""
+    """서버 환경 변수 중 OPS_ 접두 변수를 OpsFeedbackServerEnv로 검증한다(모르는 이름은 거부: 오타로 보관 경고·검토자 신원 필수가 조용히 꺼지는 것을 막는다)."""
     env = {k: v for k, v in environ.items() if k.startswith("OPS_")}
-    errs = list(validator("OpsFeedbackServerEnv").iter_errors({"env": env}))
-    if errs:
-        bad = sorted(k for k in env if not validator("OpsFeedbackServerEnv").is_valid({"env": {k: env[k]}}))
+    v = validator("OpsFeedbackServerEnv")
+    if list(v.iter_errors({"env": env})):
+        bad = sorted(k for k in env if not v.is_valid({"env": {k: env[k]}}))
         # 값은 비밀일 수 있어 변수 이름만 낸다
-        raise ValueError("환경 변수가 OpsFeedbackServerEnv 스키마를 어긴다: " + ", ".join(bad or [_brief(e) for e in errs[:3]]))
+        raise ValueError("환경 변수가 OpsFeedbackServerEnv 스키마를 어긴다: " + ", ".join(bad or ["<root>"]))
+
+
+def parse_read_tokens(spec: str) -> dict[str, str]:
+    """'역할=토큰,역할=토큰' -> {토큰: 역할}"""
+    out: dict[str, str] = {}
+    for part in filter(None, (x.strip() for x in spec.split(","))):
+        role, sep, tok = part.partition("=")
+        if not sep or not role or not tok:
+            raise ValueError("OPS_READ_TOKENS 형식은 역할=토큰,역할=토큰")
+        out[tok] = role
+    return out
+
+
+class JsonFormatter(logging.Formatter):
+    """한 줄 JSON. 메시지의 따옴표·개행을 이스케이프해 요청 경로로 로그 줄을 위조할 수 없다."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps({"ts": self.formatTime(record), "lvl": record.levelname, "msg": record.getMessage()}, ensure_ascii=False)

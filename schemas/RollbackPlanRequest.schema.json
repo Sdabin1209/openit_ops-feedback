@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RollbackPlanRequest",
+  "description": "롤백 요청 조립 입력. request_id는 (현재, 되돌릴, 포인터 버전)에서만 정해진다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "now": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "from_release_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "to_release_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "pointer_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "assessment": {
+      "$ref": "RollbackAssessment.schema.json"
+    },
+    "policy": {
+      "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/rollback"
+    }
+  },
+  "required": [
+    "now",
+    "from_release_id",
+    "to_release_id",
+    "pointer_version",
+    "assessment",
+    "policy"
+  ]
+}

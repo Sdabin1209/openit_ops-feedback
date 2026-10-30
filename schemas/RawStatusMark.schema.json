@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RawStatusMark",
+  "description": "원본 행의 처리 표시. 처리 표시가 있는 원본만 보존 기한에 지운다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "turn_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "status": {
+      "enum": [
+        "DONE_CASE",
+        "NO_FAILURE",
+        "DEID_FAILED",
+        "PUBLISH_FAILED"
+      ]
+    },
+    "config_hash": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Hash"
+    },
+    "processed_at": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    }
+  },
+  "required": [
+    "session_id",
+    "turn_id",
+    "status",
+    "config_hash",
+    "processed_at"
+  ]
+}

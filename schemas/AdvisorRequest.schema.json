@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AdvisorRequest",
+  "description": "운영자에게 알릴 설정 상태 계산 입력(오류가 아니라 경고).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "retention": {
+      "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/retention"
+    },
+    "unvalidated_keep_keys": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "oldest_unprocessed_received_at": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "raw_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "purge_unprocessed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "retention"
+  ]
+}

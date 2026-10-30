@@ -1,0 +1,9 @@
+{
+  "detections": [
+    {
+      "rule_id": "RESPONSE_FALLBACK",
+      "method": "RULE",
+      "detail": {}
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaseBuildResult",
+  "description": "조립 결과: FailureCase(version 1)와 저장할 비식별 trace와 그 참조.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "case": {
+      "$ref": "../boundary/FailureCase.schema.json"
+    },
+    "trace_ref": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "trace": {
+      "$ref": "../boundary/OpsFeedbackDeidentifiedTrace.schema.json"
+    }
+  },
+  "required": [
+    "case",
+    "trace_ref",
+    "trace"
+  ]
+}

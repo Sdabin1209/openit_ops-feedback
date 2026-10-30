@@ -1,0 +1,16 @@
+{
+  "deid": {},
+  "detection": {
+    "detectors": [
+      {
+        "type": "rule",
+        "rules": [
+          {
+            "id": "REASK_STREAK",
+            "enabled": false
+          }
+        ]
+      }
+    ]
+  }
+}

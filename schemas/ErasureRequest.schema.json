@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ErasureRequest",
+  "description": "세션 삭제 대상 찾기 입력.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_pseudonym": {
+      "$ref": "Pseudonym.schema.json"
+    }
+  },
+  "required": [
+    "session_id",
+    "session_pseudonym"
+  ]
+}

@@ -1,11 +1,11 @@
 import pytest
 
 from fakes import FakeGate, FakeReleaseReader
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
-from ops_feedback.rollback import RollbackPlanner
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.log_store import LogStore
+from ops_feedback.wiring.rollback_flow import RollbackPlanner
 from conftest import envelope, make_trace, pii_trace
-from ops_feedback.job import run_once
+from ops_feedback.wiring.pipeline import run_once
 
 POLICY = {"window_hours": 24, "min_turns": 4, "max_failure_rate": 0.2, "counted_review_statuses": ["PENDING", "CONFIRMED"],
           "requested_by_role": "ops-feedback", "auto_submit": True}
@@ -18,7 +18,7 @@ def build(pipeline, fail_n, ok_n, reader=None, gate=None, policy=POLICY):
     for i in range(ok_n):
         pipeline["log"].send(envelope(make_trace("s", f"o{i}"), release_id="rel-0002", sent_at=NOW))
     run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"],
-             detectors=pipeline["detectors"], classifier=pipeline["classifier"], clock=lambda: "2026-10-14T12:00:00Z",
+             detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"], classifier=pipeline["classifier"], clock=lambda: "2026-10-14T12:00:00Z",
              evaluate_rollback=False)
     return RollbackPlanner(store=pipeline["store"], log=pipeline["log"], release_reader=reader or FakeReleaseReader(["rel-0002", "rel-0001"], "rel-0002"),
                            gate=gate, policy=policy, clock=lambda: NOW)

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DetectRequest",
+  "description": "탐지기의 입력: 비식별을 마친 trace(원본은 오지 않는다).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "deid_trace": {
+      "$ref": "../boundary/OpsFeedbackDeidentifiedTrace.schema.json"
+    }
+  },
+  "required": [
+    "deid_trace"
+  ]
+}

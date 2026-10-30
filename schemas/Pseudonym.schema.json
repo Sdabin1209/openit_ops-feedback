@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pseudonym",
+  "description": "의사 식별자(HMAC-SHA256 앞 128비트 16진). ADR 0016.",
+  "type": "string",
+  "pattern": "^p-[0-9a-f]{32}$"
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PredecessorResult",
+  "description": "found=true면 previous가 있다. false면 목록을 더 읽어야 하거나 되돌릴 릴리스가 없다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "found": {
+      "type": "boolean"
+    },
+    "previous": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "found"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "found": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "previous"
+        ],
+        "properties": {
+          "previous": {
+            "$ref": "../boundary/_common.schema.json#/$defs/Id"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeidRequest",
+  "description": "비식별 처리기의 입력: 원본 봉투 하나. 정책은 처리기를 만들 때 정한다(OpsFeedbackJobConfig의 deid).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "envelope": {
+      "$ref": "../boundary/TraceEnvelope.schema.json"
+    }
+  },
+  "required": [
+    "envelope"
+  ]
+}

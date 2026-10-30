@@ -1,0 +1,24 @@
+{
+  "now": "2026-10-30T00:00:00Z",
+  "release_id": "rel-0002",
+  "total_turns": 200,
+  "cases": [
+    {
+      "failure_type": "T-FALLBACK",
+      "review_status": "PENDING",
+      "created_at": "2026-10-30T00:00:00Z",
+      "pause_reason": "RISK"
+    }
+  ],
+  "policy": {
+    "window_hours": 24,
+    "min_turns": 100,
+    "max_failure_rate": 0.05,
+    "counted_review_statuses": [
+      "PENDING",
+      "CONFIRMED"
+    ],
+    "requested_by_role": "ops",
+    "auto_submit": false
+  }
+}

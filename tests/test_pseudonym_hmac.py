@@ -4,8 +4,13 @@ import hashlib
 import hmac
 import json
 
-from ops_feedback import admin
-from ops_feedback.deid import pseudonym_of
+from ops_feedback.components import pseudonymizer
+from ops_feedback.wiring import admin_flow as admin
+
+
+def pseudonym_of(salt, key, value):
+    return pseudonymizer.pseudonymize({"salt": salt, "key": key, "value": value})
+
 
 SALT = "unit-test-salt-0123456789abcdef0123456789abcdef"
 

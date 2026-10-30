@@ -16,9 +16,9 @@ from boundary_contracts.errors import BoundaryError
 
 from conftest import envelope, make_trace, pii_trace
 from fakes import FakeReleaseReader
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.job import run_once
-from ops_feedback.rollback import RollbackPlanner
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.pipeline import run_once
+from ops_feedback.wiring.rollback_flow import RollbackPlanner
 from test_conformance_failurestore import case as mk_case, TRACE
 
 NOW = "2026-10-15T00:00:00Z"
@@ -99,7 +99,7 @@ def upstream():
 
 
 def run(p, planner, cfg=None, **kw):
-    return run_once(cfg=cfg or p["cfg"], log=p["log"], store=p["store"], deid=p["deid"], detectors=p["detectors"],
+    return run_once(cfg=cfg or p["cfg"], log=p["log"], store=p["store"], deid=p["deid"], detector=p["detector"], pseudonymize=p["pseudonymize"],
                     classifier=p["classifier"], clock=lambda: "2026-10-14T12:00:00Z", planner=planner, **kw)
 
 
@@ -197,7 +197,7 @@ def test_release_read_fault_is_bounded_visible_and_does_not_lose_cases(pipeline,
     assert upstream.posts == []                                           # 읽지 못하면 롤백 요청도 만들지 않는다
     upstream.mode.clear()
     # 정상 복구 뒤에는 포인터를 읽는다(이 가짜는 list_releases를 주지 않으므로 이어지는 단계는 보지 않는다)
-    assert pl._rr.get_active_pointer()["release_id"] == "rel-0002"
+    assert pl._rr.active_pointer()["release_id"] == "rel-0002"
 
 
 def test_rollback_evaluation_has_overall_deadline(pipeline):
@@ -227,7 +227,7 @@ def test_release_read_down_for_question_set_is_tried_once_per_run(pipeline):
             Down.calls += 1
             raise BoundaryError("UNAVAILABLE", "x")
 
-    rep = run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detectors=pipeline["detectors"],
+    rep = run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"],
                    classifier=pipeline["classifier"], clock=lambda: NOW, release_reader=Down())
     assert Down.calls == 1 and rep.cases_published == 3
 

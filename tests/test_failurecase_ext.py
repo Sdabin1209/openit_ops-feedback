@@ -5,9 +5,10 @@ from boundary_contracts import schema_dir, validator
 import json
 
 from conftest import envelope, make_trace, pii_trace
-from ops_feedback.deid import Deidentifier, DeidPolicy
-from ops_feedback.job import run_once
-from ops_feedback.review import ReviewQueue
+from ops_feedback.components.deidentifier import DeidPolicy
+from tdeid import Deidentifier
+from ops_feedback.wiring.pipeline import run_once
+from ops_feedback.wiring.review_flow import ReviewFlow as ReviewQueue
 from test_pause_reason import SIG, orch
 
 SCHEMA = json.loads((schema_dir() / "OpsFeedbackFailureCaseExt.schema.json").read_text(encoding="utf-8"))
@@ -22,7 +23,7 @@ def check(ext: dict) -> None:
 
 
 def run(p, **kw):
-    return run_once(cfg=p["cfg"], log=p["log"], store=p["store"], deid=p["deid"], detectors=p["detectors"],
+    return run_once(cfg=p["cfg"], log=p["log"], store=p["store"], deid=p["deid"], detector=p["detector"], pseudonymize=p["pseudonymize"],
                     classifier=p["classifier"], clock=p["clock"], evaluate_rollback=False, **kw)
 
 

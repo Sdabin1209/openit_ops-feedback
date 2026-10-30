@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ErasureTargets",
+  "description": "비식별 trace에서 찾을 session_id 값들(의사 식별자와 원래 값: 정책에 session_id 의사화가 없으면 원래 값이 남아 있다).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "trace_session_keys": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "trace_session_keys"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RollbackPlan",
+  "description": "롤백 요청(계약)과 근거 지표 스냅샷. 지표의 evidence_refs는 metric_id를 가리킨다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "request": {
+      "$ref": "../boundary/RollbackRequest.schema.json"
+    },
+    "metric": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "request",
+    "metric"
+  ]
+}

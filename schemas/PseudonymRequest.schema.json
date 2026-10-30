@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PseudonymRequest",
+  "description": "의사 식별자 계산 입력. 이 값은 로그·오류에 싣지 않는다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "salt": {
+      "type": "string",
+      "minLength": 1
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "value": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "salt",
+    "key",
+    "value"
+  ]
+}

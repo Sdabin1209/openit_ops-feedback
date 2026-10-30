@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReconcileDecision",
+  "description": "PUBLISH 새로 게시, EXISTING 이미 있다(같거나 검토가 진행됨), SKIPPED_DIFF 설정이 바뀌어 달라졌으나 기존 PENDING을 건드리지 않는다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "PUBLISH",
+        "EXISTING",
+        "SKIPPED_DIFF"
+      ]
+    }
+  },
+  "required": [
+    "action"
+  ]
+}

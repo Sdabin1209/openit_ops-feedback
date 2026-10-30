@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TraceIntakeRequest",
+  "description": "수집 업무의 입력: 받은 TraceEnvelope와 받은 시각, 지원하는 문진 스키마 버전 목록.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "envelope": {
+      "$ref": "../boundary/TraceEnvelope.schema.json"
+    },
+    "received_at": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "supported_versions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    }
+  },
+  "required": [
+    "envelope",
+    "received_at",
+    "supported_versions"
+  ]
+}

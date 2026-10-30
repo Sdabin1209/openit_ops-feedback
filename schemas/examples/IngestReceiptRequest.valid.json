@@ -1,0 +1,93 @@
+{
+  "record": {
+    "session_id": "s-001",
+    "turn_id": "t-004",
+    "release_id": "rel-0002",
+    "received_at": "2026-10-30T00:00:00Z",
+    "envelope": {
+      "pipeline_schema_version": "3.1",
+      "release_id": "rel-0002",
+      "runtime_contract_version": 1,
+      "session_id": "s-001",
+      "turn_id": "t-004",
+      "sent_at": "2026-10-14T00:00:00Z",
+      "trace": {
+        "session_id": "s-001",
+        "turn_id": "t-004",
+        "contract_version": 1,
+        "frontend_message": {
+          "session_id": "s-001",
+          "kind": "UTTERANCE",
+          "utterance": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요"
+        },
+        "intervention_decision": null,
+        "orchestrator_input": null,
+        "extract_input": {
+          "question_id": "Q1",
+          "current_question": "혈압이 어떻게 되시나요?",
+          "user_utterance": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요",
+          "state": {
+            "Q1": {
+              "sys": {
+                "value": 120,
+                "status": "ANSWERED"
+              }
+            }
+          }
+        },
+        "extract_output": {
+          "values": [
+            {
+              "key": "Q1.sys",
+              "value": 120,
+              "precision": "exact",
+              "status": "ANSWERED",
+              "save": true
+            }
+          ],
+          "action": "NEXT",
+          "next_item": "Q2",
+          "reason": "홍길동님 혈압",
+          "targets": [],
+          "note": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요"
+        },
+        "extract_attempts": 1,
+        "extract_status": "OK",
+        "extract_protections": {
+          "R1": 1
+        },
+        "validation_ok": true,
+        "validation_violations": [],
+        "response_input": {
+          "action": "NEXT",
+          "topic": "혈압",
+          "next": {
+            "id": "Q2",
+            "text": "홍길동님 다음 질문"
+          }
+        },
+        "response_output": "홍길동님 알겠습니다",
+        "response_outcome": "fallback",
+        "response_protections": {
+          "R2": 2
+        },
+        "frontend_input": null,
+        "staff_console_input": null,
+        "dispatch_input": null,
+        "dispatch_output": null,
+        "orchestrator_output": null,
+        "session_before": null,
+        "session_after": null,
+        "log_entry": null,
+        "persistence_load_request": null,
+        "persistence_load_result": null,
+        "persistence_commit_request": null,
+        "persistence_commit_result": null,
+        "turn_index": 0
+      }
+    },
+    "envelope_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "is_new": false,
+  "first_received_at": "2026-10-29T00:00:00Z"
+}

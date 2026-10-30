@@ -188,7 +188,7 @@ def test_job_exits_nonzero_when_database_frozen(tmp_path, request, frozen_pg):
 
 def test_invalid_timeout_setting_is_rejected(monkeypatch):
     from boundary_contracts.errors import BoundaryError
-    from ops_feedback import pgbase
+    from ops_feedback.wiring import pgbase
     monkeypatch.setenv("OPS_DB_STATEMENT_TIMEOUT", "0")
     with pytest.raises(BoundaryError):
         pgbase._setting("OPS_DB_STATEMENT_TIMEOUT")
@@ -201,7 +201,7 @@ def test_invalid_timeout_setting_is_rejected(monkeypatch):
 
 def test_read_and_review_are_bounded_when_database_frozen_and_review_is_retry_safe(tmp_path, request, frozen_pg):
     """D5(I7 읽기)와 D6(검토 게시)의 DB 무응답: 상한 안에 503, 반쯤 쓴 상태 없이 같은 요청을 다시 보내면 한 번만 반영된다."""
-    from ops_feedback.failurestore import FailureStoreImpl
+    from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
     from test_conformance_failurestore import TRACE, case
     log_url, fail_url = _pg_schema_url(request), _pg_schema_url(request)
     seed = FailureStoreImpl.postgres(fail_url)

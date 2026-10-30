@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PredecessorRequest",
+  "description": "되돌릴 릴리스를 찾는 입력: 최신부터의 릴리스 ID 목록(목록 페이지를 이어 붙인 것).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "current": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "release_ids": {
+      "type": "array",
+      "items": {
+        "$ref": "../boundary/_common.schema.json#/$defs/Id"
+      }
+    }
+  },
+  "required": [
+    "current",
+    "release_ids"
+  ]
+}

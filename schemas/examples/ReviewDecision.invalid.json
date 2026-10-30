@@ -1,0 +1,8 @@
+{
+  "review_status": "DISMISSED",
+  "reviewer_role": "reviewer",
+  "reviewed_by": "kim1",
+  "expected_kind": "LORA_B",
+  "expected": "안녕하세요",
+  "note": "확인"
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PurgeCutoffs",
+  "description": "관리 도구 purge가 지울 기준.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "raw_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cases_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "metrics_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "include_confirmed": {
+      "type": "boolean"
+    },
+    "include_unprocessed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "raw_cutoff",
+    "cases_cutoff",
+    "metrics_cutoff",
+    "include_confirmed",
+    "include_unprocessed"
+  ]
+}

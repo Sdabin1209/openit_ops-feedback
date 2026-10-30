@@ -1,0 +1,7 @@
+{
+  "masked_strings": 3,
+  "masked_paths": [
+    "extract_input.user_utterance"
+  ],
+  "dropped_paths": []
+}

@@ -7,7 +7,7 @@ import sys
 import yaml
 
 from conftest import envelope, make_trace, pii_trace, base_config
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.log_store import LogStore
 
 
 def test_cli_run_once_twice(tmp_path):

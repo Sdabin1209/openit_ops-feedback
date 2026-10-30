@@ -1,0 +1,30 @@
+{
+  "now": "2026-10-30T00:00:00Z",
+  "from_release_id": "rel-0002",
+  "to_release_id": "rel-0001",
+  "pointer_version": 3,
+  "assessment": {
+    "verdict": "EXCEEDED",
+    "window_start": "2026-10-29T00:00:00Z",
+    "total_turns": 200,
+    "failures": 20,
+    "rate": 0.1,
+    "by_failure_type": {
+      "T-FALLBACK": 20
+    },
+    "by_pause_reason": {
+      "RISK": 1
+    }
+  },
+  "policy": {
+    "window_hours": 24,
+    "min_turns": 100,
+    "max_failure_rate": 0.05,
+    "counted_review_statuses": [
+      "PENDING",
+      "CONFIRMED"
+    ],
+    "requested_by_role": "ops",
+    "auto_submit": false
+  }
+}

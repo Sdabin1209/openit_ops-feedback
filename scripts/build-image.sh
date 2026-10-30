@@ -78,6 +78,13 @@ for t in boundary survey-schema; do
   "$PY" -m pip wheel -q --no-deps --no-build-isolation -w build/wheels "build/src/$t" >&2
 done
 
+# 통신 기반 openit-link(D118)는 BuildImageRequest의 dependency_sources에 자리가 없어(계약이 모른다) requirements.txt의 고정 태그로 직접 wheel을 만든다.
+# 왜 호스트에서 만드나: docker 안에는 ssh 키가 없다(위의 wheel들과 같은 이유). 의존(boundary-contracts 등)은 위에서 만든 wheel과 requirements.lock이 채우므로 --no-deps.
+LINK_REQ=$(sed -n 's/^openit-link @ //p' requirements.txt | head -1)
+[ -n "$LINK_REQ" ] || { log "requirements.txt에서 openit-link 고정을 읽지 못했다"; exit 2; }
+log "wheel: openit-link ($LINK_REQ)"
+"$PY" -m pip wheel -q --no-deps --no-build-isolation -w build/wheels "$LINK_REQ" >&2 || "$PY" -m pip wheel -q --no-deps -w build/wheels "$LINK_REQ" >&2
+
 # 라벨 값은 방금 만든 wheel의 실제 버전에서 읽는다(요청 값을 그대로 찍지 않는다). 위 검사로 요청·고정·소스 트리는 이미 같다.
 BC=$("$PY" - <<'PYEOF'
 import glob, re, sys

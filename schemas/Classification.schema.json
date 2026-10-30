@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Classification",
+  "description": "분류 결과.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "failure_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "primary_rule": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "failure_type",
+    "primary_rule"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewHeaders",
+  "description": "검토 게시 요청의 헤더 값. X-Openit-User는 Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "user": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    }
+  },
+  "required": []
+}

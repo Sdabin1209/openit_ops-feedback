@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReconcileRequest",
+  "description": "같은 case_id의 version 1이 이미 있는지 대조하는 입력.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "existing": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/FailureCase.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "candidate": {
+      "$ref": "../boundary/FailureCase.schema.json"
+    }
+  },
+  "required": [
+    "existing",
+    "candidate"
+  ]
+}

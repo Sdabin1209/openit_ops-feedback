@@ -8,9 +8,10 @@ import urllib.request
 import pytest
 
 from conftest import envelope, make_trace
-from ops_feedback.api import make_server, parse_read_tokens
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
+from ops_feedback.config import parse_read_tokens
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.log_store import LogStore
 from test_conformance_failurestore import case
 
 
@@ -81,13 +82,13 @@ def test_tokens_are_separated(srv):
 
 
 def test_publish_not_exposed(srv):
-    assert call(srv, "/v1/cases", method="POST", body=b"{}")[0] == 404
+    assert call(srv, "/v1/cases", method="POST", body=b"{}")[0] == 405
 
 
 def test_response_schema_is_failurecase(srv):
-    from ops_feedback.schemas import validate_record
+    from ops_feedback.wiring.validate import check
     for c in call(srv, "/v1/cases")[1]["items"]:
-        validate_record("FailureCase", c)
+        check("FailureCase", c, contract=True)
 
 
 def test_read_surface_off_without_store():

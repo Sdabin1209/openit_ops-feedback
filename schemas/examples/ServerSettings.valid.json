@@ -1,0 +1,11 @@
+{
+  "port": 8080,
+  "max_connections": 64,
+  "readyz_cache_seconds": 1.5,
+  "tokens": [
+    "a",
+    "b"
+  ],
+  "retention_declared": true,
+  "require_reviewer_identity": true
+}

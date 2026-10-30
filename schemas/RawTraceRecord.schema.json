@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RawTraceRecord",
+  "description": "로그 저장소(원본)에 한 행으로 들어가는 수집 기록. 만드는 곳: trace_intake. 읽는 곳: raw_log_store.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "turn_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "release_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "received_at": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "envelope": {
+      "$ref": "../boundary/TraceEnvelope.schema.json"
+    },
+    "envelope_hash": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Hash"
+    }
+  },
+  "required": [
+    "session_id",
+    "turn_id",
+    "release_id",
+    "received_at",
+    "envelope",
+    "envelope_hash"
+  ]
+}

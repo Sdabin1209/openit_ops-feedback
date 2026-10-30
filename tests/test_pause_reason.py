@@ -5,10 +5,11 @@ import pytest
 
 from conftest import base_config, envelope, make_trace
 from test_detect import ext, log_entry
-from ops_feedback.deid import Deidentifier, DeidPolicy
-from ops_feedback.detect import RuleDetector, pause_reason_of
-from ops_feedback.job import run_once
-from ops_feedback.rollback import RollbackPlanner
+from ops_feedback.components.deidentifier import DeidPolicy
+from tdeid import Deidentifier
+from ops_feedback.components.failure_detector import RuleDetector, pause_reason_of
+from ops_feedback.wiring.pipeline import run_once
+from ops_feedback.wiring.rollback_flow import RollbackPlanner
 from fakes import FakeReleaseReader
 
 SIG = {"session_id": "s-1", "write_committed": "COMMITTED", "staff_alert": "DELIVERED"}
@@ -50,7 +51,7 @@ def test_old_trace_without_field_is_compatible():
     assert "pause_reason" not in out["orchestrator_output"]["turn_failure_signal"]
     assert pause_reason_of(out) is None
     (d,) = RuleDetector([{"id": "TURN_FAILURE_SIGNAL"}]).detect(out)
-    assert "pause_reason" not in d.detail
+    assert "pause_reason" not in d["detail"]
 
 
 def test_policy_off_drops_it_and_fingerprint_differs():
@@ -82,19 +83,19 @@ RULES = [{"id": "TURN_FAILURE_SIGNAL"}, {"id": "REASK_STREAK", "params": {"thres
 def test_reask_limit_turn_is_one_detection_not_two():
     out = RuleDetector(RULES).detect(streak_trace("REASK_LIMIT"))
     (d,) = out
-    assert d.rule_id == "TURN_FAILURE_SIGNAL"
-    assert d.detail["pause_reason"] == "REASK_LIMIT" and d.detail["service_escalated"] is True
+    assert d["rule_id"] == "TURN_FAILURE_SIGNAL"
+    assert d["detail"]["pause_reason"] == "REASK_LIMIT" and d["detail"]["service_escalated"] is True
 
 
 def test_risk_pause_with_streak_is_only_the_signal():
     out = RuleDetector(RULES).detect(streak_trace("RISK"))
-    assert {d.rule_id for d in out} == {"TURN_FAILURE_SIGNAL"}
-    assert not any(d.detail.get("service_escalated") for d in out)
+    assert {d["rule_id"] for d in out} == {"TURN_FAILURE_SIGNAL"}
+    assert not any(d["detail"].get("service_escalated") for d in out)
 
 
 def test_old_trace_without_pause_reason_has_no_streak_detection():
     out = RuleDetector(RULES).detect(streak_trace(None))
-    assert {d.rule_id for d in out} == {"TURN_FAILURE_SIGNAL"}
+    assert {d["rule_id"] for d in out} == {"TURN_FAILURE_SIGNAL"}
 
 
 def test_reask_limit_streak_without_signal_keeps_streak_detection():
@@ -102,7 +103,7 @@ def test_reask_limit_streak_without_signal_keeps_streak_detection():
     t["orchestrator_output"] = orch(None)
     t["log_entry"] = log_entry(turn_failure_signal=dict(SIG, pause_reason="REASK_LIMIT"))
     (d,) = RuleDetector([{"id": "REASK_STREAK", "params": {"threshold": 3}}]).detect(t)
-    assert d.detail["service_escalated"] is True
+    assert d["detail"]["service_escalated"] is True
 
 
 def test_case_and_metrics_carry_reason(pipeline):
@@ -112,7 +113,7 @@ def test_case_and_metrics_carry_reason(pipeline):
     for i, r in enumerate(["RISK", "REASK_LIMIT", "REASK_LIMIT", None]):
         t = make_trace("s", f"t{i}", orchestrator_output=orch(dict(SIG, pause_reason=r) if r else dict(SIG)))
         pipeline["log"].send(envelope(t, release_id="rel-0002", sent_at=now))
-    run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detectors=pipeline["detectors"],
+    run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"],
              classifier=pipeline["classifier"], clock=lambda: "2026-10-14T12:00:00Z", evaluate_rollback=False)
     items, _ = pipeline["store"].list_cases(source_release_id="rel-0002", cursor=None, limit=50)
     reasons = sorted(str(((c.get("ext") or {}).get("ops-feedback") or {}).get("pause_reason")) for c in items)
@@ -131,7 +132,7 @@ def test_policy_change_does_not_rewrite_existing_case(pipeline):
     now = "2026-10-15T00:00:00Z"
     t = make_trace("s", "t0", orchestrator_output=orch(dict(SIG, pause_reason="RISK")))
     pipeline["log"].send(envelope(t, release_id="rel-0002", sent_at=now))
-    kw = dict(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], detectors=pipeline["detectors"],
+    kw = dict(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"],
               classifier=pipeline["classifier"], clock=lambda: now, evaluate_rollback=False)
     off = run_once(deid=pipeline["deid"], **kw)                                   # 기본 정책(끔)
     assert off.cases_published == 1

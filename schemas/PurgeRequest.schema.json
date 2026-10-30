@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PurgeRequest",
+  "description": "관리 도구 purge 입력. 기간은 사용자가 정하며 기본값이 없어 하나 이상 있어야 한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "now": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "raw_days": {
+      "type": "number",
+      "minimum": 0
+    },
+    "cases_days": {
+      "type": "number",
+      "minimum": 0
+    },
+    "metrics_days": {
+      "type": "number",
+      "minimum": 0
+    },
+    "include_confirmed": {
+      "type": "boolean"
+    },
+    "include_unprocessed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "now",
+    "include_confirmed",
+    "include_unprocessed"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "raw_days"
+      ]
+    },
+    {
+      "required": [
+        "cases_days"
+      ]
+    },
+    {
+      "required": [
+        "metrics_days"
+      ]
+    }
+  ]
+}

@@ -3,8 +3,15 @@ import json
 import pytest
 
 from conftest import FAKE_PII, envelope, make_trace, pii_trace, base_config
-from ops_feedback.schemas import validate_trace
-from ops_feedback.deid import MASK, DROPPED, DeidError, Deidentifier, DeidPolicy
+import survey_schema
+from jsonschema import Draft202012Validator
+
+
+def validate_trace(version, trace):
+    Draft202012Validator(survey_schema.load_schema("TurnTrace", version)).validate(trace)
+
+from ops_feedback.components.deidentifier import MASK, DROPPED, DeidError, DeidPolicy
+from tdeid import Deidentifier
 
 
 def deid(cfg=None):
@@ -107,7 +114,7 @@ def test_scrub_options_are_gone_in_3_0_0():
     for key, val in (("scrub_string_keys", ["utterance"]), ("scrub_patterns", {"PHONE": r"0\d{1,2}-\d{3,4}-\d{4}"})):
         cfg = base_config()
         cfg["deid"][key] = val
-        with pytest.raises(ValueError, match=key):
+        with pytest.raises(ValueError, match="deid 설정"):
             DeidPolicy.from_config(cfg["deid"])
 
 
@@ -121,7 +128,7 @@ def test_policy_has_no_defaults():
 def test_unlisted_drop_action_is_gone_in_3_0_0():
     cfg = base_config()
     cfg["deid"]["unlisted_string_action"] = "drop"
-    with pytest.raises(ValueError, match="mask만"):
+    with pytest.raises(ValueError, match="deid 설정"):
         DeidPolicy.from_config(cfg["deid"])
 
 
@@ -200,7 +207,7 @@ def _leaves(defs: dict, node: dict, path: str, out: set, seen=()) -> None:
 
 def test_every_new_key_leaf_is_classified():
     import json as _j
-    from ops_feedback.schemas import trace_schema
+    from ops_feedback.components.deidentifier import trace_schema
     defs = trace_schema(1)["$defs"]
     props = defs["TurnTrace"]["properties"]
     found: set = set()
@@ -332,7 +339,7 @@ def test_count_map_key_pattern_is_fixed_to_the_contract_pattern_and_fingerprint(
     t = make_trace(extract_protections={"G5": 1, "abc": 2})
     r = deid(_cfg_counts()).deidentify(envelope(t)).trace
     assert r["extract_protections"] == {"G5": 1}                      # 계약 CountMap 키 패턴 ^[A-Z][A-Z0-9_]{0,31}$ 밖의 키는 버린다
-    with pytest.raises(ValueError, match="count_map_key_pattern"):
+    with pytest.raises(ValueError, match="deid 설정"):
         DeidPolicy.from_config(_cfg_counts(count_map_key_pattern=r"[a-z]{3}")["deid"])
     assert DeidPolicy.from_config(base_config()["deid"]).fingerprint() != DeidPolicy.from_config(_cfg_counts()["deid"]).fingerprint()
 

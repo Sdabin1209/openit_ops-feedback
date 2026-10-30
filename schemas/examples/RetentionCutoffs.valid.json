@@ -1,0 +1,9 @@
+{
+  "raw_cutoff": "2026-09-30T00:00:00Z",
+  "failed_raw_cutoff": "2026-09-30T00:00:00Z",
+  "cases_cutoff": null,
+  "metrics_cutoff": "2025-10-30T00:00:00Z",
+  "purge_unprocessed": false,
+  "cases_purge_confirmed": true,
+  "minimize_raw": false
+}

@@ -4,6 +4,7 @@ WORKDIR /src
 COPY build/wheels /wheels
 COPY pyproject.toml requirements.lock /src/
 COPY src /src/src
+COPY schemas /src/schemas
 RUN pip install --no-cache-dir --prefix=/install -r requirements.lock \
  && pip install --no-cache-dir --prefix=/install --no-deps /wheels/*.whl /src
 

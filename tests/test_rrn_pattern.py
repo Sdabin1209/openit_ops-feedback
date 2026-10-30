@@ -5,7 +5,7 @@ import re
 import pytest
 import yaml
 
-from ops_feedback.review import DEFAULT_REVIEW_PATTERNS
+from ops_feedback.components.review_decider import DEFAULT_REVIEW_PATTERNS
 
 EXAMPLE = yaml.safe_load(open("config/job.example.yaml", encoding="utf-8"))["deid"]["residual_patterns"]["rrn_kr"]
 

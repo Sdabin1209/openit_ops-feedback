@@ -9,10 +9,11 @@ from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts.clients import HttpFailureStore
 
 from conftest import envelope, pii_trace
-from ops_feedback.api import make_server, parse_read_tokens
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.job import run_once
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
+from ops_feedback.config import parse_read_tokens
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.pipeline import run_once
+from ops_feedback.wiring.log_store import LogStore
 
 GOOD_PARSER = {"action": "NEXT", "next_item": "END", "values": []}      # LORA_A 출력(ActionExtraction)
 GOOD_TEXT = "혈압약은 지금도 드시고 계신가요?"                          # LORA_B 출력(ResponseText)
@@ -22,7 +23,7 @@ GOOD_TEXT = "혈압약은 지금도 드시고 계신가요?"                    
 def env(pipeline):
     pipeline["log"].send(envelope(pii_trace("s-1", "t-1"), release_id="rel-0002"))
     run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"],
-             detectors=pipeline["detectors"], classifier=pipeline["classifier"], clock=pipeline["clock"])
+             detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"], classifier=pipeline["classifier"], clock=pipeline["clock"])
     (c,), _ = pipeline["store"].list_cases()
     s = make_server(LogStore.memory(), "ingest-tok", "127.0.0.1", 0, failures=pipeline["store"],
                     read_tokens=parse_read_tokens("synthetic-data=read-tok"),
@@ -66,7 +67,7 @@ def test_invalid_expected_cases(env):
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_PARSER})
     assert st == 400 and "CaseReviewRequest" in e["message"]        # expected_kind 없음: 계약 스키마가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": {"items": "x"}, "expected_kind": "LORA_A"})
-    assert st == 400 and "ActionExtraction" in e["message"]
+    assert st == 400 and "expected" in e["message"]
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_PARSER, "expected_kind": "LORA_B"})
     assert st == 400 and "CaseReviewRequest" in e["message"]       # 객체는 LORA_B의 정답(문자열)이 아니다: 계약 스키마가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_TEXT, "expected_kind": "LORA_A"})
@@ -124,7 +125,7 @@ def test_reviewed_input_without_expected(env):
 def test_reviewed_input_rejections(env):
     base, cid = env
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "LORA_A", "reviewed_input": {"user_utterance": 1}})
-    assert st == 400 and "ActionExtractionInput" in e["message"]
+    assert st == 400 and "reviewed_input" in e["message"]
     st, e = post(base, cid, {"review_status": "CONFIRMED", "reviewed_input": GOOD_INPUT})
     assert st == 400 and "CaseReviewRequest" in e["message"]
     # LORA_B용 입력(ResponseRequest)이 아니다
@@ -160,7 +161,7 @@ def test_reviewed_by_header_and_fallback(env):
 def test_invalid_user_header(env, bad):
     base, cid = env
     st, e = post_h(base, cid, {"review_status": "DISMISSED"}, user=bad)
-    assert st == 400 and "X-Openit-User" in e["message"]
+    assert st == 400 and "ReviewHeaders" in e["message"]
     assert HttpFailureStore(base, "read-tok").get_case(cid)["version"] == 1
 
 

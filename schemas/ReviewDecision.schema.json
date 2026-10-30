@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewDecision",
+  "description": "검토 결정. 상태·정답·종류의 조건부 필수와 정답 형식(종류별 계약 타입)을 모두 여기서 정한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "review_status",
+    "reviewer_role"
+  ],
+  "properties": {
+    "review_status": {
+      "enum": [
+        "CONFIRMED",
+        "DISMISSED",
+        "PENDING"
+      ]
+    },
+    "reviewer_role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewed_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "failure_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "expected_kind": {
+      "enum": [
+        "LORA_A",
+        "LORA_B"
+      ]
+    },
+    "expected": {
+      "$ref": "#/$defs/Bounded"
+    },
+    "reviewed_input": {
+      "$ref": "#/$defs/Bounded"
+    }
+  },
+  "dependentRequired": {
+    "expected": [
+      "expected_kind"
+    ],
+    "reviewed_input": [
+      "expected_kind"
+    ]
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "review_status": {
+            "enum": [
+              "DISMISSED",
+              "PENDING"
+            ]
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "expected"
+              ]
+            },
+            {
+              "required": [
+                "reviewed_input"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "expected_kind"
+        ]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "expected"
+            ]
+          },
+          {
+            "required": [
+              "reviewed_input"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "expected_kind"
+        ],
+        "properties": {
+          "expected_kind": {
+            "const": "LORA_A"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "expected": {
+            "$ref": "../boundary/ActionExtraction.schema.json"
+          },
+          "reviewed_input": {
+            "$ref": "../boundary/ActionExtractionInput.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "expected_kind"
+        ],
+        "properties": {
+          "expected_kind": {
+            "const": "LORA_B"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "expected": {
+            "$ref": "../boundary/ResponseText.schema.json"
+          },
+          "reviewed_input": {
+            "$ref": "../boundary/ResponseRequest.schema.json"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Bounded": {
+      "description": "검토자가 쓴 값: 문자열 하나는 20000자 이하(ADR 0008의 임의 상한, 측정 안 함). 깊이·개인정보 패턴은 스키마 밖 조건 표.",
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 20000
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Bounded"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Bounded"
+          }
+        }
+      ]
+    }
+  }
+}

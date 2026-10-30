@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RetentionCutoffs",
+  "description": "지울 기준 시각(null이면 지우지 않는다)과 지우는 방식.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "raw_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "failed_raw_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cases_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "metrics_cutoff": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "purge_unprocessed": {
+      "type": "boolean"
+    },
+    "cases_purge_confirmed": {
+      "type": "boolean"
+    },
+    "minimize_raw": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "raw_cutoff",
+    "failed_raw_cutoff",
+    "cases_cutoff",
+    "metrics_cutoff",
+    "purge_unprocessed",
+    "cases_purge_confirmed",
+    "minimize_raw"
+  ]
+}

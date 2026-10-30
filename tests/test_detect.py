@@ -1,6 +1,7 @@
 import pytest
 
-from ops_feedback.detect import Classifier, Detection, Detector, RuleDetector, build_detectors
+from ops_feedback.components.failure_detector import Detector, RuleDetector, build_detectors, make_detection
+from ops_feedback.components.failure_classifier import FailureClassifier as Classifier
 from conftest import make_trace
 
 
@@ -9,7 +10,7 @@ def test_rules_fire_on_structural_fields():
     t = make_trace(response_output="[MASKED]", response_outcome="fallback",
                    persistence_commit_result={"session_id": "p", "status": "DB_ERROR", "write_outcome": "UNKNOWN", "revision": None, "detail": "[MASKED]"},
                    orchestrator_output={"turn_failure_signal": {"session_id": "p", "write_committed": "NOT_COMMITTED", "staff_alert": "NONE"}})
-    assert {x.rule_id for x in d.detect(t)} == {"RESPONSE_FALLBACK", "COMMIT_ERROR", "TURN_FAILURE_SIGNAL"}
+    assert {x["rule_id"] for x in d.detect(t)} == {"RESPONSE_FALLBACK", "COMMIT_ERROR", "TURN_FAILURE_SIGNAL"}
     assert d.detect(make_trace()) == []
 
 
@@ -25,21 +26,22 @@ def test_failed_steps_with_v2_step_values(phase, step):
     d = RuleDetector([{"id": "TURN_FAILED_STEPS"}])
     t = make_trace(log_entry=log_entry(turn_result={"failed_steps": [{"phase": phase, "step": step}]}))
     (x,) = d.detect(t)
-    assert x.detail == {"steps": [f"{phase}:{step}"]}
+    assert x["detail"] == {"steps": [f"{phase}:{step}"]}
     assert d.detect(make_trace(log_entry=log_entry(turn_result="COMMITTED"))) == []
     assert d.detect(make_trace(log_entry=log_entry(turn_result="NOT_APPLICABLE"))) == []
 
 
 def test_failed_steps_survive_deid_unchanged():
     """비식별을 거쳐도 failed_steps(열거값)와 commit 상태는 남아 규칙이 읽는다."""
-    from ops_feedback.deid import Deidentifier, DeidPolicy
+    from ops_feedback.components.deidentifier import DeidPolicy
+    from tdeid import Deidentifier
     from conftest import base_config, envelope
     t = make_trace(log_entry=log_entry(turn_result={"failed_steps": [{"phase": "AFTER_COMMIT", "step": "LoRA-B"}]}),
                    persistence_commit_result={"session_id": "s", "status": "DB_ERROR", "write_outcome": "NOT_APPLIED", "revision": "r", "detail": None},
                    orchestrator_output=None)
     out = Deidentifier(DeidPolicy.from_config(base_config()["deid"]), "salt").deidentify(envelope(t)).trace
     d = RuleDetector([{"id": "TURN_FAILED_STEPS"}, {"id": "COMMIT_ERROR"}])
-    assert {x.rule_id for x in d.detect(out)} == {"TURN_FAILED_STEPS", "COMMIT_ERROR"}
+    assert {x["rule_id"] for x in d.detect(out)} == {"TURN_FAILED_STEPS", "COMMIT_ERROR"}
 
 
 def log_entry(**over):
@@ -62,7 +64,7 @@ V = [{"key": "Q1.a", "value": "[MASKED]", "precision": "exact", "status": "ANSWE
 def test_extract_failed_by_status(status):
     d = RuleDetector([{"id": "EXTRACT_FAILED"}])
     (x,) = d.detect(make_trace(extract_status=status, extract_attempts=2, extract_output=None))
-    assert x.detail == {"reason": "STATUS", "status": status, "attempts": 2}
+    assert x["detail"] == {"reason": "STATUS", "status": status, "attempts": 2}
 
 
 def test_extract_failed_by_empty_values():
@@ -73,7 +75,7 @@ def test_extract_failed_by_empty_values():
     assert d.detect(make_trace(extract_output=ext("REASK", values=V), **ok)) == []
     for action in ("NEXT", "REASK", "CONFIRM", "HOLD"):
         (x,) = d.detect(make_trace(extract_output=ext(action), **ok))
-        assert x.detail == {"reason": "EMPTY_VALUES"}
+        assert x["detail"] == {"reason": "EMPTY_VALUES"}
     # 비발화 턴(추출 없음)은 해당 없음
     assert d.detect(make_trace()) == []
     assert d.detect(make_trace(extract_status=None, extract_output=None)) == []
@@ -93,16 +95,20 @@ def streak_trace(history, current="REASK", q="Q1"):
                                       "dispatch_log": []})
 
 
-def test_reask_streak_rule_is_enabled_without_params_and_disabled_rule_is_silent():
-    # 연속 횟수는 다시 세지 않는다(tests/test_reask_from_trace.py). 규칙은 params 없이 켜지고, 끈 규칙은 아무것도 내지 않는다
-    RuleDetector([{"id": "REASK_STREAK"}])
-    assert RuleDetector([{"id": "REASK_STREAK", "enabled": False}]).detect(make_trace()) == []
+def test_reask_streak_rule_needs_contract_params_and_disabled_rule_is_silent():
+    # 연속 횟수는 다시 세지 않는다(tests/test_reask_from_trace.py). 다만 계약 OpsFeedbackJobConfig가 아직 params.threshold를 요구한다(CR-009): 없으면 스키마가 거부한다.
+    with pytest.raises(ValueError):
+        RuleDetector([{"id": "REASK_STREAK"}])
+    P = {"threshold": 3, "actions": ["REASK"]}
+    RuleDetector([{"id": "REASK_STREAK", "params": P}])
+    assert RuleDetector([{"id": "REASK_STREAK", "enabled": False, "params": P}]).detect(make_trace()) == []
 
 
-@pytest.mark.parametrize("old,new", [("PARSER_EMPTY", "EXTRACT_FAILED"), ("UNRECOGNIZED_STREAK", "REASK_STREAK")])
-def test_retired_rule_names_fail_with_replacement(old, new):
+@pytest.mark.parametrize("old", ["PARSER_EMPTY", "UNRECOGNIZED_STREAK"])
+def test_retired_rule_names_are_rejected_by_schema(old):
+    # 없어진 규칙은 계약 OpsFeedbackJobConfig의 RuleId 열거에 없어 스키마가 거부한다(대체 이름 안내는 CHANGELOG·ADR 0015·0019)
     for enabled in (True, False):
-        with pytest.raises(ValueError, match=new):
+        with pytest.raises(ValueError):
             RuleDetector([{"id": old, "enabled": enabled, "params": {"threshold": 3}}])
 
 
@@ -122,13 +128,13 @@ def test_unknown_rule():
 def test_pluggable_detector():
     from tests_plugin import make
     ds = build_detectors([{"factory": "tests_plugin:make"}])
-    assert isinstance(ds[0], Detector) and ds[0].detect({})[0].rule_id == "CUSTOM"
+    assert isinstance(ds[0], Detector) and ds[0].detect({})[0]["rule_id"] == "CUSTOM"
 
 
 def test_classifier_config_driven():
-    c = Classifier({"default_failure_type": "UNCLASSIFIED", "rule_to_type": {"B": "TYPE-B"}, "priority": ["A", "B"]})
-    assert c.classify([Detection("B"), Detection("Z")]).failure_type == "TYPE-B"
-    assert c.classify([Detection("Z")]).failure_type == "UNCLASSIFIED"
+    c = Classifier({"default_failure_type": "UNCLASSIFIED", "rule_to_type": {"COMMIT_ERROR": "TYPE-B"}, "priority": ["TURN_FAILURE_SIGNAL", "COMMIT_ERROR"]})
+    assert c.classify({"detections": [make_detection("COMMIT_ERROR", {}), make_detection("Z", {})]})["failure_type"] == "TYPE-B"
+    assert c.classify({"detections": [make_detection("Z", {})]})["failure_type"] == "UNCLASSIFIED"
     with pytest.raises(ValueError):
         Classifier({})
 
@@ -141,7 +147,7 @@ def test_hold_skip_with_values_is_normal_and_without_values_is_failure(action):
     unknown = [{"key": "Q1.a", "value": None, "precision": "unspecified", "status": "UNKNOWN", "save": False}]
     assert d.detect(make_trace(extract_output=ext(action, values=unknown), **ok)) == []        # 정상 행동은 실패가 아니다
     (x,) = d.detect(make_trace(extract_output=ext(action), **ok))                              # targets가 가리킬 values가 없다 = 계약 위반
-    assert x.detail == {"reason": "EMPTY_VALUES"}
+    assert x["detail"] == {"reason": "EMPTY_VALUES"}
 
 
 def test_example_config_enables_both_rules():
@@ -156,7 +162,7 @@ def test_example_config_enables_both_rules():
     assert not d.detect(streak_trace([("REASK", "Q1")] * 5))                              # 횟수는 다시 세지 않는다: pause_reason이 없으면 사례 없음
 
 
-def test_retired_generator_fallback_name_is_rejected_with_replacement():
+def test_retired_generator_fallback_name_is_rejected():
     import pytest
-    with pytest.raises(ValueError, match="RESPONSE_FALLBACK"):
+    with pytest.raises(ValueError):
         RuleDetector([{"id": "GENERATOR_FALLBACK"}])

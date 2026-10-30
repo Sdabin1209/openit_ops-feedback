@@ -5,12 +5,12 @@ import json
 from boundary_contracts.errors import BoundaryError
 
 from conftest import FAKE_PII, envelope, make_trace, pii_trace
-from ops_feedback.job import run_once
-from ops_feedback.review import ReviewQueue
+from ops_feedback.wiring.pipeline import run_once
+from ops_feedback.wiring.review_flow import ReviewFlow as ReviewQueue
 
 
 def run(p, **kw):
-    return run_once(cfg=p["cfg"], log=p["log"], store=p["store"], deid=p["deid"], detectors=p["detectors"],
+    return run_once(cfg=p["cfg"], log=p["log"], store=p["store"], deid=p["deid"], detector=p["detector"], pseudonymize=p["pseudonymize"],
                     classifier=p["classifier"], clock=p["clock"], **kw)
 
 
@@ -64,7 +64,8 @@ def test_duplicate_delivery_makes_one_case(pipeline):
 
 def test_deid_failure_creates_no_case(pipeline):
     pipeline["deid"].policy.keep_string_keys  # frozenset; 정책을 바꿔 발화를 남기게 한다
-    from ops_feedback.deid import Deidentifier, DeidPolicy
+    from ops_feedback.components.deidentifier import DeidPolicy
+    from tdeid import Deidentifier
     cfg = pipeline["cfg"]
     cfg["deid"]["keep_string_keys"] = cfg["deid"]["keep_string_keys"] + ["utterance"]
     pipeline["deid"] = Deidentifier(DeidPolicy.from_config(cfg["deid"]), "s", pipeline["log"].grant_deidentifier_view())
@@ -99,7 +100,7 @@ def test_rerun_after_review_does_not_touch_case(pipeline):
 
 def test_raw_purge_only_when_configured(pipeline):
     seed(pipeline)
-    pipeline["cfg"]["retention"]["raw_days"] = 0
+    pipeline["cfg"]["retention"]["raw_days"] = 1
     pipeline["clock"] = lambda: "2030-01-01T00:00:00Z"
     rep = run(pipeline)
     assert rep.purged_raw == 2
@@ -180,7 +181,7 @@ def test_expected_requires_kind(pipeline):
 
 
 def test_factory_args_resolve_env():
-    from ops_feedback.job import _resolve_args
+    from ops_feedback.wiring.build import _resolve_args
     assert _resolve_args({"base_url": "http://x", "token": {"env": "T"}}, {"T": "s"}) == {"base_url": "http://x", "token": "s"}
     import pytest
     with pytest.raises(ValueError):

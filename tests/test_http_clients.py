@@ -13,11 +13,13 @@ from boundary_contracts.sdk import FailureStore, ReleaseReader, TraceIngest
 
 from boundary_contracts.action_rules import load_rules
 from conftest import envelope, make_trace, pii_trace
-from ops_feedback.api import make_server, parse_read_tokens
+from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
+from ops_feedback.config import parse_read_tokens
 from ops_feedback.config import load_config
-from ops_feedback.job import build_from_config, run_once
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.build import build_from_config
+from ops_feedback.wiring.pipeline import run_once
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.log_store import LogStore
 
 # 시험용 임의 값(실제 model-runtime 버전이 아니다). 계약은 형식만 본다.
 FAKE_MODEL_RUNTIME_VERSION = "0.0.0+fake-test"
@@ -92,11 +94,11 @@ def test_release_reader_factory_from_config(tmp_path, gate, monkeypatch, cfg):
     p = tmp_path / "job.yaml"
     p.write_text(yaml.safe_dump(cfg))
     env = {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef", "GATE_READ": "gate-read"}
-    log, store, deid, detectors, classifier, planner, reader = build_from_config(load_config(p), env)
+    log, store, deid, pseudonymize, detector, classifier, planner, reader = build_from_config(load_config(p), env)
     assert isinstance(reader, HttpReleaseReader) and isinstance(reader, ReleaseReader)
     assert reader.get_release("rel-0002")["question_set"] == QS     # 클라이언트 자체가 읽을 수 있어야 한다
     log.send(envelope(pii_trace("s-1", "t-1"), release_id="rel-0002"))
-    rep = run_once(cfg=load_config(p), log=log, store=store, deid=deid, detectors=detectors, classifier=classifier,
+    rep = run_once(cfg=load_config(p), log=log, store=store, deid=deid, pseudonymize=pseudonymize, detector=detector, classifier=classifier,
                    clock=lambda: "2026-10-15T00:00:00Z", release_reader=reader)
     assert rep.cases_published == 1
     (c,), _ = store.list_cases()
@@ -108,7 +110,7 @@ def test_unreadable_release_omits_question_set(gate, pipeline):
     bad = HttpReleaseReader(gate.url, "wrong-token")
     pipeline["log"].send(envelope(pii_trace(), release_id="rel-0002"))
     rep = run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"],
-                   detectors=pipeline["detectors"], classifier=pipeline["classifier"], clock=pipeline["clock"], release_reader=bad)
+                   detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"], classifier=pipeline["classifier"], clock=pipeline["clock"], release_reader=bad)
     (c,), _ = pipeline["store"].list_cases()
     assert rep.cases_published == 1 and "question_set" not in c
 
@@ -130,7 +132,8 @@ def ours(failure_store, tmp_path):
     from test_conformance_failurestore import case
     # 계약 클라이언트(2.5.1)가 get_trace 응답을 OpsFeedbackDeidentifiedTrace로 검증하므로 장난감 dict가 아니라 실제 비식별 결과를 쓴다
     from conftest import base_config, make_trace
-    from ops_feedback.deid import Deidentifier, DeidPolicy
+    from ops_feedback.components.deidentifier import DeidPolicy
+    from tdeid import Deidentifier
     global REAL_TRACE
     REAL_TRACE = Deidentifier(DeidPolicy.from_config(base_config()["deid"]), "test-salt-0123456789abcdef-0123456789abcdef").deidentify(envelope(make_trace())).trace
     failure_store.put_trace("tr-1", REAL_TRACE)

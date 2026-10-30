@@ -5,8 +5,8 @@ import sqlite3
 import pytest
 
 from conftest import envelope, make_trace, base_config
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.log_store import LogStore
 
 # 단위 3까지 시작 때 실행하던 DDL 그대로(기존 운영 DB의 모양)
 OLD_LOG_DDL = """

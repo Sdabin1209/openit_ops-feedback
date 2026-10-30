@@ -1,0 +1,7 @@
+{
+  "raw_cutoff": "2026-10-30T00:00:00Z",
+  "cases_cutoff": null,
+  "metrics_cutoff": null,
+  "include_confirmed": false,
+  "include_unprocessed": false
+}

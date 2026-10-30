@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewRequest",
+  "description": "검토 적용 입력: 최신 version의 사례와 결정.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "current": {
+      "$ref": "../boundary/FailureCase.schema.json"
+    },
+    "decision": {
+      "$ref": "ReviewDecision.schema.json"
+    },
+    "now": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    }
+  },
+  "required": [
+    "current",
+    "decision",
+    "now"
+  ]
+}

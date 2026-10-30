@@ -12,8 +12,8 @@ import pytest
 import yaml
 
 from conftest import envelope, make_trace, pii_trace, base_config
-from ops_feedback.job import build_from_config
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.build import build_from_config
+from ops_feedback.wiring.log_store import LogStore
 
 SALT = "SALT-canary-7f3a91-0123456789abcdef0123"
 ING, RD, RV = "ing-canary-11aa", "rd-canary-22bb", "rv-canary-33cc"
@@ -60,7 +60,7 @@ def test_file_wins_over_env_and_env_still_works(tmp_path):
     a = build_from_config(cfg, {"OPS_DEID_SALT_FILE": f, "OPS_DEID_SALT": "from-env-0123456789abcdef0123456789abcdef"})[2]
     b = build_from_config(cfg, {"OPS_DEID_SALT": "from-file-0123456789abcdef0123456789abcdef"})[2]
     tr = envelope(pii_trace("s-1", "t-1"))
-    assert a.deidentify(tr) == b.deidentify(tr)         # 파일 값이 우선
+    assert a.deidentify({"envelope": tr}) == b.deidentify({"envelope": tr})         # 파일 값이 우선
 
 
 def test_missing_or_bad_salt_error_hides_values(tmp_path):
@@ -78,7 +78,7 @@ def test_missing_or_bad_salt_error_hides_values(tmp_path):
 
 
 def test_factory_arg_token_from_file(tmp_path):
-    from ops_feedback.job import _resolve_args
+    from ops_feedback.wiring.build import _resolve_args
     f = _secret_file(tmp_path, "gt", "gate-canary")
     assert _resolve_args({"token": {"env": "OPS_GATE_READ_TOKEN"}, "u": "x"}, {"OPS_GATE_READ_TOKEN_FILE": f}) == {"token": "gate-canary", "u": "x"}
     with pytest.raises(ValueError) as e:
@@ -176,7 +176,7 @@ def test_config_accepts_secret_references_and_env_name_keys(tmp_path):
 
 
 def test_resolve_args_secret_form_and_nesting(tmp_path):
-    from ops_feedback.job import _resolve_args
+    from ops_feedback.wiring.build import _resolve_args
     f = _secret_file(tmp_path, "s", "v-canary")
     out = _resolve_args({"a": {"secret": "S"}, "n": {"h": [{"secret": "S"}]}, "k": 1}, {"S_FILE": f})
     assert out == {"a": "v-canary", "n": {"h": ["v-canary"]}, "k": 1}

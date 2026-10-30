@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RollbackAssessRequest",
+  "description": "롤백 판단 입력: 현재 릴리스의 창 안 전체 턴 수와 사례 요약과 기준(사용자 결정, 기본값 없음).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "now": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "release_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "total_turns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "$ref": "CaseSummary.schema.json"
+      }
+    },
+    "policy": {
+      "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/rollback"
+    }
+  },
+  "required": [
+    "now",
+    "release_id",
+    "total_turns",
+    "cases",
+    "policy"
+  ]
+}

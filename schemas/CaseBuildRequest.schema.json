@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaseBuildRequest",
+  "description": "사례 조립 입력. 의사 식별자는 wiring이 pseudonymizer로 만들어 넘긴다(조립기는 salt를 모른다).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "release_id": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "runtime_contract_version": {
+      "$ref": "../boundary/_common.schema.json#/$defs/RuntimeContractVersion"
+    },
+    "received_at": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "session_pseudonym": {
+      "$ref": "Pseudonym.schema.json"
+    },
+    "turn_pseudonym": {
+      "$ref": "Pseudonym.schema.json"
+    },
+    "deid": {
+      "$ref": "DeidResult.schema.json"
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classification": {
+      "$ref": "Classification.schema.json"
+    },
+    "detections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "Detection.schema.json"
+      }
+    },
+    "pause_reason": {
+      "enum": [
+        "RISK",
+        "REASK_LIMIT",
+        "OTHER"
+      ]
+    },
+    "question_set": {
+      "$ref": "../boundary/_common.schema.json#/$defs/ArtifactRef"
+    }
+  },
+  "required": [
+    "release_id",
+    "runtime_contract_version",
+    "received_at",
+    "session_pseudonym",
+    "turn_pseudonym",
+    "deid",
+    "policy_id",
+    "classification",
+    "detections"
+  ]
+}

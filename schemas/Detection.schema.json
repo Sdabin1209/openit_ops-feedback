@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Detection",
+  "description": "탐지 하나. detail에는 개인정보 없는 값(규칙 ID, 열거값, 개수)만.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rule_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "method": {
+      "enum": [
+        "RULE",
+        "MODEL",
+        "HUMAN",
+        "FEEDBACK"
+      ]
+    },
+    "detail": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "rule_id",
+    "method",
+    "detail"
+  ]
+}

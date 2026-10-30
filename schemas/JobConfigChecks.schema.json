@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JobConfigChecks",
+  "description": "계약 OpsFeedbackJobConfig가 정하지 못한 설정 조건: (1) 키 이름이 token/secret/password/credential/api_key/authorization/private_key를 포함하면(이름이 _env로 끝나는 것 제외) 문자열 값을 직접 적을 수 없다({secret: NAME}/{env: NAME}만) (D84), (2) REASK_STREAK 규칙이 켜져 있으면 deid.keep_pause_reason이 true여야 한다(비식별이 pause_reason을 지우면 이 규칙은 조용히 아무것도 못 잡는다, ADR 0019).",
+  "allOf": [
+    {
+      "$ref": "#/$defs/Walk"
+    },
+    {
+      "if": {
+        "properties": {
+          "detection": {
+            "properties": {
+              "detectors": {
+                "contains": {
+                  "properties": {
+                    "type": {
+                      "const": "rule"
+                    },
+                    "rules": {
+                      "contains": {
+                        "properties": {
+                          "id": {
+                            "const": "REASK_STREAK"
+                          },
+                          "enabled": {
+                            "not": {
+                              "const": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "rules"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "detectors"
+            ]
+          }
+        },
+        "required": [
+          "detection"
+        ]
+      },
+      "then": {
+        "required": [
+          "deid"
+        ],
+        "properties": {
+          "deid": {
+            "required": [
+              "keep_pause_reason"
+            ],
+            "properties": {
+              "keep_pause_reason": {
+                "const": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "Walk": {
+      "if": {
+        "type": "object",
+        "minProperties": 1,
+        "maxProperties": 1,
+        "propertyNames": {
+          "enum": [
+            "secret",
+            "env"
+          ]
+        }
+      },
+      "else": {
+        "allOf": [
+          {
+            "if": {
+              "type": "object"
+            },
+            "then": {
+              "allOf": [
+                {
+                  "patternProperties": {
+                    "^(?!.*_[Ee][Nn][Vv]$).*([Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Aa][Pp][Ii][__][Kk][Ee][Yy]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][__][Kk][Ee][Yy])": {
+                      "not": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": {
+                    "$ref": "#/$defs/Walk"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "type": "array"
+            },
+            "then": {
+              "items": {
+                "$ref": "#/$defs/Walk"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

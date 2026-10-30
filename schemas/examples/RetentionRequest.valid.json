@@ -1,0 +1,7 @@
+{
+  "now": "2026-10-30T00:00:00Z",
+  "retention": {
+    "raw_days": 30,
+    "cases_days": "forever"
+  }
+}

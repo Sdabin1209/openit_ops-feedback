@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaseSummary",
+  "description": "실패율 집계에 쓰는 사례 요약(필요한 칸만).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "failure_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "review_status": {
+      "enum": [
+        "PENDING",
+        "CONFIRMED",
+        "DISMISSED"
+      ]
+    },
+    "created_at": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "pause_reason": {
+      "enum": [
+        "RISK",
+        "REASK_LIMIT",
+        "OTHER"
+      ]
+    }
+  },
+  "required": [
+    "failure_type",
+    "review_status",
+    "created_at"
+  ]
+}

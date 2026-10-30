@@ -8,8 +8,8 @@ import pytest
 import yaml
 
 from conftest import base_config, envelope, pii_trace
-from ops_feedback.job import build_from_config
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.build import build_from_config
+from ops_feedback.wiring.log_store import LogStore
 
 OK32 = "k" * 32
 SHORT31 = "S31-canary-" + "z" * 20          # 31바이트

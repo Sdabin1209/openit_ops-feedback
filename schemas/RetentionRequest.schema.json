@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RetentionRequest",
+  "description": "보존 기한 계산 입력. 생략된 기간은 기본값(원본 30일, 사례 180일, 기록 365일, ADR 0007)을 쓴다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "now": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "retention": {
+      "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/retention"
+    }
+  },
+  "required": [
+    "now",
+    "retention"
+  ]
+}

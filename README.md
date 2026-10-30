@@ -22,14 +22,12 @@
 
 | 경로 | 역할 |
 | --- | --- |
-| `src/ops_feedback/logstore.py` | 로그 저장소와 I6 수집. 원본을 비식별 처리기에만 보여 준다 |
-| `src/ops_feedback/api.py` | ingest-api(HTTP), `/healthz`, `/readyz`, I7 읽기, 검토 게시 |
-| `src/ops_feedback/deid.py` | 비식별 처리기(허용 목록 방식). 원본을 읽는 유일한 부분 |
-| `src/ops_feedback/detect.py` | 실패 탐지 규칙과 분류 |
-| `src/ops_feedback/review.py` | 사람 검토 큐 |
-| `src/ops_feedback/failurestore.py` | 실패 사례 저장소(I7), PostgreSQL(운영)·SQLite·메모리 구현 |
-| `src/ops_feedback/rollback.py` | 지표 집계와 롤백 요청 생성 |
-| `src/ops_feedback/job.py` | 주기 잡 1회 실행 명령 |
+| `schemas/`, `schemas/examples/` | 영역 내부 타입의 JSON Schema와 통과·거부 예시. 스키마 밖 조건 표는 `schemas/README.md` |
+| `src/ops_feedback/types/` | `schemas/`에서 생성한 코드 타입(손으로 고치지 않는다) |
+| `src/ops_feedback/components/` | 컴포넌트(파일 하나에 업무 하나). 목록과 입출력은 `docs/components.md`. 이웃과의 통신은 `link_*` |
+| `src/ops_feedback/wiring/` | 조립: 잡 한 번(`pipeline.py`), 롤백 평가, 검토, 수집 조립, 서버 서비스 면, 저장소 고르기, 스키마 검증 도구 |
+| `src/ops_feedback/{api,job,admin}/__main__.py` | 진입점: ingest-api 기동, 주기 잡 1회, 관리 명령 |
+| `src/ops_feedback/config.py`, `migrate.py`, `migrations/` | 설정 읽기, DB 마이그레이션 |
 | `config/job.example.yaml` | 잡 설정 예시(값은 사용자가 정한 기준이 아님) |
 | `tests/` | 수용 시험과 적합성 시험(`tests/fakes.py`는 이웃 대역) |
 | `examples/` | 입출력 예시 JSON |
@@ -57,13 +55,17 @@ scripts/dev-postgres.sh                                         # 일회용 Post
 scripts/smoke.sh                                                # 이미지 빌드, 기동, 수집, 인증 확인 (Docker 필요)
 ```
 
-- ingest-api: `OPS_INGEST_TOKEN_FILE=/run/secrets/ingest OPS_LOG_DB=/data/log.db python -m ops_feedback.api` (토큰은 파일에 두고 경로만 준다, D84. `OPS_INGEST_TOKEN=값` 직접 지정은 개발용으로만 동작한다).
+- ingest-api: `OPS_INGEST_TOKEN_FILE=/run/secrets/ingest OPS_LOG_DB=/data/log.db python -m ops_feedback.api`(`api/__main__.py`) (토큰은 파일에 두고 경로만 준다, D84. `OPS_INGEST_TOKEN=값` 직접 지정은 개발용으로만 동작한다).
 - 잡 1회: `OPS_DEID_SALT_FILE=/run/secrets/deid_salt python -m ops_feedback.job --config config/job.yaml` (`config/job.example.yaml`을 복사해 사용. 옵션 `--limit --reprocess --retry-deid-failed --no-rollback`).
 - 비밀(D84): 운영에서는 토큰과 salt를 파일에 두고 경로만 `OPS_INGEST_TOKEN_FILE`, `OPS_READ_TOKENS_FILE`, `OPS_REVIEW_TOKENS_FILE`, `OPS_DEID_SALT_FILE`로 준다. 잡 설정 파일에 비밀 값을 적으면 잡이 시작을 거부한다. 상세는 docs/runbook.md.
 
 이 문서를 쓰는 세션에서 실제로 돌린 것: `.venv/bin/python -m pytest --collect-only -q`(195건 수집, 이후 시험이 늘었다), `.venv/bin/python -m ops_feedback.job --help`(옵션 목록 출력). 돌리지 않은 것: pytest 실행 전체, `scripts/smoke.sh`, 이미지 빌드, ingest-api 기동, 잡 실행, `pip install`.
 
 ## 4. 현재 상태
+
+타입 생성(손으로 고치지 않는다): `.venv/bin/pip install -r requirements-dev.lock && .venv/bin/python scripts/gen_types.py`(datamodel-code-generator 0.87.0, 출력 TypedDict). 스키마를 바꾸면 다시 생성한다. `--check`는 파일과 같은지만 본다(`tests/test_structure.py`가 부른다).
+구조 검사: `tests/test_structure.py`, 헤드 도구 `head/scripts/structure-check.py ops-feedback`(DESIGN.md 6절).
+
 
 확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
 - docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): 시험·smoke 결과는 docs/STATUS.md의 해당 날짜 기록과 아래 시험 현황을 본다(여기에 개수를 복사하지 않는다).
@@ -126,12 +128,16 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0021](docs/adr/0021-yoyo-migrations.md) | 스키마는 yoyo-migrations(0001의 시작 DDL 대체) |
 | [0020](docs/adr/0020-wsgi-waitress.md) | WSGI 앱 + waitress(0010 대체) |
 | [0019](docs/adr/0019-reask-limit-from-trace.md) | 되묻기 한도 정지는 trace의 pause_reason을 읽는다(0012 결정 1 대체) |
+| [0024](docs/adr/0024-schemas-at-repo-root-installed-as-data.md) | 영역 스키마는 리포 루트 `schemas/`, 설치본에는 data-files |
+| [0025](docs/adr/0025-component-decomposition.md) | 입력 스키마 하나 -> 출력 스키마 하나인 컴포넌트로 나눈다(U400) |
+| [0026](docs/adr/0026-openit-link-for-link-components.md) | 받는 쪽 통신 컴포넌트는 openit_link 위에 쓴다 |
 
 ## 7. 더 자세한 문서
 
 | 문서 | 내용 |
 | --- | --- |
 | `docs/brief.md` | 영역의 목적, 소유·제공·소비, 수용 기준 |
+| `docs/components.md` | 컴포넌트 표: 파일, 입력·출력 타입, 하는 일 |
 | `docs/design.md` | 내부 설계: 저장소, 수집, 비식별, 탐지, 분류, 롤백 요청, 잡 |
 | `docs/adr/` | 설계 결정 기록 |
 | `docs/boundary.md` | 소유 저장소, 제공 인터페이스, 지원 버전, 장애 영향, 비밀 전달 |

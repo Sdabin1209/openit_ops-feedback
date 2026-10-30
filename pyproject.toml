@@ -7,17 +7,20 @@ name = "ops-feedback"
 version = "0.1.0"
 requires-python = ">=3.10"
 description = "문진 시스템 운영 관측·피드백 영역: 수집(I6), 실패 사례 저장소(I7), 비식별, 실패 탐지"
-dependencies = ["boundary-contracts", "openit-survey-schema", "jsonschema>=4.18", "PyYAML>=6", "psycopg[binary]==3.3.6", "waitress==3.0.2", "yoyo-migrations==9.0.0"]
+dependencies = ["boundary-contracts", "openit-link", "openit-survey-schema", "jsonschema>=4.18", "PyYAML>=6", "psycopg[binary]==3.3.6", "waitress==3.0.2", "yoyo-migrations==9.0.0"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "datamodel-code-generator"]
 
 [project.scripts]
-ops-feedback-job = "ops_feedback.job:main"
-ops-feedback-ingest-api = "ops_feedback.api:main"
+ops-feedback-job = "ops_feedback.job.__main__:main"
+ops-feedback-ingest-api = "ops_feedback.api.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"share/ops-feedback/schemas" = ["schemas/*.schema.json"]       # 영역 스키마를 설치본에서도 찾게 한다(wiring/validate.py, ADR 0024)
 
 [tool.setuptools.package-data]
 ops_feedback = ["migrations/**/*.sql"]

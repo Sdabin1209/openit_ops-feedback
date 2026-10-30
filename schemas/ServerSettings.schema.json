@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ServerSettings",
+  "description": "수집 서버 설정(환경 변수에서 읽어 모은 값).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "port": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "max_connections": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "readyz_cache_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "tokens": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "수집·읽기·검토 토큰을 모두 모은 목록. 서로 달라야 하므로 uniqueItems가 그 검사다. 값은 오류에 싣지 않는다."
+    },
+    "retention_declared": {
+      "type": "boolean"
+    },
+    "require_reviewer_identity": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "tokens"
+  ]
+}

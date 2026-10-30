@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IngestReceiptRequest",
+  "description": "수집 결과(IngestResult)를 만드는 입력. 이미 있던 턴(is_new=false)이면 처음 받은 시각을 낸다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "record": {
+      "$ref": "RawTraceRecord.schema.json"
+    },
+    "is_new": {
+      "type": "boolean"
+    },
+    "first_received_at": {
+      "anyOf": [
+        {
+          "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "record",
+    "is_new"
+  ]
+}

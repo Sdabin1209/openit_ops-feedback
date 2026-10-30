@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuxRecord",
+  "description": "실패 사례 저장소의 보조 기록(지표 스냅샷, 롤백 요청, 영수증).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "metric",
+        "rollback_request",
+        "rollback_receipt"
+      ]
+    },
+    "key": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Id"
+    },
+    "record": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "kind",
+    "key",
+    "record"
+  ]
+}

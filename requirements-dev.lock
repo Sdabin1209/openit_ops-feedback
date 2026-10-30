@@ -1,0 +1,5 @@
+# 개발 전용 고정(이미지에는 넣지 않는다). 타입 생성기: scripts/gen_types.py (README 4절)
+datamodel-code-generator==0.87.0
+black==26.10.1
+isort==8.0.1
+pytest==9.2.0

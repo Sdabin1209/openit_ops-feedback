@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewOutcome",
+  "description": "changed=true면 case는 version을 올린 새 레코드(게시 대상), false면 최신 레코드 그대로(같은 검토 재전송).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "changed": {
+      "type": "boolean"
+    },
+    "case": {
+      "$ref": "../boundary/FailureCase.schema.json"
+    }
+  },
+  "required": [
+    "changed",
+    "case"
+  ]
+}

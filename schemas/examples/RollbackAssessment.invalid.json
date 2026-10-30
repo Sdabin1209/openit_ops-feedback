@@ -1,0 +1,12 @@
+{
+  "verdict": "EXCEEDED",
+  "window_start": "2026-10-29T00:00:00Z",
+  "total_turns": 200,
+  "failures": 20,
+  "by_failure_type": {
+    "T-FALLBACK": 20
+  },
+  "by_pause_reason": {
+    "RISK": 1
+  }
+}

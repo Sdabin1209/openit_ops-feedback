@@ -18,7 +18,8 @@ from boundary_contracts import validator
 import deps
 from conftest import base_config, envelope, make_trace, pii_trace
 from ops_feedback.config import load_config, validate_server_env
-from ops_feedback.deid import DeidError, Deidentifier, DeidPolicy
+from ops_feedback.components.deidentifier import DeidError, DeidPolicy
+from tdeid import Deidentifier
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -127,7 +128,7 @@ def test_deid_output_is_valid_deidentified_trace():
 
 
 def test_deid_output_violating_contract_fails_closed(monkeypatch):
-    import ops_feedback.deid as deid_mod
+    import ops_feedback.components.deidentifier as deid_mod
     real = deid_mod._Walker.walk
 
     def bad(self, node, schema, path, key):
@@ -143,8 +144,8 @@ def test_deid_output_violating_contract_fails_closed(monkeypatch):
 # ---- OpsFeedbackReadyz / OpsFeedbackJobResult: 출력 자기 검사 ----
 
 def test_readyz_bodies_follow_contract():
-    from ops_feedback.api import make_server
-    from ops_feedback.logstore import LogStore
+    from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
+    from ops_feedback.wiring.log_store import LogStore
     srv = make_server(LogStore.memory(), "tok", "127.0.0.1", 0, retention_declared=False)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -156,18 +157,19 @@ def test_readyz_bodies_follow_contract():
 
 
 def test_job_result_follows_contract(pipeline):
-    from ops_feedback.job import run_once
+    from ops_feedback.wiring.pipeline import run_once
     pipeline["log"].send(envelope(pii_trace("s-1", "t-1")))
-    rep = run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detectors=pipeline["detectors"],
+    rep = run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"],
                    classifier=pipeline["classifier"], clock=pipeline["clock"])
     assert not list(validator("OpsFeedbackJobResult").iter_errors(rep.as_dict()))
 
 
 def test_job_result_violation_is_not_printed(tmp_path, monkeypatch, capsys):
-    import ops_feedback.job as job
+    import ops_feedback.job.__main__ as job
+    from ops_feedback.wiring.pipeline import JobReport
     cfg = base_config()
     cfg["storage"] = {"log_db": str(tmp_path / "l.db"), "failure_db": str(tmp_path / "f.db")}
     monkeypatch.setenv("OPS_DEID_SALT", "test-salt-0123456789abcdef-0123456789abcdef")
-    monkeypatch.setattr(job.JobReport, "as_dict", lambda self: {"processed": 0, "turn_id": "raw-t-1"})
+    monkeypatch.setattr(JobReport, "as_dict", lambda self: {"processed": 0, "turn_id": "raw-t-1"})
     assert job.main(["--config", str(_write_cfg(tmp_path, cfg))]) != 0
     assert "raw-t-1" not in capsys.readouterr().out

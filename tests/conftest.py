@@ -7,17 +7,21 @@ import itertools
 
 import pytest
 
-from ops_feedback.detect import Classifier, build_detectors
-from ops_feedback.deid import Deidentifier, DeidPolicy
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
+from ops_feedback.components.deidentifier import DeidPolicy
+from tdeid import Deidentifier
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.components.failure_classifier import FailureClassifier
+from ops_feedback.components.failure_detector import FailureDetector
+from ops_feedback.wiring.build import make_pseudonymizer
+from ops_feedback.wiring.log_store import LogStore
 
+SALT = "test-salt-0123456789abcdef-0123456789abcdef"      # 32바이트 이상(ADR 0017)
 FAKE_PII = {"name": "홍길동", "phone": "010-1234-5678", "email": "gildong@example.com"}
 
 
 def make_trace(session_id="s-1", turn_id="t-1", **over) -> dict:
-    from ops_feedback.schemas import trace_schema
-    req = trace_schema(1)["$defs"]["TurnTrace"]["required"]
+    import survey_schema
+    req = survey_schema.load_schema("TurnTrace", 1)["$defs"]["TurnTrace"]["required"]
     t = {k: None for k in req}
     t.update(session_id=session_id, turn_id=turn_id, contract_version=1, turn_index=0)
     t.update(over)
@@ -87,9 +91,10 @@ def pipeline(cfg, request, tmp_path):
         log, store = LogStore.sqlite(tmp_path / "l.db", clock=t), FailureStoreImpl.sqlite(tmp_path / "f.db")
     else:
         log, store = LogStore.postgres(_pg_schema_url(request), clock=t), FailureStoreImpl.postgres(_pg_schema_url(request))
-    deid = Deidentifier(DeidPolicy.from_config(cfg["deid"]), "test-salt", log.grant_deidentifier_view())
-    return dict(cfg=cfg, log=log, store=store, deid=deid, detectors=build_detectors(cfg["detection"]["detectors"]),
-                classifier=Classifier(cfg["classification"]), clock=lambda: "2026-10-15T00:00:00Z")
+    ps = make_pseudonymizer(SALT)
+    deid = Deidentifier(DeidPolicy.from_config(cfg["deid"]), SALT, log.grant_deidentifier_view())
+    return dict(cfg=cfg, log=log, store=store, deid=deid, pseudonymize=ps, detector=FailureDetector(cfg["detection"]["detectors"]),
+                classifier=FailureClassifier(cfg["classification"]), clock=lambda: "2026-10-15T00:00:00Z")
 
 
 def _pg_schema_url(request):

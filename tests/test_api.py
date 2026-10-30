@@ -7,9 +7,9 @@ from boundary_contracts.errors import BoundaryError
 from boundary_contracts.sdk import TraceIngest
 
 from conftest import envelope, make_trace
-from ops_feedback.api import make_server
+from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
 from boundary_contracts.clients import HttpTraceIngest
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.log_store import LogStore
 
 
 @pytest.fixture
@@ -56,8 +56,8 @@ def test_unreachable_is_unavailable():
 
 
 def test_http_status_table_matches_conventions_9():
-    from ops_feedback.api import HTTP_STATUS
-    assert HTTP_STATUS == {"INVALID_RECORD": 400, "PERMISSION_DENIED": 403, "NOT_FOUND": 404, "CONFLICT": 409,
+    from openit_link.server import STATUS      # 상태 표는 통신 기반(openit_link)이 갖는다
+    assert STATUS == {"INVALID_RECORD": 400, "PERMISSION_DENIED": 403, "NOT_FOUND": 404, "CONFLICT": 409,
                            "FAILED_PRECONDITION": 412, "UNSUPPORTED_VERSION": 422, "INTEGRITY_ERROR": 422, "UNAVAILABLE": 503}
 
 

@@ -1,0 +1,57 @@
+{
+  "current": {
+    "pipeline_schema_version": "3.1",
+    "case_id": "fc-b2f3f0095c415957054e94a9c2b7b1cd",
+    "version": 1,
+    "created_at": "2026-10-14T00:00:01Z",
+    "source_release_id": "rel-0002",
+    "runtime_contract_version": 1,
+    "deidentified": true,
+    "deidentified_trace_ref": "tr-10d5e266a06f6be303ab70dddc5623d6",
+    "failure_type": "T-FALLBACK",
+    "detection_method": "RULE",
+    "review_status": "PENDING",
+    "ext": {
+      "ops-feedback": {
+        "detections": [
+          {
+            "rule_id": "RESPONSE_FALLBACK",
+            "detail": {}
+          }
+        ],
+        "primary_rule": "RESPONSE_FALLBACK",
+        "deid_policy_id": "test-policy",
+        "deid_stats": {
+          "pseudonymized": 3,
+          "masked_strings": 10,
+          "dropped_free_objects": 4,
+          "masked_by_key": 1,
+          "masked_paths": [
+            "extract_input.current_question",
+            "extract_input.user_utterance",
+            "extract_output.note",
+            "extract_output.reason",
+            "extract_output.values[].key",
+            "extract_output.values[].precision",
+            "extract_output.values[].status",
+            "extract_output.values[].value",
+            "frontend_message.utterance",
+            "response_input.topic",
+            "response_output"
+          ],
+          "dropped_paths": [
+            "extract_input.state",
+            "extract_protections",
+            "response_input.next",
+            "response_protections"
+          ]
+        }
+      }
+    }
+  },
+  "decision": {
+    "review_status": "X",
+    "reviewer_role": "r"
+  },
+  "now": "2026-10-30T00:00:00Z"
+}

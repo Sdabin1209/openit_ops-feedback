@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Advisories",
+  "description": "경고 문장 목록(코드: 설명).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "warnings"
+  ]
+}

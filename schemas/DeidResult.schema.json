@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeidResult",
+  "description": "비식별 결과. trace는 계약 비식별 뷰를 지킨다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "trace": {
+      "$ref": "../boundary/OpsFeedbackDeidentifiedTrace.schema.json"
+    },
+    "stats": {
+      "$ref": "DeidStats.schema.json"
+    },
+    "policy_fingerprint": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Hash"
+    }
+  },
+  "required": [
+    "trace",
+    "stats",
+    "policy_fingerprint"
+  ]
+}

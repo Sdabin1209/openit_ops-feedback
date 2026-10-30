@@ -12,8 +12,8 @@ def test_mark_unprocessed_reset(log_store):
     v = log_store.grant_deidentifier_view()
     assert [r["turn_id"] for r in v.read_unprocessed()] == ["t-0", "t-1", "t-2"]      # 수신 순서
     assert len(v.read_unprocessed(limit=2)) == 2
-    log_store.mark("s-1", "t-0", "DONE", "cfg", "2026-10-15T00:00:00Z")
-    log_store.mark("s-1", "t-1", "DEID_FAILED", "cfg", "2026-10-15T00:00:00Z")
+    log_store.mark("s-1", "t-0", "DONE_CASE", "sha256:" + "0" * 64, "2026-10-15T00:00:00Z")
+    log_store.mark("s-1", "t-1", "DEID_FAILED", "sha256:" + "0" * 64, "2026-10-15T00:00:00Z")
     assert [r["turn_id"] for r in v.read_unprocessed()] == ["t-2"]
     assert log_store.reset_processing("DEID_FAILED") == 1
     assert [r["turn_id"] for r in v.read_unprocessed()] == ["t-1", "t-2"]

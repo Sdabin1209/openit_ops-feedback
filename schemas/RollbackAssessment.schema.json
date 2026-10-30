@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RollbackAssessment",
+  "description": "판단 결과. 표본이 충분했을 때만 rate가 있다.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "verdict": {
+      "enum": [
+        "INSUFFICIENT",
+        "BELOW",
+        "EXCEEDED"
+      ]
+    },
+    "window_start": {
+      "$ref": "../boundary/_common.schema.json#/$defs/Timestamp"
+    },
+    "total_turns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failures": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rate": {
+      "type": "number",
+      "minimum": 0
+    },
+    "by_failure_type": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "by_pause_reason": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "required": [
+    "verdict",
+    "window_start",
+    "total_turns",
+    "failures",
+    "by_failure_type",
+    "by_pause_reason"
+  ],
+  "if": {
+    "properties": {
+      "verdict": {
+        "enum": [
+          "BELOW",
+          "EXCEEDED"
+        ]
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "rate"
+    ]
+  }
+}

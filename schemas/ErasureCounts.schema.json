@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ErasureCounts",
+  "description": "삭제(또는 dry-run 계수) 결과 건수.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "raw_rows": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cases": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "traces": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "dry_run": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "raw_rows",
+    "cases",
+    "traces",
+    "dry_run"
+  ]
+}

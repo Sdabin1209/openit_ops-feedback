@@ -1,0 +1,7 @@
+{
+  "kind": "metric",
+  "key": "metric-1",
+  "record": {
+    "metric_id": "metric-1"
+  }
+}

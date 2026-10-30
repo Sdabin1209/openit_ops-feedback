@@ -7,9 +7,10 @@ import threading
 
 import pytest
 
-from ops_feedback.api import make_server, parse_read_tokens
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
+from ops_feedback.config import parse_read_tokens
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.log_store import LogStore
 
 ING, RD, RV = "ing-tok", "read-tok", "review-tok"
 

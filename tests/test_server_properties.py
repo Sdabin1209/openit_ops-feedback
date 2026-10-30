@@ -8,13 +8,14 @@ import time
 
 import pytest
 
-import ops_feedback.api as api
+import ops_feedback.components.link_ingest_api as api
+from ops_feedback.wiring.ingest_service import make_ingest_server
 from conftest import envelope, make_trace
-from ops_feedback.logstore import LogStore
+from ops_feedback.wiring.log_store import LogStore
 
 
 def start(**kw):
-    s = api.make_server(kw.pop("store", None) or LogStore.memory(), "tok", "127.0.0.1", 0, **kw)
+    s = make_ingest_server(kw.pop("store", None) or LogStore.memory(), "tok", "127.0.0.1", 0, **kw)
     threading.Thread(target=s.serve_forever, daemon=True).start()
     return s, s.server_address[1]
 

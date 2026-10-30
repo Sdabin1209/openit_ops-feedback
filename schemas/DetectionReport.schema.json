@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DetectionReport",
+  "description": "탐지 결과. pause_reason은 trace에 정지 사유가 남아 있을 때만(추정하지 않는다).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "detections": {
+      "type": "array",
+      "items": {
+        "$ref": "Detection.schema.json"
+      }
+    },
+    "pause_reason": {
+      "enum": [
+        "RISK",
+        "REASK_LIMIT",
+        "OTHER"
+      ]
+    }
+  },
+  "required": [
+    "detections"
+  ]
+}

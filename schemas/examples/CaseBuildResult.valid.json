@@ -1,0 +1,113 @@
+{
+  "case": {
+    "pipeline_schema_version": "3.1",
+    "case_id": "fc-b2f3f0095c415957054e94a9c2b7b1cd",
+    "version": 1,
+    "created_at": "2026-10-14T00:00:01Z",
+    "source_release_id": "rel-0002",
+    "runtime_contract_version": 1,
+    "deidentified": true,
+    "deidentified_trace_ref": "tr-10d5e266a06f6be303ab70dddc5623d6",
+    "failure_type": "T-FALLBACK",
+    "detection_method": "RULE",
+    "review_status": "PENDING",
+    "ext": {
+      "ops-feedback": {
+        "detections": [
+          {
+            "rule_id": "RESPONSE_FALLBACK",
+            "detail": {}
+          }
+        ],
+        "primary_rule": "RESPONSE_FALLBACK",
+        "deid_policy_id": "test-policy",
+        "deid_stats": {
+          "pseudonymized": 3,
+          "masked_strings": 10,
+          "dropped_free_objects": 4,
+          "masked_by_key": 1,
+          "masked_paths": [
+            "extract_input.current_question",
+            "extract_input.user_utterance",
+            "extract_output.note",
+            "extract_output.reason",
+            "extract_output.values[].key",
+            "extract_output.values[].precision",
+            "extract_output.values[].status",
+            "extract_output.values[].value",
+            "frontend_message.utterance",
+            "response_input.topic",
+            "response_output"
+          ],
+          "dropped_paths": [
+            "extract_input.state",
+            "extract_protections",
+            "response_input.next",
+            "response_protections"
+          ]
+        }
+      }
+    }
+  },
+  "trace_ref": "tr-10d5e266a06f6be303ab70dddc5623d6",
+  "trace": {
+    "session_id": "p-0ceeab87092f7748521f58a8d5190c10",
+    "turn_id": "p-f63752f925216557de6812bfd77a46bb",
+    "contract_version": 1,
+    "frontend_message": {
+      "session_id": "p-0ceeab87092f7748521f58a8d5190c10",
+      "kind": "UTTERANCE",
+      "utterance": "[MASKED]"
+    },
+    "intervention_decision": null,
+    "orchestrator_input": null,
+    "extract_input": {
+      "question_id": "Q1",
+      "current_question": "[MASKED]",
+      "user_utterance": "[MASKED]",
+      "state": {}
+    },
+    "extract_output": {
+      "values": [
+        {
+          "key": "[MASKED]",
+          "value": "[MASKED]",
+          "precision": "[MASKED]",
+          "status": "[MASKED]",
+          "save": true
+        }
+      ],
+      "action": "NEXT",
+      "next_item": "Q2",
+      "reason": "[MASKED]",
+      "targets": [],
+      "note": "[MASKED]"
+    },
+    "extract_attempts": 1,
+    "extract_status": "OK",
+    "extract_protections": {},
+    "validation_ok": true,
+    "validation_violations": [],
+    "response_input": {
+      "action": "NEXT",
+      "topic": "[MASKED]",
+      "next": {}
+    },
+    "response_output": "[MASKED]",
+    "response_outcome": "fallback",
+    "response_protections": {},
+    "frontend_input": null,
+    "staff_console_input": null,
+    "dispatch_input": null,
+    "dispatch_output": null,
+    "orchestrator_output": null,
+    "session_before": null,
+    "session_after": null,
+    "log_entry": null,
+    "persistence_load_request": null,
+    "persistence_load_result": null,
+    "persistence_commit_request": null,
+    "persistence_commit_result": null,
+    "turn_index": 0
+  }
+}

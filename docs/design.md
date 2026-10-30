@@ -18,23 +18,24 @@ survey-service --I6 send--> [ingest-api] --> LogStore(log.db, 원본)
                                   --I5 request_rollback--> release-gate(GateService)
 ```
 
-| 컴포넌트 | 파일 | 하는 일 |
-| --- | --- | --- |
-| 로그 저장소 + 수집 | `logstore.py` | I6 구현. 원본 봉투 저장. 읽기는 `DeidentifierView`로만 |
-| ingest-api | `api.py` | I6의 HTTP 서비스, `/healthz`, `/readyz` |
-| 비식별 처리기 | `deid.py` | 원본을 읽는 유일한 컴포넌트. 정책은 설정 |
-| 탐지기 | `detect.py` | `Detector` Protocol, 규칙 기반 `RuleDetector` |
-| 분류기 | `detect.py` | 규칙 ID -> failure_type 대응(설정) |
-| 검토 큐 | `review.py` | PENDING 목록, 검토 결과를 version 올려 게시 |
-| 실패 사례 저장소 | `failurestore.py` | I7 구현 |
-| 롤백 요청 | `rollback.py` | 지표 집계, RollbackRequest 생성, I5 전달 |
-| 잡 | `job.py` | 위를 순서대로 한 번 실행 |
+컴포넌트(입력 스키마 하나 -> 출력 스키마 하나)와 파일, 입출력 타입은 [components.md](components.md)가 정본이다(U400, [ADR 0025](adr/0025-component-decomposition.md)). 이 절의 옛 모듈 이름(`logstore.py` 등)은 아래와 같이 옮겨졌다.
+
+| 옛 이름 | 지금 |
+| --- | --- |
+| `logstore.py` (로그 저장소 + 수집) | `components/raw_log_store.py`(저장), `components/trace_intake.py`·`ingest_receipt.py`(수집), `wiring/log_store.py`(수집 조립, `LogStore`) |
+| `api.py` (ingest-api) | `components/link_ingest_api.py`(받는 쪽, [ADR 0026](adr/0026-openit-link-for-link-components.md)), 진입점 `api/__main__.py`, 서비스 면 `wiring/ingest_service.py` |
+| `deid.py` | `components/deidentifier.py`(비식별), `components/pseudonymizer.py`(의사 식별자) |
+| `detect.py` | `components/failure_detector.py`(탐지), `components/failure_classifier.py`(분류) |
+| `review.py` | `components/review_decider.py`(결정), `wiring/review_flow.py`(조립) |
+| `failurestore.py` | `components/failure_case_store.py` |
+| `rollback.py` | `components/rollback_assessor.py`·`release_predecessor.py`·`rollback_request_builder.py`, 이웃 통신 `link_release_read.py`·`link_gate_send.py`, 조립 `wiring/rollback_flow.py` |
+| `job.py` | `wiring/pipeline.py`(잡 조립), `components/case_builder.py`·`case_reconciler.py`·`retention_planner.py`·`job_advisor.py`, 진입점 `job/__main__.py` |
 
 지표 대시보드와 피드백 배포기는 이번 구간 범위 밖이다(미정). 대시보드는 FailureStore의 목록과 `RollbackPlanner`의 지표 스냅샷만 읽으면 되도록 비식별 뒤의 데이터만 둔다.
 
 ## 2. 저장소 (O10: 영역이 정한다)
 
-저장소 두 곳(원본, 실패 사례)을 인터페이스 뒤에 두고 구현을 둘 둔다(`_RawBackend`, `_Backend`). **운영은 PostgreSQL 서버(서비스별 데이터베이스·계정)**, 개발·시험 기본은 SQLite 파일이다. PostgreSQL을 운영 표준으로 한 이유: 영역별 파일 DB보다 다중 프로세스 동시 쓰기, 백업·복구, 계정 권한 분리가 표준 도구로 해결된다(사용자 결정). 선택은 환경으로만 한다: `OPS_LOG_DATABASE_URL`, `OPS_FAILURE_DATABASE_URL`(비밀, `_FILE` 우선)이 있으면 PostgreSQL, 없으면 `OPS_LOG_DB`, `OPS_FAILURE_DB`의 SQLite. 원본과 실패 사례는 **서로 다른 데이터베이스(계정)**를 가리키며 분리 원칙은 그대로다(원본 백엔드는 `logstore.py`, 실패 사례 백엔드는 `failurestore.py`에만 있다). 같은 테이블 구조를 시작 시 버전 마이그레이션(yoyo-migrations, ADR 0021)으로 만들고, 연결이 끊기면 다시 열어 한 번 재시도하며(쓰기는 모두 멱등), JSON은 TEXT로 저장해 SQLite와 같은 바이트를 낸다. 중복(DUPLICATE), 보존 삭제, 처리 표시는 구현이 달라도 같은 적합성 시험을 통과한다.
+저장소 두 곳(원본, 실패 사례)을 인터페이스 뒤에 두고 구현을 둘 둔다(`_RawBackend`, `_Backend`). **운영은 PostgreSQL 서버(서비스별 데이터베이스·계정)**, 개발·시험 기본은 SQLite 파일이다. PostgreSQL을 운영 표준으로 한 이유: 영역별 파일 DB보다 다중 프로세스 동시 쓰기, 백업·복구, 계정 권한 분리가 표준 도구로 해결된다(사용자 결정). 선택은 환경으로만 한다: `OPS_LOG_DATABASE_URL`, `OPS_FAILURE_DATABASE_URL`(비밀, `_FILE` 우선)이 있으면 PostgreSQL, 없으면 `OPS_LOG_DB`, `OPS_FAILURE_DB`의 SQLite. 원본과 실패 사례는 **서로 다른 데이터베이스(계정)**를 가리키며 분리 원칙은 그대로다(원본 백엔드는 `components/raw_log_store.py`, 실패 사례 백엔드는 `components/failure_case_store.py`에만 있다). 같은 테이블 구조를 시작 시 버전 마이그레이션(yoyo-migrations, ADR 0021)으로 만들고, 연결이 끊기면 다시 열어 한 번 재시도하며(쓰기는 모두 멱등), JSON은 TEXT로 저장해 SQLite와 같은 바이트를 낸다. 중복(DUPLICATE), 보존 삭제, 처리 표시는 구현이 달라도 같은 적합성 시험을 통과한다.
 
 - `log.db`(로그 저장소, 원본): `raw_traces(seq, session_id, turn_id, release_id, received_at, envelope, envelope_hash, status, config_hash, processed_at)`, `UNIQUE(session_id, turn_id)`. WAL 모드. 쓰기 계정은 ingest-api와 잡뿐이고, 읽는 컴포넌트는 비식별 처리기뿐이다. 두 파일을 따로 두는 이유는 파일·볼륨 권한으로 분리하기 위해서다(대시보드·검토 큐에는 `failures.db`만 준다).
 - `failures.db`(실패 사례 저장소, 비식별 뒤): `cases(seq, case_id, version, record)`, `traces(ref, trace)`, `aux(kind, key, record)`(지표 스냅샷, 롤백 요청·영수증).

@@ -1,0 +1,8 @@
+{
+  "retention": {
+    "raw_days": "forever"
+  },
+  "unvalidated_keep_keys": [
+    "code"
+  ]
+}

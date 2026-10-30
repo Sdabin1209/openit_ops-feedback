@@ -1,0 +1,4 @@
+{
+  "failure_type": "T-FALLBACK",
+  "primary_rule": "RESPONSE_FALLBACK"
+}

@@ -14,7 +14,7 @@ import yaml
 
 from boundary_contracts.errors import BoundaryError
 from conftest import _pg_schema_url, base_config, envelope, make_trace, pii_trace
-from ops_feedback.storage import open_failure_store, open_log_store
+from ops_feedback.wiring.storage import open_failure_store, open_log_store
 
 CANARY = "pw-canary-9d41"
 DEAD_URL = f"postgresql://svc:{CANARY}@127.0.0.1:1/db"      # 아무도 듣지 않는 포트
@@ -72,7 +72,7 @@ def test_job_run_once_on_postgres(tmp_path, request):
     cfg["storage"] = {"log_db": str(tmp_path / "unused-log.db"), "failure_db": str(tmp_path / "unused-f.db")}
     cp = tmp_path / "job.yaml"
     cp.write_text(yaml.safe_dump(cfg))
-    from ops_feedback.logstore import LogStore
+    from ops_feedback.wiring.log_store import LogStore
     log = LogStore.postgres(log_url)
     log.send(envelope(pii_trace("s-1", "t-1")))
     log.send(envelope(make_trace("s-1", "t-2")))

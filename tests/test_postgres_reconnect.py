@@ -11,8 +11,8 @@ import pytest
 
 from boundary_contracts.errors import BoundaryError
 from conftest import _pg_schema_url, envelope, make_trace
-from ops_feedback.failurestore import FailureStoreImpl
-from ops_feedback.logstore import LogStore
+from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
+from ops_feedback.wiring.log_store import LogStore
 from test_conformance_failurestore import TRACE, case
 from test_postgres_select import _file, _scrub, _secrets_of
 

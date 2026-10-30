@@ -1,0 +1,10 @@
+{
+  "detections": [
+    {
+      "rule_id": "RESPONSE_FALLBACK",
+      "method": "RULE",
+      "detail": {}
+    }
+  ],
+  "pause_reason": "NONE"
+}

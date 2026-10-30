@@ -1,0 +1,17 @@
+{
+  "request": {
+    "pipeline_schema_version": "3.1",
+    "request_id": "rb-1",
+    "requested_at": "2026-10-30T00:00:00Z",
+    "from_release_id": "rel-0002",
+    "to_release_id": "rel-0001",
+    "reason": "r",
+    "evidence_refs": [
+      "metric-1"
+    ],
+    "requested_by_role": "ops"
+  },
+  "metric": {
+    "metric_id": "metric-1"
+  }
+}
