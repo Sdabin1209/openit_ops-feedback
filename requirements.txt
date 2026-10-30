@@ -1,5 +1,5 @@
 # 개발·CI 의존. 이미지는 requirements.lock(서드파티 고정)과 scripts/build_wheels.sh가 만든 wheel을 쓴다.
-git+ssh://git@github.com/Sdabin1209/openit_boundary-contracts.git@v3.0.2
+git+ssh://git@github.com/Sdabin1209/openit_boundary-contracts.git@v3.1.1
 # 문진 스키마 패키지(TurnTrace). 사본을 두지 않고 태그로 설치한다(D110)
 openit-survey-schema @ git+ssh://git@github.com/Sdabin1209/openit_survey-service.git@survey-schema-v2.0.0#subdirectory=schema
 psycopg[binary]==3.3.6          # PostgreSQL 드라이버(운영 저장소). libpq 내장 wheel
