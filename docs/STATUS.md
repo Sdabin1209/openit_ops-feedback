@@ -104,5 +104,5 @@ REASK_STREAK 재계산을 없애고 trace의 pause_reason을 읽는다(ADR 0019,
 
 ## 2026-10-30 U400 영역 구조 개편 (브랜치 wo-400)
 
-한 일: 컴포넌트 분해(docs/components.md), `schemas/` 40개와 예시, `types/` 생성, `components/`·`wiring/` 이동, 받는 쪽을 openit_link v0.3.0 위로, 구조 검사 `tests/test_structure.py`, 헤드 도구 structure-check 통과, ADR 0024~0026, 변경 요청 CR-009. 시험·이미지 결과는 완료 커밋 메시지에 있다.
+한 일: 컴포넌트 분해(docs/components.md), `schemas/` 40개와 예시, `types/` 생성, `components/`·`wiring/` 이동, 받는 쪽을 openit_link v0.4.0 위로, 구조 검사 `tests/test_structure.py`, 헤드 도구 structure-check 통과, ADR 0024~0026, 변경 요청 CR-009. 시험·이미지 결과는 완료 커밋 메시지에 있다.
 남은 일: 계약이 REASK_STREAK의 params를 선택으로 바꾸면(CR-009) 시험의 params 줄을 정리한다. 헤드 검증 뒤 E2E. 막힌 것: 없음.
