@@ -93,3 +93,16 @@ REASK_STREAK 재계산을 없애고 trace의 pause_reason을 읽는다(ADR 0019,
 - 한 일: OF-03(의사 식별자 식을 `deid.pseudonym_of` 한 곳으로 통합, admin 세션 삭제가 같은 함수를 씀), CR-007(경계 형식 6개 스키마 초안, `docs/change-requests/schemas/validate.py`로 검증).
 - 남은 일: 헤드가 스키마를 계약에 올린 뒤 코드가 쓰게 하기. 잡의 설정 오류 종료 코드(현재 1, 제안 2)는 CR-007 6절. OF-02, X-Openit-User는 건드리지 않았다.
 - 막힌 것: 없음.
+
+
+## 2026-10-30 U400 구조 개편 상태
+
+한 일: 컴포넌트 분해(`docs/components.md`), `schemas/`·`types/`, `components/`·`wiring/` 이동, 받는 쪽을 openit_link 위로, 구조 시험 `tests/test_structure.py`. 시험·이미지·smoke 결과는 최신 커밋 메시지가 정본이다.
+남은 일: 헤드 검증. 계약이 REASK_STREAK의 params를 선택으로 바꾸면(CR-009) 예시 설정의 params를 지운다. 두 번째 머신에서의 시험은 하지 않았다.
+막힌 것: 없음.
+
+
+## 2026-10-30 U400 영역 구조 개편 (브랜치 wo-400)
+
+한 일: 컴포넌트 분해(docs/components.md), `schemas/` 40개와 예시, `types/` 생성, `components/`·`wiring/` 이동, 받는 쪽을 openit_link v0.3.0 위로, 구조 검사 `tests/test_structure.py`, 헤드 도구 structure-check 통과, ADR 0024~0026, 변경 요청 CR-009. 시험·이미지 결과는 완료 커밋 메시지에 있다.
+남은 일: 계약이 REASK_STREAK의 params를 선택으로 바꾸면(CR-009) 시험의 params 줄을 정리한다. 헤드 검증 뒤 E2E. 막힌 것: 없음.

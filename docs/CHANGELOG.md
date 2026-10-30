@@ -1,5 +1,23 @@
 # 변경 이력
 
+## 0.18.0 (제안, U400 영역 구조 개편, D117)
+
+- 영역을 컴포넌트로 나눴다(22개, [components.md](components.md), ADR 0025). 코드는 `components/`(컴포넌트마다 파일 하나)와 `wiring/`(연결·주입)으로 옮겼고 컴포넌트끼리 import하지 않는다. 타입은 `schemas/`(40개)에서 `types/`로 생성한다(ADR 0024).
+- 받는 쪽 서버는 `openit_link.App/Route`(v0.3.0) 위에 다시 썼다(ADR 0026). 계약 핀 v3.1.1. 와이어 형식·잡 출력은 그대로다. HTTP 동작 변화: 큰 본문 413(전에는 400), 허용하지 않는 메서드 405(전에는 404).
+- 진입점은 `api/`, `job/`, `admin/`의 `__main__.py`(`python -m ops_feedback.api|job|admin` 그대로, 콘솔 스크립트 이름 그대로).
+- 설정·입력의 거부 조건을 스키마로 옮겼다. 달라진 것: `log.mark`의 상태·해시는 스키마로 검사(전에는 아무 문자열), 롤백 요청 조립·보존 기한 계산이 계약 `OpsFeedbackJobConfig`로 입력을 검사한다. `RuleDetector`에 `REASK_STREAK`를 줄 때 계약대로 `params.threshold`가 필요하다(CR-009).
+- 모듈 이름이 바뀌었다(`logstore`->`wiring/log_store`+`components/raw_log_store` 등, 대응표는 design.md 2절).
+
+## 0.18.0 (제안, U400 영역 구조 개편)
+
+- 코드를 컴포넌트(`components/`, 파일 하나에 입력 스키마 하나 -> 출력 스키마 하나)와 조립(`wiring/`)으로 옮겼다. 목록: `docs/components.md`, 이유: ADR 0025. 컴포넌트끼리 import하지 않는다.
+- `schemas/`에 영역 내부 타입 40개 JSON Schema와 통과·거부 예시, `src/ops_feedback/types/`에 생성 타입(`scripts/gen_types.py`, README 4절). 거부 조건은 스키마로 옮겼고 옮기지 못한 21건은 `schemas/README.md` 표에 이유와 함께 적었다(ADR 0024).
+- 받는 쪽 HTTP는 `openit_link`(D118) 위로 옮겼다(ADR 0026). HTTP 동작 변화: 큰 본문 413(전: 400), 허용하지 않는 메서드 405(전: 404). 와이어 형식·잡 출력·설정 형식은 그대로다.
+- 진입점: `python -m ops_feedback.api|job|admin`은 그대로(패키지의 `__main__.py`), 콘솔 스크립트 이름도 그대로.
+- 설정 검사: 비밀 직접 기입 금지와 REASK_STREAK 조합은 스키마(`JobConfigChecks`)로. 보존 기본값은 `retention_planner`가 정한다(`load_config`가 더는 설정을 채우지 않는다).
+- 계약 핀 v3.1.1, 의존 추가 `openit-link` v0.3.0.
+- 변경 요청 CR-009(계약이 REASK_STREAK params.threshold를 필수로 요구).
+
 ## 0.17.0 (제안, 계약 3.0.0 전환)
 
 - 계약 핀 v3.0.0, 예시 `pipeline_schema_version` "3.0".

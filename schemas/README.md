@@ -24,6 +24,13 @@
 | 12 | `link_ingest_api` | 본문 크기 상한(수집 8 MiB, 검토 1 MiB) | 전송 계층의 한도이고 `openit_link` Route의 `max_body`가 413으로 낸다. 값은 ADR 0008 |
 | 13 | `link_gate_send` | 영수증의 `request_id`가 보낸 요청의 것이다 | 교차 필드 동일성(응답 대 요청) |
 | 14 | `wiring/build.py` | 설정의 `factory` `모듈:함수`가 실제로 불러와진다 | 모듈 존재 여부는 실행 환경에 달렸다 |
+| 15 | `failure_case_store` | version은 최신+1이어야 하고(FAILED_PRECONDITION), 같은 (case_id, version)에 다른 내용을 쓸 수 없으며(CONFLICT), 참조한 비식별 trace가 먼저 저장돼 있어야 한다 | 저장소에 이미 있는 상태에 따른 조건이다(입력 문서만으로 판정할 수 없다). 불변 레코드 원칙(D25) |
+| 16 | `failure_case_store` | 목록 `limit`은 1 이상이고 `cursor`는 이전 호출이 낸 불투명 문자열이다 | 문서가 아니라 함수 인자(스키마 대상이 아니다). HTTP 쪽 limit 범위(1~500)는 `ListCasesQuery`에 있다 |
+| 17 | `wiring/pgbase.py` | `OPS_DB_*_TIMEOUT`은 0 초과 3600 이하(초), `OPS_DB_SCHEMA`는 apply\|verify | 계약 `OpsFeedbackServerEnv`는 모양(문자열 숫자)만 정하고 범위·값은 읽는 곳이 검사한다(계약 설명). 계약이 범위를 정하면 옮긴다 |
+| 18 | `migrate.py` | SQLite 메모리 DB에는 마이그레이션을 적용하지 않는다 | 저장소 경로 문자열의 특수값 규칙(메모리 구현을 쓴다) |
+| 19 | `config.py` | `OPS_READ_TOKENS`·`OPS_REVIEW_TOKENS` 형식 `역할=토큰,역할=토큰` | 계약 `OpsFeedbackServerEnv.RoleTokens` 모양 검사 뒤의 분해 규칙이다(문자열을 표로 푸는 구문 해석) |
+| 20 | `wiring/build.py` | 설정의 `{secret: NAME}`이 가리키는 비밀이 존재하고 비어 있지 않다 | 비밀 값의 존재는 실행 환경(NAME_FILE)에 달렸다 |
+| 21 | `wiring/check_settings.py` | 환경 변수 `OPS_PORT`·`OPS_MAX_CONNECTIONS`·`OPS_READYZ_CACHE_SECONDS`가 숫자로 읽힌다 | 문자열 -> 숫자 변환은 검증 전 단계다(변환 뒤 값은 `ServerSettings`가 검사) |
 
 ## 계약이 정한 것을 영역이 같은 모양으로 쓰는 곳
 

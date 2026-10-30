@@ -83,10 +83,10 @@ def test_postgres_fresh_and_existing_schema(request):
     import psycopg
     url = _pg_schema_url(request)
     for _ in range(2):                                            # 두 번째는 이미 적용된 DB
-        LogStore.postgres(url)._backend.close()
+        LogStore.postgres(url)._raw._backend.close()
         FailureStoreImpl.postgres(url)._b.close()
     with psycopg.connect(url, autocommit=True) as c:
         assert sorted(r[0] for r in c.execute("SELECT migration_id FROM _yoyo_migration")) == ["failure-0001.initial", "log-0001.initial"]
         c.execute("DROP TABLE _yoyo_migration, _yoyo_log, _yoyo_version, yoyo_lock")   # 기록만 없는 기존 DB를 흉내
-    LogStore.postgres(url)._backend.close()                       # 표는 이미 있다: 마이그레이션이 그대로 받아들여야 한다
+    LogStore.postgres(url)._raw._backend.close()                       # 표는 이미 있다: 마이그레이션이 그대로 받아들여야 한다
     FailureStoreImpl.postgres(url)._b.close()

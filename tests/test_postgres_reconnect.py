@@ -29,14 +29,14 @@ def _kill(*stores_conn):
 def test_log_store_recovers(request):
     log = LogStore.postgres(_pg_schema_url(request))
     assert log.send(envelope(make_trace("s-1", "t-1")))["status"] == "ACCEPTED"
-    _kill(log._backend._db)
+    _kill(log._raw._backend._db)
     assert log.send(envelope(make_trace("s-1", "t-2")))["status"] == "ACCEPTED"      # 끊긴 뒤 첫 호출이 복구한다
-    _kill(log._backend._db)
+    _kill(log._raw._backend._db)
     assert log.send(envelope(make_trace("s-1", "t-2")))["status"] == "DUPLICATE"
-    _kill(log._backend._db)
+    _kill(log._raw._backend._db)
     assert len(log.grant_deidentifier_view().read_unprocessed()) == 2
     assert log.counts_by_release() == {"rel-0002": 2}
-    _kill(log._backend._db)
+    _kill(log._raw._backend._db)
     log.ping()
 
 
@@ -55,8 +55,8 @@ def test_failure_store_recovers(request):
 def test_unrecoverable_is_unavailable_and_hides_url(request):
     log = LogStore.postgres(_pg_schema_url(request))
     log.ping()
-    log._backend._url = "postgresql://svc:pw-canary-77@127.0.0.1:1/db"       # 다시 열 수 없는 주소
-    _kill(log._backend._db)
+    log._raw._backend._url = "postgresql://svc:pw-canary-77@127.0.0.1:1/db"       # 다시 열 수 없는 주소
+    _kill(log._raw._backend._db)
     with pytest.raises(BoundaryError) as e:
         log.send(envelope(make_trace("s-1", "t-1")))
     assert e.value.code == "UNAVAILABLE" and e.value.retryable

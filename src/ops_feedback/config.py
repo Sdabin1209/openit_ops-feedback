@@ -29,8 +29,6 @@ def _check(v, cfg, what: str) -> None:
 
 def load_config(path: str | Path) -> dict:
     cfg = yaml.safe_load(Path(path).read_text("utf-8"))
-    if not isinstance(cfg, dict):
-        raise ValueError("설정 파일이 객체가 아니다")
     _check(area_validator("JobConfigChecks"), cfg, "JobConfigChecks")
     _check(validator("OpsFeedbackJobConfig"), cfg, "OpsFeedbackJobConfig")
     return cfg

@@ -333,7 +333,6 @@ def test_readyz_shows_counters_and_retention_warning():
         s.shutdown()
 
 
-@pytest.mark.xfail(reason="openit_link v0.1.0이 깊게 중첩된 JSON의 RecursionError를 400으로 바꾸지 않고 500을 낸다: 헤드에 변경 요청 docs/change-requests/CR-010", strict=False)
 def test_deeply_nested_json_and_non_ascii_token_do_not_drop_the_connection():
     s, port = _server()
     try:
@@ -390,7 +389,7 @@ def test_verify_mode_needs_no_ddl_privilege(request, tmp_path):
             LogStore.postgres(url)
         assert e.value.code == "FAILED_PRECONDITION" and "migrate" in e.value.message
         os.environ["OPS_DB_SCHEMA"] = "apply"
-        LogStore.postgres(url)._backend.close()                           # migrate 단계(소유자 계정)
+        LogStore.postgres(url)._raw._backend.close()                           # migrate 단계(소유자 계정)
         FailureStoreImpl.postgres(url)._b.close()
         schema = url.split("search_path%3D")[1]
         role = "ops_app_" + schema[-8:]
@@ -406,8 +405,8 @@ def test_verify_mode_needs_no_ddl_privilege(request, tmp_path):
                 app = LogStore.postgres(app_url)                           # DDL 권한 없는 계정으로 시작한다
                 assert app.send(envelope(make_trace("s-v", "t-v")))["status"] == "ACCEPTED"
                 with pytest.raises(psycopg.Error):                         # 이 계정은 실제로 DDL을 못 한다
-                    app._backend._db.execute("CREATE TABLE should_fail(x int)")
-                app._backend.close()
+                    app._raw._backend._db.execute("CREATE TABLE should_fail(x int)")
+                app._raw._backend.close()
             finally:
                 c.execute(f"DROP OWNED BY {role}")
                 c.execute(f"DROP ROLE {role}")
