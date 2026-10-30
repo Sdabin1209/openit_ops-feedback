@@ -2,6 +2,7 @@
 요청 거부 시험은 docker를 쓰지 않는다(DOCKER=/bin/false로 호출되면 실패하게 한다). 실제 빌드 시험은 docker 데몬이 있을 때만 돈다.
 의존 소스 트리는 계약·문진 스키마 리포의 태그에서 git archive로 꺼낸다(리포가 없으면 건너뛴다). 위치는 WORKSPACE_DIR(기본: 이 리포의 상위)."""
 import json
+import uuid
 import os
 import shutil
 import subprocess
@@ -13,6 +14,8 @@ from boundary_contracts import validator
 import deps
 
 ROOT = Path(__file__).resolve().parents[1]
+# 왜 프로세스마다 다른 태그: 영역 시험 여러 벌이 같은 도커 데몬에서 동시에 돌 때(check-all) 고정 태그를 서로 지우거나 덮어써 흔들렸다.
+UNIQ = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
 BC_TAG, SS_TAG = deps.pinned_boundary_tag(), deps.pinned_survey_tag()      # 고정(requirements.txt)에서 읽는다: 올릴 때 시험 상수를 따로 고치지 않는다
 SCRIPT = ROOT / "scripts" / "build-image.sh"
 
@@ -93,14 +96,14 @@ def _docker_ok() -> bool:
 
 @pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
 def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(trees, tmp_path):
-    req = request(trees, revision="0123abc", image_tag="ops-feedback-buildtest:t42")
+    req = request(trees, revision="0123abc", image_tag=f"ops-feedback-buildtest:t42-{UNIQ}")
     try:
         r = run(tmp_path, req, docker="docker")
         assert r.returncode == 0, r.stderr[-800:]
         last = r.stdout.strip().splitlines()[-1]
         res = json.loads(last)
         assert not list(validator("BuildImageResult").iter_errors(res))
-        assert res["image"] == "ops-feedback-buildtest:t42"
+        assert res["image"] == f"ops-feedback-buildtest:t42-{UNIQ}"
         lb = res["labels"]
         assert lb["io.openit.revision"] == "0123abc" and lb["io.openit.contracts.boundary"] == BC_TAG
         # 라벨은 이미지에 들어간 문진 스키마 패키지(openit-survey-schema) 버전의 주 번호다(3.0.0 -> "3"). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다
@@ -110,14 +113,14 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert not list(validator("Exposure").iter_errors(exposure))
         assert exposure == json.loads((ROOT / "deploy-exposure.json").read_text(encoding="utf-8"))
         def layers():
-            out = subprocess.run(["docker", "image", "inspect", "ops-feedback-buildtest:t42", "--format", "{{json .RootFS.Layers}}"], capture_output=True, text=True)
+            out = subprocess.run(["docker", "image", "inspect", f"ops-feedback-buildtest:t42-{UNIQ}", "--format", "{{json .RootFS.Layers}}"], capture_output=True, text=True)
             return json.loads(out.stdout)
         first = layers()
         assert run(tmp_path, req, docker="docker").returncode == 0
         # 같은 요청 -> 같은 내용: 층(RootFS.Layers)이 같다. 이미지 ID는 BuildKit이 설정에 넣는 시각 때문에 매번 달라서 비교하지 않는다(ADR 0022).
         assert layers() == first
     finally:
-        subprocess.run(["docker", "rmi", "-f", "ops-feedback-buildtest:t42"], capture_output=True)
+        subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t42-{UNIQ}"], capture_output=True)
 
 
 @pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
@@ -127,7 +130,7 @@ def test_survey_schema_label_is_the_package_major_not_the_integer_contract_versi
     tree = tmp_path / "ss-modified"
     shutil.copytree(trees["survey_schema"], tree)
     (tree / "CONTRACT_VERSION").write_text("7\n")
-    req = request(trees, revision="0123abd", image_tag="ops-feedback-buildtest:t43")
+    req = request(trees, revision="0123abd", image_tag=f"ops-feedback-buildtest:t43-{UNIQ}")
     req["dependency_sources"]["survey_schema"] = str(tree)
     try:
         r = run(tmp_path, req, docker="docker")
@@ -135,4 +138,4 @@ def test_survey_schema_label_is_the_package_major_not_the_integer_contract_versi
         label = json.loads(r.stdout.strip().splitlines()[-1])["labels"]["io.openit.contracts.survey-schema"]
         assert label == SS_TAG.removeprefix("survey-schema-v").split(".")[0] and label != "7"
     finally:
-        subprocess.run(["docker", "rmi", "-f", "ops-feedback-buildtest:t43"], capture_output=True)
+        subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t43-{UNIQ}"], capture_output=True)
