@@ -103,7 +103,7 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert res["image"] == "ops-feedback-buildtest:t42"
         lb = res["labels"]
         assert lb["io.openit.revision"] == "0123abc" and lb["io.openit.contracts.boundary"] == BC_TAG
-        # 라벨은 이미지에 들어간 문진 스키마 패키지(openit-survey-schema) 버전의 주 번호다(2.0.0 -> "2"). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다
+        # 라벨은 이미지에 들어간 문진 스키마 패키지(openit-survey-schema) 버전의 주 번호다(3.0.0 -> "3"). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다
         assert lb["io.openit.contracts.survey-schema"] == SS_TAG.removeprefix("survey-schema-v").split(".")[0] and lb["io.openit.service"] == "ops-feedback"
         assert "io.openit.turn-engine" not in lb and lb["io.openit.model-runtime"] == "n/a"      # 3.0.0: turn-engine 라벨이 없어졌다
         exposure = json.loads(lb["io.openit.exposure"])                 # 노출 선언 라벨(U47): 리포의 deploy-exposure.json 그대로

@@ -93,7 +93,7 @@ m = re.match(r"boundary_contracts-([0-9]+\.[0-9]+\.[0-9]+)-", w[0].split("/")[-1
 sys.exit("build-image: boundary-contracts wheel의 버전을 읽지 못했다") if not m else print("v" + m.group(1))
 PYEOF
 )
-# 라벨 io.openit.contracts.survey-schema는 문진 스키마 패키지(openit-survey-schema)의 주 번호다(2.0.0 -> 2). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다.
+# 라벨 io.openit.contracts.survey-schema는 문진 스키마 패키지(openit-survey-schema)의 주 번호다(3.0.0 -> 3). 정수 CONTRACT_VERSION(모델 런타임 호환 번호)이 아니다.
 SS_INT=$("$PY" - <<'PYEOF'
 import glob, re, sys
 w = glob.glob("build/wheels/openit_survey_schema-*.whl")
