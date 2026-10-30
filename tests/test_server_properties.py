@@ -1,127 +1,163 @@
-"""HTTP 서버가 지켜야 할 성질(ADR 0020): 느린 클라이언트가 다른 요청을 막지 않는다, 멈춘 연결은 timeout으로 닫힌다,
-종료할 때 진행 중 요청을 마친다, 연결 상한을 넘는 연결은 스레드를 늘리지 않는다, 큰 본문은 빨리 거부한다. 서버 구현(표준 라이브러리 → waitress)을 바꿔도 같아야 한다."""
-import http.client
-import json
-import socket
+"""HTTP 서버 면(ADR 0020, 0026). 느린 연결이 언제 끊기는가, 연결 상한을 넘으면 어떻게 되는가는 waitress의 동작이라 시험하지 않는다(의존 자체는 시험하지 않는다).
+이 영역의 책임은 둘이다: (1) waitress와 openit_link에 올바른 값을 넘겼는가 (2) 종료 절차(Server.shutdown)가 정해진 순서로 호출하는가. 시간을 재지 않는다(U421)."""
+import io
 import threading
-import time
 
 import pytest
 
 import ops_feedback.components.link_ingest_api as api
-from ops_feedback.wiring.ingest_service import make_ingest_server
-from conftest import envelope, make_trace
+from ops_feedback.components.failure_case_store import FailureCaseStore
+from ops_feedback.wiring.ingest_service import IngestService, make_ingest_server
 from ops_feedback.wiring.log_store import LogStore
+from waiting import HANG_GUARD_SECONDS
 
 
-def start(**kw):
-    s = make_ingest_server(kw.pop("store", None) or LogStore.memory(), "tok", "127.0.0.1", 0, **kw)
+class FakeWaitress:
+    """waitress.create_server 대역: 넘긴 인자를 기록한다."""
+
+    def __init__(self):
+        self.kw = {}
+        self.calls = []
+
+    def create_server(self, app, **kw):
+        self.kw = kw
+        outer = self
+
+        class Dispatcher:
+            def shutdown(self, **k):
+                outer.calls.append(("dispatcher.shutdown", k))
+
+        class Srv:
+            effective_host, effective_port = "127.0.0.1", 4321
+            task_dispatcher = Dispatcher()
+            _map = {}
+
+            def close(self):
+                outer.calls.append(("close", {}))
+
+            def run(self):
+                outer.calls.append(("run", {}))
+                raise OSError("EBADF")
+        return Srv()
+
+
+@pytest.fixture
+def fake(monkeypatch):
+    f = FakeWaitress()
+    monkeypatch.setattr(api.waitress, "create_server", f.create_server)
+    monkeypatch.setattr(api.waitress.wasyncore, "close_all", lambda m: f.calls.append(("close_all", {})))
+    return f
+
+
+def test_waitress_receives_our_limits(fake, monkeypatch):
+    """연결 상한 N이면 일꾼 N개, waitress 상한 N+2(듣는 소켓·깨우기 포함), 멈춘 연결 정리 주기, 본문 상한을 넘긴다(ADR 0020)."""
+    api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=7, channel_timeout=12.5)      # 넘긴 값 확인(시계 아님)
+    kw = fake.kw
+    assert kw["threads"] == 7 and kw["connection_limit"] == 9
+    assert kw["channel_timeout"] == 12.5 and kw["cleanup_interval"] == 5.0           # min(5, channel_timeout)
+    assert kw["max_request_body_size"] == api.MAX_BODY
+    api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=1, channel_timeout=2.0)      # 넘긴 값 확인(시계 아님)
+    assert fake.kw["cleanup_interval"] == 2.0
+
+
+def test_make_server_passes_the_request_timeout_and_connection_cap(fake, monkeypatch):
+    monkeypatch.setattr(api, "REQUEST_TIMEOUT", 3.5)
+    make_ingest_server(LogStore.memory(), "tok", "127.0.0.1", 0, max_connections=5)
+    assert fake.kw["channel_timeout"] == 3.5 and fake.kw["threads"] == 5 and fake.kw["connection_limit"] == 7
+
+
+def test_shutdown_stops_listening_then_lets_in_flight_requests_finish_then_closes(fake):
+    """종료 절차: 듣는 소켓을 닫고 -> 진행 중 요청을 취소하지 않고 grace까지 기다리고 -> 연결을 닫는다."""
+    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0)      # 넘긴 값 확인(시계 아님)
+    s.shutdown(grace=123.0)
+    assert [c[0] for c in fake.calls] == ["close", "dispatcher.shutdown", "close_all"]
+    assert fake.calls[1][1] == {"cancel_pending": False, "timeout": 123.0}
+    assert api.SHUTDOWN_GRACE_SECONDS < 10      # docker stop 기본 10초(SIGKILL 전)보다 짧다(ADR 0020의 제약값)
+
+
+def test_serve_forever_hides_the_socket_error_only_while_closing(fake):
+    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0)      # 넘긴 값 확인(시계 아님)
+    with pytest.raises(OSError):
+        s.serve_forever()                  # 종료 중이 아니면 오류를 올린다
+    s._closing = True
+    s.serve_forever()                      # 종료 중이면 정상 종료로 본다
+
+
+def wsgi(app, method, path, length, token):
+    got = {}
+    env = {"REQUEST_METHOD": method, "PATH_INFO": path, "CONTENT_LENGTH": str(length), "HTTP_AUTHORIZATION": f"Bearer {token}",
+           "wsgi.input": io.BytesIO(b""), "CONTENT_TYPE": "application/json"}
+    app(env, lambda status, headers, *a: got.setdefault("status", status))
+    return got["status"]
+
+
+def test_ingest_surface_refuses_a_body_over_its_limit_without_reading_it():
+    """수집 면 본문 상한(8 MiB)이 openit_link Route에 실제로 넘어갔는지: 상한보다 큰 Content-Length 머리글만 있는 요청이 413이다(본문·소켓·시간 없음)."""
+    app = api.make_app(IngestService(LogStore.memory()), "tok")
+    assert wsgi(app, "POST", "/v1/traces", api.MAX_BODY + 1, "tok").startswith("413")
+
+
+def test_one_real_round_trip_starts_answers_and_stops():
+    """기동 -> /healthz 한 번 -> 종료. 서버를 끝까지 맞물려 보는 일은 deploy E2E·smoke의 몫이다."""
+    import http.client
+    s = make_ingest_server(LogStore.memory(), "tok", "127.0.0.1", 0)
     threading.Thread(target=s.serve_forever, daemon=True).start()
-    return s, s.server_address[1]
-
-
-def stuck(port, n):
-    out = []
-    for _ in range(n):
-        c = socket.create_connection(("127.0.0.1", port))
-        c.sendall(b"POST /v1/traces HTTP/1.1\r\nAuthorization: Bearer tok\r\nContent-Length: 100\r\n\r\n")     # 본문을 덜 보내고 붙들고 있는 연결
-        out.append(c)
-    return out
-
-
-def test_stuck_clients_do_not_block_other_requests():
-    s, port = start()
-    held = stuck(port, 10)
     try:
-        # 판정은 "붙들린 연결 10개가 있어도 /healthz가 응답한다"이다. 속도가 아니라서 벽시계 상한을 두지 않는다(바깥 마감은 클라이언트 timeout 30초: 막히면 여기서 실패한다)
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+        c = http.client.HTTPConnection("127.0.0.1", s.server_address[1], timeout=HANG_GUARD_SECONDS)      # 매달림 감시
         c.request("GET", "/healthz")
         assert c.getresponse().status == 200
     finally:
-        for h in held:
-            h.close()
         s.shutdown()
 
 
-def test_stuck_connection_is_closed_by_the_timeout(monkeypatch):
-    monkeypatch.setattr(api, "REQUEST_TIMEOUT", 1.0)
-    s, port = start()
-    (h,) = stuck(port, 1)
-    try:
-        # 서버 timeout은 1초다. 시험이 확인하는 것은 "닫힌다(매달리지 않는다)"이므로 바깥 마감을 30초로 넉넉히 둔다(부하에서 수 초 늦어도 판정이 같다).
-        # 30초 안에 닫히지 않으면 recv가 socket.timeout으로 실패한다.
-        h.settimeout(30)
-        try:
-            data = h.recv(4096)          # 서버가 닫으면 b"" (또는 오류 응답 뒤 닫힘)
-        except ConnectionResetError:
-            data = b""
-        assert data == b"" or data.startswith(b"HTTP/1.")
-    finally:
-        h.close()
-        s.shutdown()
+# ---- 시계·대기 주입(ADR 0027) ----
+
+class StubService:
+    def __init__(self):
+        self.pinged = 0
+
+    def pings(self):
+        return [self._ping]
+
+    def _ping(self):
+        self.pinged += 1
+
+    def supported_versions(self):
+        return [1]
+
+    def log_kind(self):
+        return "memory"
+
+    def failure_kind(self):
+        return None
 
 
-def test_shutdown_finishes_the_request_in_flight():
-    store = LogStore.memory()
-    real = store.send
-    entered, release = threading.Event(), threading.Event()
+def test_readyz_result_is_shared_for_the_cache_window_by_the_injected_clock():
+    """readyz 캐시: 같은 창 안의 호출은 저장소를 다시 확인하지 않고, 창이 지나면(가짜 시계를 흘림) 다시 확인한다. 실제 시간을 기다리지 않는다."""
+    now = [1000.0]
+    svc = StubService()
+    app = api.make_app(svc, "tok", readyz_cache_seconds=1.5, clock=lambda: now[0])
 
-    def slow(env):
-        entered.set()                    # 요청이 서버 안에서 처리 중임을 알린다(시계 대신 사건으로 순서를 잡는다)
-        assert release.wait(30)
-        return real(env)
-    store.send = slow
-    s, port = start(store=store)
-    box = {}
-
-    def post():
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-        c.request("POST", "/v1/traces", body=json.dumps(envelope(make_trace("s-1", "t-1"))), headers={"Authorization": "Bearer tok"})
-        box["status"] = c.getresponse().status
-    th = threading.Thread(target=post)
-    th.start()
-    assert entered.wait(30)
-    threading.Timer(0.5, release.set).start()                      # 종료가 시작된 뒤에 처리가 끝나도록 놓아 준다(종료가 진행 중 요청을 기다리는지 본다)
-    s.shutdown()                                                   # 종료 신호와 같은 경로
-    th.join(30)
-    assert box.get("status") == 200
-    c = http.client.HTTPConnection("127.0.0.1", port, timeout=1.5)
-    with pytest.raises(OSError):                                   # 종료 뒤 새 요청은 받지 않는다
-        c.request("GET", "/healthz")
-        c.getresponse()
+    def readyz():
+        got = {}
+        app({"REQUEST_METHOD": "GET", "PATH_INFO": "/readyz", "wsgi.input": io.BytesIO(b"")}, lambda st, h, *a: got.setdefault("st", st))
+        return got["st"]
+    assert readyz().startswith("200") and svc.pinged == 1
+    now[0] += 1.4
+    assert readyz().startswith("200") and svc.pinged == 1          # 창 안: 다시 확인하지 않는다
+    now[0] += 0.2
+    assert readyz().startswith("200") and svc.pinged == 2          # 창 밖(1.6초 지남): 다시 확인한다
 
 
-def test_connections_over_the_cap_wait_instead_of_spawning_workers():
-    s, port = start(max_connections=2)
-    held = stuck(port, 2)      # 먼저 연결한 순서대로 받아들여지므로 c보다 앞선다(같은 호스트의 커널 대기열 순서)
-    try:
-        c = socket.create_connection(("127.0.0.1", port), timeout=1.5)
-        c.sendall(b"GET /healthz HTTP/1.1\r\nHost: x\r\n\r\n")
-        with pytest.raises(socket.timeout):                         # 상한이 찬 동안은 응답이 없다(대기열). 한 칸이 비면 처리된다
-            c.recv(100)
-        held[0].close()
-        c.settimeout(30)      # 한 칸이 비면 처리된다: 바깥 마감만 넉넉히(부하 여유)
-        assert c.recv(100).startswith(b"HTTP/1.1 200")
-        c.close()
-    finally:
-        for h in held:
-            h.close()
-        s.shutdown()
+def test_shutdown_flush_loop_ends_when_the_injected_clock_passes_its_limit(fake):
+    """종료 때 응답이 소켓으로 나가길 기다리는 루프는 SHUTDOWN_FLUSH_SECONDS 뒤에 끝난다(가짜 시계·대기로 흘림, 실제 대기 없음)."""
+    now, slept = [0.0], []
 
+    class Busy:
+        total_outbufs_len = 5      # 보낼 것이 남아 있는 연결
 
-def test_oversized_ingest_body_is_rejected_fast():
-    """큰 Content-Length 머리글만 보내고 응답을 읽는다. 서버는 본문을 기다리지 않고 413으로 거절해야 한다(본문을 보내지 않으므로 전송 중 연결 끊김 경쟁이 없다)."""
-    s, port = start()
-    try:
-        c = socket.create_connection(("127.0.0.1", port), timeout=30)
-        c.sendall(b"POST /v1/traces HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer tok\r\nContent-Length: %d\r\n\r\n" % (9 * 1024 * 1024))
-        line = b""
-        while b"\r\n" not in line:
-            chunk = c.recv(4096)
-            if not chunk:
-                break
-            line += chunk
-        assert line.split()[1] in (b"400", b"413"), line[:80]
-        c.close()
-    finally:
-        s.shutdown()
+    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0,
+                   clock=lambda: now[0], sleep=lambda secs: (slept.append(secs), now.__setitem__(0, now[0] + secs)))      # 넘긴 값 확인(시계 아님)
+    s._srv._map = {1: Busy()}
+    s.shutdown(grace=1.0)
+    assert slept and abs(sum(slept) - api.SHUTDOWN_FLUSH_SECONDS) < 0.05 and fake.calls[-1][0] == "close_all"

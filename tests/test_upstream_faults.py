@@ -3,6 +3,7 @@
 가짜 상류는 실제 HTTP 서버다. boundary_contracts의 실제 클라이언트(HttpReleaseReader, HttpGateService)가 멈춤·느림·5xx·깨진 JSON·401/403·
 형식이 다른 응답을 어떻게 겪는지를 잡 수준(run_once)에서 본다. PostgreSQL이 필요한 것은 pipeline/log_store 매개변수에 따라 TEST_DATABASE_URL이 없으면 SKIP.
 """
+from waiting import HANG_GUARD_SECONDS
 import copy
 import json
 import threading
@@ -34,7 +35,7 @@ def receipt(req):
 
 
 class Upstream:
-    """경로 접두사별로 동작을 바꿀 수 있는 가짜 게이트. mode: ok | hang | slow | 500 | 503 | badjson | 401 | 403 | shape | wrongid"""
+    """경로 접두사별로 동작을 바꿀 수 있는 가짜 게이트. mode: ok | drop | 500 | 503 | badjson | 401 | 403 | shape | wrongid"""
 
     def __init__(self):
         self.mode = {}
@@ -55,11 +56,9 @@ class Upstream:
 
             def _handle(self, body):
                 mode = next((m for p, m in up.mode.items() if self.path.startswith(p)), "ok")
-                if mode == "hang":
-                    time.sleep(4)               # 클라이언트 timeout(1초)보다 길게 무응답
+                if mode == "drop":
+                    self.close_connection = True      # 응답 없이 연결을 끊는다: 시간 초과와 같은 '응답 못 받음'을 즉시 만든다(U421: 시계 없이)
                     return
-                if mode == "slow":
-                    time.sleep(0.4)
                 if mode in ("500", "503"):
                     return self._send(int(mode), {"code": "UNAVAILABLE", "message": "x"})
                 if mode == "badjson":
@@ -111,23 +110,21 @@ def seed(p, fails=3, oks=3):
 
 
 def planner(p, upstream, reader=None):
-    gate = HttpGateService(upstream.url, "t", timeout=1)
+    gate = HttpGateService(upstream.url, "t", timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     rr = reader or FakeReleaseReader(["rel-0002", "rel-0001"], "rel-0002")
     return RollbackPlanner(store=p["store"], log=p["log"], release_reader=rr, gate=gate, policy=POLICY, clock=lambda: NOW)
 
 
 # ---------- D3: I5 롤백 요청 ----------
 
-@pytest.mark.parametrize("mode,code", [("hang", "UNAVAILABLE"), ("500", "UNAVAILABLE"), ("503", "UNAVAILABLE"), ("badjson", "UNAVAILABLE"),
+@pytest.mark.parametrize("mode,code", [("drop", "UNAVAILABLE"), ("500", "UNAVAILABLE"), ("503", "UNAVAILABLE"), ("badjson", "UNAVAILABLE"),
                                        ("401", "PERMISSION_DENIED"), ("403", "PERMISSION_DENIED"), ("shape", "INTEGRITY_ERROR"),
                                        ("wrongid", "INTEGRITY_ERROR")])
-def test_gate_fault_is_bounded_visible_and_retried_with_same_request(pipeline, upstream, mode, code):
+def test_gate_fault_is_visible_and_retried_with_same_request(pipeline, upstream, mode, code):
     seed(pipeline)
     pl = planner(pipeline, upstream)
     upstream.mode["/v1/rollback"] = mode
-    t0 = time.monotonic()
     rep = run(pipeline, pl)
-    assert time.monotonic() - t0 < 8                                     # 멈춤도 클라이언트 timeout(1초)이 걸려 끝난다. 8초는 부하 여유(기본 timeout 10초보다 작아 timeout 설정 적용 여부를 가른다)
     assert rep.rollback["action"] == "REQUEST_CREATED" and rep.rollback["submit_error"] == code
     assert {"stage": "rollback_submit", "error": code} in rep.errors     # 조용히 버리지 않는다: 종료 코드 1의 근거
     rid = rep.rollback["request_id"]
@@ -144,13 +141,6 @@ def test_gate_fault_is_bounded_visible_and_retried_with_same_request(pipeline, u
     assert len(upstream.posts) == n                                      # 영수증이 있으면 다시 보내지 않는다
 
 
-def test_slow_gate_within_timeout_succeeds(pipeline, upstream):
-    seed(pipeline)
-    upstream.mode["/v1/rollback"] = "slow"
-    rep = run(pipeline, planner(pipeline, upstream))
-    assert rep.rollback["receipt_status"] == "APPLIED" and not rep.errors
-
-
 def test_duplicate_evaluation_makes_one_request_and_one_metric(pipeline, upstream):
     seed(pipeline)
     pl = planner(pipeline, upstream)
@@ -165,7 +155,7 @@ def test_lost_receipt_resends_same_request_id(pipeline, upstream):
     """게이트는 처리했지만 응답을 못 받은 경우(멈춤): 다음 실행이 같은 request_id를 다시 보낸다. 중복 처리 방지는 게이트의 request_id 멱등에 달려 있다."""
     seed(pipeline)
     pl = planner(pipeline, upstream)
-    upstream.mode["/v1/rollback"] = "hang"
+    upstream.mode["/v1/rollback"] = "drop"
     run(pipeline, pl)
     upstream.mode.clear()
     run(pipeline, pl)
@@ -176,43 +166,26 @@ def test_auto_submit_false_never_calls_gate(pipeline, upstream):
     seed(pipeline)
     pol = dict(POLICY, auto_submit=False)
     pl = RollbackPlanner(store=pipeline["store"], log=pipeline["log"], release_reader=FakeReleaseReader(["rel-0002", "rel-0001"], "rel-0002"),
-                         gate=HttpGateService(upstream.url, "t", timeout=1), policy=pol, clock=lambda: NOW)
+                         gate=HttpGateService(upstream.url, "t", timeout=HANG_GUARD_SECONDS), policy=pol, clock=lambda: NOW)      # 매달림 감시
     rep = run(pipeline, pl)
     assert rep.rollback["action"] == "REQUEST_CREATED" and upstream.posts == [] and not rep.errors
 
 
 # ---------- D2: I4 읽기 ----------
 
-@pytest.mark.parametrize("mode,code", [("hang", "UNAVAILABLE"), ("500", "UNAVAILABLE"), ("badjson", "UNAVAILABLE"),
+@pytest.mark.parametrize("mode,code", [("drop", "UNAVAILABLE"), ("500", "UNAVAILABLE"), ("badjson", "UNAVAILABLE"),
                                        ("401", "PERMISSION_DENIED"), ("403", "PERMISSION_DENIED"), ("shape", "INTEGRITY_ERROR")])
-def test_release_read_fault_is_bounded_visible_and_does_not_lose_cases(pipeline, upstream, mode, code):
+def test_release_read_fault_is_visible_and_does_not_lose_cases(pipeline, upstream, mode, code):
     seed(pipeline)
     upstream.mode["/v1/active-pointer"] = mode
-    pl = planner(pipeline, upstream, reader=HttpReleaseReader(upstream.url, "t", timeout=1))
-    t0 = time.monotonic()
+    pl = planner(pipeline, upstream, reader=HttpReleaseReader(upstream.url, "t", timeout=HANG_GUARD_SECONDS))      # 매달림 감시
     rep = run(pipeline, pl)
-    assert time.monotonic() - t0 < 8                                     # 위와 같은 근거
     assert rep.rollback == {"action": "ERROR", "error": code} and {"stage": "rollback", "error": code} in rep.errors
     assert rep.cases_published == 3                                       # I4가 죽어도 사례 게시는 끝났다
     assert upstream.posts == []                                           # 읽지 못하면 롤백 요청도 만들지 않는다
     upstream.mode.clear()
     # 정상 복구 뒤에는 포인터를 읽는다(이 가짜는 list_releases를 주지 않으므로 이어지는 단계는 보지 않는다)
     assert pl._rr.active_pointer()["release_id"] == "rel-0002"
-
-
-def test_rollback_evaluation_has_overall_deadline(pipeline):
-    """클라이언트 읽기 timeout이 호출 한 번의 대기라, 평가 전체에도 상한이 있다."""
-    seed(pipeline)
-
-    class Stuck(FakeReleaseReader):
-        def get_active_pointer(self):
-            time.sleep(30)
-
-    pl = RollbackPlanner(store=pipeline["store"], log=pipeline["log"], release_reader=Stuck(["rel-0002"], "rel-0002"), gate=None, policy=POLICY, clock=lambda: NOW)
-    cfg = dict(pipeline["cfg"], rollback={"deadline_seconds": 0.5})
-    t0 = time.monotonic()
-    rep = run(pipeline, pl, cfg=cfg)
-    assert time.monotonic() - t0 < 20 and rep.rollback == {"action": "ERROR", "error": "DEADLINE_EXCEEDED"} and rep.errors
 
 
 def test_release_read_down_for_question_set_is_tried_once_per_run(pipeline):
@@ -279,7 +252,7 @@ def test_concurrent_duplicate_trace_is_recorded_once(log_store):
     for t in ts:
         t.start()
     for t in ts:
-        t.join()
+        t.join()      # 사건 대기: 스레드 종료(시간 제한 없음)
     assert not errs and sorted(out) == ["ACCEPTED"] + ["DUPLICATE"] * 7
     assert log_store.counts_by_release() == {"rel-0002": 1}
 
@@ -333,3 +306,24 @@ def test_stale_check_cannot_report_success_for_a_lost_write(backend, tmp_path, r
     seen["n"] = 0
     b._b.versions = versions
     assert b.publish_case(mk_case(version=2, review_status="CONFIRMED", expected={"items": []}))["review_status"] == "CONFIRMED"   # 같은 내용의 재시도는 성공
+
+
+def test_rollback_deadline_is_passed_to_the_injected_wait_and_expiry_is_reported(pipeline):
+    """롤백 평가 상한(rollback.deadline_seconds)이 주입한 wait에 그대로 넘어가고, wait이 '상한 지남'을 말하면 DEADLINE_EXCEEDED로 닫힌다. 시계 없이."""
+    seed(pipeline)
+    never = threading.Event()      # 평가가 끝나지 않게 붙잡는다(끝까지 set하지 않는다)
+
+    class Stuck(FakeReleaseReader):
+        def get_active_pointer(self):
+            never.wait()
+
+    pl = RollbackPlanner(store=pipeline["store"], log=pipeline["log"], release_reader=Stuck(["rel-0002"], "rel-0002"), gate=None, policy=POLICY, clock=lambda: NOW)
+    cfg = dict(pipeline["cfg"], rollback={"deadline_seconds": 7.5})
+    seen = []
+
+    def expired(done, secs):
+        seen.append(secs)
+        return False
+    rep = run(pipeline, pl, cfg=cfg, rollback_wait=expired)
+    assert seen == [7.5] and rep.rollback == {"action": "ERROR", "error": "DEADLINE_EXCEEDED"} and {"stage": "rollback", "error": "DEADLINE_EXCEEDED"} in rep.errors
+    never.set()      # 붙잡힌 스레드를 놓는다

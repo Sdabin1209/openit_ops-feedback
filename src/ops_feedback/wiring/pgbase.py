@@ -73,6 +73,8 @@ class PgBase:
     WHAT = "저장소"
     SCOPE = ""              # 마이그레이션 묶음 이름(log|failure)
     TABLES: tuple = ()      # OPS_DB_SCHEMA=verify일 때 존재를 확인할 표
+    CLOCK = staticmethod(time.monotonic)      # 시계와 타이머는 주입 자리다(U422, ADR 0027): 시험은 가짜로 바꿔 실제 시간을 쓰지 않는다
+    TIMER = threading.Timer
 
     def __init__(self, url: str) -> None:
         self._url = url                      # 어디에도 출력하지 않는다
@@ -120,7 +122,7 @@ class PgBase:
                 with self._lock:
                     if not self._alive():
                         self._db = self._open()
-                    timer = threading.Timer(limit, _abort, args=(self._db,))
+                    timer = self.TIMER(limit, _abort, args=(self._db,))
                     timer.daemon = True
                     timer.start()
                     return fn()
@@ -140,11 +142,11 @@ class PgBase:
         import psycopg
         conn = None
         timer = None
-        t0 = time.monotonic()
+        t0 = self.CLOCK()
         try:
             conn = psycopg.connect(autocommit=True, **_params(self._url, self.probe_timeout, self.probe_timeout))
-            remain = max(0.05, self.probe_timeout - (time.monotonic() - t0))
-            timer = threading.Timer(remain, _abort, args=(conn,))
+            remain = max(0.05, self.probe_timeout - (self.CLOCK() - t0))
+            timer = self.TIMER(remain, _abort, args=(conn,))
             timer.daemon = True
             timer.start()
             conn.execute("SELECT 1").fetchone()

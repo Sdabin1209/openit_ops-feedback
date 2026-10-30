@@ -1,6 +1,7 @@
 """계약에 올라간 이 영역의 경계 스키마(OpsFeedback*, D107)를 코드가 실제로 쓰는지 확인한다.
 기대값은 계약 스키마와 conformance 예시에서 온다. 예시 폴더는 계약 리포지토리에만 있어(패키지에 없다) OPENIT_CONFORMANCE_DIR 또는
 이웃 `../boundary-contracts/conformance`에서 찾고, 없으면 그 시험만 건너뛴다(아래 인라인 사례는 항상 돈다)."""
+from waiting import HANG_GUARD_SECONDS
 import copy
 import json
 import os
@@ -93,7 +94,7 @@ def test_server_env_contract_valid_example_accepted():
 
 def test_api_main_refuses_unknown_ops_variable(tmp_path):
     env = {**os.environ, "OPS_INGEST_TOKEN": "t", "OPS_LOG_DB": str(tmp_path / "l.db"), "OPS_RAW_RETENTON_DAYS": "30"}
-    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=30)
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2 and "OPS_RAW_RETENTON_DAYS" in (r.stdout + r.stderr)
 
 

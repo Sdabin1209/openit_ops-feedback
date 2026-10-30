@@ -41,7 +41,8 @@ INGEST, READ, REVIEW = "ingest", "read:", "review:"      # 토큰 -> 역할 이�
 class Server:
     """waitress 서버를 감싼 얇은 손잡이: 시험과 진입점이 `server_address`, `serve_forever()`, `shutdown()`으로 다룬다."""
 
-    def __init__(self, app, host: str, port: int, *, connection_limit: int, channel_timeout: float) -> None:
+    def __init__(self, app, host: str, port: int, *, connection_limit: int, channel_timeout: float, clock=time.monotonic, sleep=time.sleep) -> None:
+        self._clock, self._sleep = clock, sleep      # 시계·대기는 주입한다(U422, ADR 0027): 운영은 실제 시계, 시험은 가짜
         # connection_limit + 2: waitress는 내부 map 크기(듣는 소켓 + 깨우기 trigger + 연결)로 상한을 재서 (상한 - 2)개까지만 받는다(실측: 상한 3에서 연결 1개). 상한 그대로 받게 2를 더한다.
         # cleanup_interval: 멈춘 연결을 channel_timeout 안팎에 닫으려고 점검 주기를 줄인다(기본 30초면 timeout이 최대 두 배 늦다).
         # 왜 이 값들: ADR 0020. threads=connection_limit은 연결마다 일꾼이 있던 이전 동작(DB가 막혀도 /healthz가 대답)을 유지하려는 것이다.
@@ -66,15 +67,15 @@ class Server:
         self._closing = True
         srv.close()                                                       # 듣는 소켓만 닫는다(waitress 단일 서버의 close)
         srv.task_dispatcher.shutdown(cancel_pending=False, timeout=grace)  # 일꾼이 지금 하던 요청을 끝내고 나간다
-        deadline = time.monotonic() + SHUTDOWN_FLUSH_SECONDS
-        while time.monotonic() < deadline and any(getattr(c, "total_outbufs_len", 0) or getattr(c, "requests", None) for c in list(srv._map.values())):
-            time.sleep(0.02)
+        deadline = self._clock() + SHUTDOWN_FLUSH_SECONDS
+        while self._clock() < deadline and any(getattr(c, "total_outbufs_len", 0) or getattr(c, "requests", None) for c in list(srv._map.values())):
+            self._sleep(0.02)
         waitress.wasyncore.close_all(srv._map)
 
 
 def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = None,
              review_tokens: Optional[dict[str, str]] = None, readyz_cache_seconds: float = READYZ_CACHE_SECONDS,
-             retention_declared: bool = True, require_reviewer_identity: bool = True):
+             retention_declared: bool = True, require_reviewer_identity: bool = True, clock=time.monotonic):
     """WSGI 앱(PEP 3333). service는 wiring/ingest_service.py의 IngestService가 정한 면을 가진 객체다(이 컴포넌트는 업무 컴포넌트를 모른다, 구조 규칙 3)."""
     read_tokens = read_tokens or {}
     review_tokens = review_tokens or {}
@@ -102,7 +103,7 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     def check_ready() -> Optional[str]:
         """저장소 확인. 실패하면 오류 코드, 정상이면 None. 결과를 readyz_cache_seconds 동안 공유한다(동시 호출도 한 번만 확인)."""
         with ready_lock:
-            now = time.monotonic()
+            now = clock()
             if ready_cache["val"] is not None and readyz_cache_seconds > 0 and now - ready_cache["at"] < readyz_cache_seconds:
                 return ready_cache["val"][0]
             errs: list = []
@@ -118,7 +119,7 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
             for t in ts:
                 t.join()
             code = errs[0].code if errs else (None if service.supported_versions() else "UNAVAILABLE")
-            ready_cache.update(at=time.monotonic(), val=(code,))
+            ready_cache.update(at=clock(), val=(code,))
             return code
 
     def ready():

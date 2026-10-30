@@ -1,4 +1,5 @@
 import json
+from waiting import HANG_GUARD_SECONDS
 import threading
 import urllib.request
 
@@ -51,7 +52,7 @@ def test_client_roundtrip_and_errors(server):
 
 def test_unreachable_is_unavailable():
     with pytest.raises(BoundaryError) as x:
-        HttpTraceIngest("http://127.0.0.1:1", "t", timeout=0.5).send(envelope())
+        HttpTraceIngest("http://127.0.0.1:1", "t", timeout=HANG_GUARD_SECONDS).send(envelope())      # 매달림 감시
     assert x.value.code == "UNAVAILABLE" and x.value.retryable
 
 

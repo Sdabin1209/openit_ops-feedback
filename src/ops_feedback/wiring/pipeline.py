@@ -73,7 +73,8 @@ def _existing(store: FailureCaseStore, case_id: str) -> Optional[dict]:
 def run_once(*, cfg: dict, log: LogStore, store: FailureCaseStore, deid: Deidentifier, pseudonymize: Callable[[str, str], str],
              detector: FailureDetector, classifier: FailureClassifier, planner: Optional[RollbackPlanner] = None, clock: Clock = utc_now,
              limit: Optional[int] = None, reprocess: bool = False, retry_deid_failed: bool = False,
-             evaluate_rollback: bool = True, release_reader=None) -> JobReport:
+             evaluate_rollback: bool = True, release_reader=None,
+             rollback_wait: Callable[[threading.Event, float], bool] = lambda done, secs: done.wait(secs)) -> JobReport:
     rep = JobReport()
     release_link = ReleaseLink(release_reader) if release_reader is not None else None
     view = log.grant_deidentifier_view()          # 원본 읽기 권한을 비식별 단계에 넘기는 유일한 지점(tests/test_raw_access.py)
@@ -155,29 +156,34 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureCaseStore, deid: Deident
         rep.purged_aux = store.purge_aux_before(cut["metrics_cutoff"])
 
     if evaluate_rollback and planner is not None:
-        rep.rollback = _evaluate_rollback(planner, cfg, rep)
+        rep.rollback = _evaluate_rollback(planner, cfg, rep, rollback_wait)
     return rep
 
 
-def _evaluate_rollback(planner: RollbackPlanner, cfg: dict, rep: JobReport) -> dict:
+def _evaluate_rollback(planner: RollbackPlanner, cfg: dict, rep: JobReport, wait: Callable[[threading.Event, float], bool]) -> dict:
     """롤백 평가를 상한 안에서 한다. 이웃(I4/I5)이 멈추거나 실패해도 잡은 끝나고, 실패는 보고서와 종료 코드(1)에 드러난다(원칙 9).
 
     클라이언트의 읽기 timeout(boundary_contracts 기본 10초)은 호출 한 번의 소켓 대기라 응답을 조금씩 흘리는 상류에서는 합이 길어질 수 있다.
     그래서 평가 전체에도 상한(`rollback.deadline_seconds`, 기본 60초)을 둔다. 넘으면 평가 스레드는 버리고(데몬) 잡이 끝난다.
-    이미 저장된 요청·영수증은 그대로이고 다음 실행이 같은 request_id로 이어 간다."""
+    이미 저장된 요청·영수증은 그대로이고 다음 실행이 같은 request_id로 이어 간다.
+
+    기다림은 `wait(끝남 신호, 상한 초)`로 주입한다(U422, ADR 0027): 운영은 Event.wait(실제 시간), 시험은 즉시 False를 돌려 '상한이 지났다'를 일으킨다."""
     deadline = float((cfg.get("rollback") or {}).get("deadline_seconds", DEFAULT_ROLLBACK_DEADLINE))
     box: dict = {}
+
+    done = threading.Event()
 
     def run():
         try:
             box["out"] = planner.evaluate()
         except BaseException as e:           # noqa: BLE001 스레드 밖으로 옮겨 처리한다
             box["exc"] = e
+        finally:
+            done.set()
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
-    t.join(deadline)
-    if t.is_alive():
+    if not wait(done, deadline):
         rep.errors.append({"stage": "rollback", "error": "DEADLINE_EXCEEDED"})
         return {"action": "ERROR", "error": "DEADLINE_EXCEEDED"}
     exc = box.get("exc")

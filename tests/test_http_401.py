@@ -1,6 +1,7 @@
 """D106(계약 CONVENTIONS.md 6절 보충 규칙): 영역 사이 서비스 API에서 토큰이 없거나 틀리면 401 + `WWW-Authenticate: Bearer`,
 토큰은 맞지만 그 호출 권한이 없으면 403. 사람 행위자가 필요한 I7 검토 게시는 `X-Openit-User`가 없으면 401.
 오류 본문 code는 어느 쪽이든 PERMISSION_DENIED. /healthz, /readyz는 인증 없음. raw HTTP(http.client)로 확인한다."""
+from waiting import HANG_GUARD_SECONDS
 import http.client
 import json
 import threading
@@ -25,7 +26,7 @@ def port():
 
 
 def call(port, method, path, auth=None, body=b"{}", extra=None):
-    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     h = dict(extra or {})
     if auth is not None:
         h["Authorization"] = auth

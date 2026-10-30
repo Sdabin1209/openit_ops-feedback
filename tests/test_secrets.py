@@ -1,4 +1,5 @@
 """비밀(토큰, salt)은 NAME_FILE로 받고, 값은 어떤 출력에도 나오지 않는다(D84)."""
+from waiting import HANG_GUARD_SECONDS, Proc
 import json
 import os
 import socket
@@ -110,18 +111,12 @@ def test_api_server_secrets_from_files_do_not_leak(tmp_path):
         OPS_READ_TOKENS_FILE=_secret_file(tmp_path, "r", f"synthetic-data={RD}"),
         OPS_REVIEW_TOKENS_FILE=_secret_file(tmp_path, "v", f"reviewer={RV}"),
         OPS_LOG_DB=str(tmp_path / "l.db"), OPS_FAILURE_DB=str(tmp_path / "f.db"), OPS_PORT=str(port), OPS_REVIEW_REQUIRE_USER="0")
-    pr = subprocess.Popen([sys.executable, "-m", "ops_feedback.api"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    pr = Proc([sys.executable, "-m", "ops_feedback.api"], env)
     bodies = []
     try:
         base = f"http://127.0.0.1:{port}"
-        for _ in range(50):
-            try:
-                bodies.append(_get(base + "/healthz")[1])
-                break
-            except OSError:
-                time.sleep(0.2)
-        else:
-            pytest.fail("서버가 뜨지 않았다")
+        pr.wait_for("listening on")      # 기동은 로그 줄이라는 사건으로 안다(시계 없음)
+        bodies.append(_get(base + "/healthz")[1])
         bodies.append(_get(base + "/readyz")[1])
         for tok in (None, "wrong", RD, RV):                       # 잘못된 토큰의 오류 본문
             bodies.append(_get(base + "/v1/cases", tok)[1])
@@ -129,8 +124,7 @@ def test_api_server_secrets_from_files_do_not_leak(tmp_path):
         bodies.append(_get(base + "/v1/cases/nope", RD)[1])
         bodies.append(_get(base + "/v1/cases", ING)[1])
     finally:
-        pr.terminate()
-        out = pr.communicate(timeout=10)[0]
+        out = pr.stop()
     for secret in (ING, RD, RV):
         assert secret not in out
         assert all(secret not in b for b in bodies)
@@ -138,9 +132,9 @@ def test_api_server_secrets_from_files_do_not_leak(tmp_path):
 
 def test_api_startup_errors_hide_values(tmp_path):
     env = _scrub_env(OPS_INGEST_TOKEN=ING, OPS_INGEST_TOKEN_FILE=str(tmp_path / "missing"), OPS_PORT=str(_free_port()))
-    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=30)
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2 and ING not in r.stdout + r.stderr
-    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=_scrub_env(OPS_PORT=str(_free_port())), capture_output=True, text=True, timeout=30)
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=_scrub_env(OPS_PORT=str(_free_port())), capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2
 
 

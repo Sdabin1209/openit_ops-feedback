@@ -131,6 +131,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0024](docs/adr/0024-schemas-at-repo-root-installed-as-data.md) | 영역 스키마는 리포 루트 `schemas/`, 설치본에는 data-files |
 | [0025](docs/adr/0025-component-decomposition.md) | 입력 스키마 하나 -> 출력 스키마 하나인 컴포넌트로 나눈다(U400) |
 | [0026](docs/adr/0026-openit-link-for-link-components.md) | 받는 쪽 통신 컴포넌트는 openit_link 위에 쓴다 |
+| [0027](docs/adr/0027-inject-clock-and-wait.md) | 시계·타이머·대기를 인자로 주입한다(시험에서 실제 시간 0) |
 
 ## 7. 더 자세한 문서
 
