@@ -439,7 +439,7 @@ def test_review_surface_refuses_a_body_over_its_limit_without_reading_it():
     from ops_feedback.components.link_ingest_api import MAX_REVIEW_BODY, make_app
     from ops_feedback.wiring.ingest_service import IngestService
     app = make_app(IngestService(LogStore.memory(), FailureStoreImpl.memory()), "ing", read_tokens=parse_read_tokens("r=rt"),
-                   review_tokens=parse_read_tokens("reviewer=vt"), require_reviewer_identity=False, clock=FakeClock())
+                   review_tokens=parse_read_tokens("reviewer=vt"), require_reviewer_identity=False, clock=FakeClock(), request_deadline=9.0)
     got = {}
     env = {"REQUEST_METHOD": "POST", "PATH_INFO": "/v1/cases/fc-1/review", "CONTENT_LENGTH": str(MAX_REVIEW_BODY + 1), "HTTP_AUTHORIZATION": "Bearer vt",
            "wsgi.input": io.BytesIO(b""), "CONTENT_TYPE": "application/json"}

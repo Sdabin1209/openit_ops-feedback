@@ -10,6 +10,10 @@ from .log_store import LogStore, supported_trace_versions
 from .review_flow import ReviewFlow
 
 
+# 사람용 요청(검토 면·읽기 면)의 서버 쪽 전체 마감(초). 근거: D120, gateway 상한(연결 1초 + 응답 머리글 10초) 안에 끝내도록 11초에서 여유 2초를 뺀 값. 측정하지 않은 설계 값이다. 환경 변수로 받으려면 계약 OpsFeedbackServerEnv에 이름이 필요하다(CR-011).
+REQUEST_DEADLINE_SECONDS = 9.0
+
+
 class IngestService:
     def __init__(self, log: LogStore, failures: Optional[FailureCaseStore] = None, *, clock=utc_now) -> None:
         self._log, self._failures, self._clock = log, failures, clock
@@ -62,4 +66,5 @@ def make_ingest_server(log: LogStore, token: str, host: str = "0.0.0.0", port: i
     from ..components.link_ingest_api import make_server
     kw.setdefault("clock", time.monotonic)      # 실제 시계는 여기(wiring)에서 명시적으로 넘긴다(U423, ADR 0027)
     kw.setdefault("sleep", time.sleep)
+    kw.setdefault("request_deadline", REQUEST_DEADLINE_SECONDS)
     return make_server(IngestService(log, failures), token, host, port, **kw)

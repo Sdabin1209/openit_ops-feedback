@@ -94,7 +94,7 @@ def wsgi(app, method, path, length, token):
 
 def test_ingest_surface_refuses_a_body_over_its_limit_without_reading_it():
     """수집 면 본문 상한(8 MiB)이 openit_link Route에 실제로 넘어갔는지: 상한보다 큰 Content-Length 머리글만 있는 요청이 413이다(본문·소켓·시간 없음)."""
-    app = api.make_app(IngestService(LogStore.memory()), "tok", clock=FakeClock())
+    app = api.make_app(IngestService(LogStore.memory()), "tok", clock=FakeClock(), request_deadline=9.0)
     assert wsgi(app, "POST", "/v1/traces", api.MAX_BODY + 1, "tok").startswith("413")
 
 
@@ -137,7 +137,7 @@ def test_readyz_result_is_shared_for_the_cache_window_by_the_injected_clock():
     """readyz 캐시: 같은 창 안의 호출은 저장소를 다시 확인하지 않고, 창이 지나면(가짜 시계를 흘림) 다시 확인한다. 실제 시간을 기다리지 않는다."""
     now = [1000.0]
     svc = StubService()
-    app = api.make_app(svc, "tok", readyz_cache_seconds=1.5, clock=lambda: now[0])
+    app = api.make_app(svc, "tok", readyz_cache_seconds=1.5, clock=lambda: now[0], request_deadline=9.0)
 
     def readyz():
         got = {}
@@ -179,7 +179,7 @@ class ListStub(StubService):
 
 
 def list_call(result):
-    app = api.make_app(ListStub(result), "tok", read_tokens={"rt": "reader"}, clock=FakeClock())
+    app = api.make_app(ListStub(result), "tok", read_tokens={"rt": "reader"}, clock=FakeClock(), request_deadline=9.0)
     got, body = {}, []
 
     def sr(status, headers, *a):

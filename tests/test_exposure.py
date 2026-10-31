@@ -73,17 +73,8 @@ def test_declared_gateway_timeouts_for_reviewer_paths():
     assert _timeouts() == [{"dial": 1000, "response_header": 10000}] * 2
 
 
-def _db_worst_case_ms():
-    """설정 값으로만 계산한다(시간을 재지 않는다). 연결이 끊긴 호출 하나: 문장 상한+1초(소켓 abort 타이머) 뒤 재접속(접속 상한) 뒤 한 번 더 문장 상한+1초(PgBase._x, ADR 0008)."""
-    from ops_feedback.wiring import pgbase
-    stmt, conn = pgbase.DEFAULTS["OPS_DB_STATEMENT_TIMEOUT"], pgbase.DEFAULTS["OPS_DB_CONNECT_TIMEOUT"]
-    return int(((stmt + 1) + conn + (stmt + 1)) * 1000)
-
-
-@pytest.mark.xfail(strict=True, reason="U427 보고: 기본 DB 상한이면 연결이 끊긴 호출 하나의 최악이 11000ms로 게이트웨이 response_header 10000ms보다 길다. 헤드가 사슬을 다시 정하면 이 표시를 지운다")
-def test_server_worst_case_for_one_db_call_is_shorter_than_the_gateway_response_header():
-    assert _db_worst_case_ms() < max(t["response_header"] for t in _timeouts())
-
-
-def test_db_worst_case_numbers_from_the_settings():
-    assert _db_worst_case_ms() == 11000      # (3+1) + 3 + (3+1)초: 문장 상한 3, 접속 상한 3(pgbase.DEFAULTS, ADR 0008)
+def test_server_side_request_deadline_is_shorter_than_the_gateway_response_header():
+    """요청 전체 마감(D120, ADR 0028) < 게이트웨이 response_header: 서버가 계속 일하는 동안 화면이 504를 받는 일이 없다. 설정 값 비교(시간을 재지 않는다)."""
+    from ops_feedback.wiring.ingest_service import REQUEST_DEADLINE_SECONDS
+    assert REQUEST_DEADLINE_SECONDS * 1000 < min(t["response_header"] for t in _timeouts())
+    assert REQUEST_DEADLINE_SECONDS == 9.0

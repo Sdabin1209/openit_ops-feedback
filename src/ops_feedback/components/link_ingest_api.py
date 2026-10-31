@@ -22,6 +22,7 @@ from boundary_contracts import validator
 from boundary_contracts.errors import BoundaryError
 from openit_link import App, Request, Response, Route
 
+from ..wiring import deadline as request_deadline_scope
 from ..wiring.validate import check
 
 log = logging.getLogger("ingest-api")
@@ -74,7 +75,7 @@ class Server:
 
 def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = None,
              review_tokens: Optional[dict[str, str]] = None, readyz_cache_seconds: float = READYZ_CACHE_SECONDS,
-             retention_declared: bool = True, require_reviewer_identity: bool = True, clock):
+             retention_declared: bool = True, require_reviewer_identity: bool = True, clock, request_deadline: float):
     """WSGI 앱(PEP 3333). service는 wiring/ingest_service.py의 IngestService가 정한 면을 가진 객체다(이 컴포넌트는 업무 컴포넌트를 모른다, 구조 규칙 3)."""
     read_tokens = read_tokens or {}
     review_tokens = review_tokens or {}
@@ -88,9 +89,13 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     ready_cache: dict = {"at": 0.0, "val": None}
     ready_lock = threading.Lock()
 
-    def guarded(fn):
+    def guarded(fn, human: bool = False):
+        """human=True: 사람용(gateway를 지나는) 요청이다. 서버 쪽 요청 전체 마감을 주입한 시계로 정해 단계마다 남은 시간을 상한으로 쓴다(D120, ADR 0028)."""
         def run(req: Request) -> Response:
             try:
+                if human:
+                    with request_deadline_scope.scope(request_deadline_scope.Deadline(clock, request_deadline)):
+                        return fn(req)
                 return fn(req)
             except BoundaryError:
                 raise
@@ -98,6 +103,9 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
                 log.exception("처리 중 예외")
                 raise BoundaryError("UNAVAILABLE", "내부 오류") from None
         return run
+
+    def guarded_human(fn):
+        return guarded(fn, human=True)
 
     def check_ready() -> Optional[str]:
         """저장소 확인. 실패하면 오류 코드, 정상이면 None. 결과를 readyz_cache_seconds 동안 공유한다(동시 호출도 한 번만 확인)."""
@@ -158,13 +166,13 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
         counters["ingest_accepted" if res.get("status") == "ACCEPTED" else "ingest_duplicate"] += 1
         return Response(200, res)
 
-    @guarded
+    @guarded_human
     def get_case(req: Request) -> Response:
         need_read()
         ver = query(req).get("version")
         return Response(200, service.get_case(req.params["case_id"], int(ver) if ver is not None else None))
 
-    @guarded
+    @guarded_human
     def list_cases(req: Request) -> Response:
         need_read()
         one = query(req)
@@ -179,12 +187,12 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
                 raise BoundaryError("UNAVAILABLE", "응답 원소가 FailureCase를 어긴다(서버 결함)") from None
         return Response(200, {"items": items, "next_cursor": nxt})
 
-    @guarded
+    @guarded_human
     def get_trace(req: Request) -> Response:
         need_read()
         return Response(200, service.get_trace(req.params["ref"]))
 
-    @guarded
+    @guarded_human
     def review(req: Request) -> Response:
         check("ReviewHeaders", {} if req.user is None else {"user": req.user})       # Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)
         if not service.review_enabled:
@@ -223,5 +231,5 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     return app
 
 
-def make_server(service, token: str, host: str = "0.0.0.0", port: int = 8080, *, max_connections: int = 64, clock, sleep, **app_kw) -> Server:
-    return Server(make_app(service, token, clock=clock, **app_kw), host, port, connection_limit=max_connections, channel_timeout=REQUEST_TIMEOUT, clock=clock, sleep=sleep)
+def make_server(service, token: str, host: str = "0.0.0.0", port: int = 8080, *, max_connections: int = 64, clock, sleep, request_deadline: float, **app_kw) -> Server:
+    return Server(make_app(service, token, clock=clock, request_deadline=request_deadline, **app_kw), host, port, connection_limit=max_connections, channel_timeout=REQUEST_TIMEOUT, clock=clock, sleep=sleep)

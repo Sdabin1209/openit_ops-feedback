@@ -5,6 +5,7 @@ from typing import Optional
 
 from ..components.failure_case_store import FailureCaseStore
 from ..components.review_decider import ReviewDecider
+from . import deadline
 from .clock import Clock, utc_now
 
 
@@ -25,10 +26,13 @@ class ReviewFlow:
                      ("reviewed_input", reviewed_input), ("note", note), ("reviewed_by", reviewed_by)):
             if v is not None:
                 d[k] = v
+        deadline.check_current()                                  # 요청 전체 마감(D120): 단계마다 남은 시간을 본다
         cur = self._store.get_case(case_id)                       # 없으면 NOT_FOUND
+        deadline.check_current()
         out = self._decider.decide({"current": cur, "decision": d, "now": self._clock()})
         if not out["changed"]:
             return out["case"], False
+        deadline.check_current()                                  # 쓰기는 이 한 문장뿐이다: 그 전에 멈추면 반쯤 쓴 상태가 없다
         rec = self._store.publish_case(out["case"])
         return rec, rec["version"] > cur["version"]
 

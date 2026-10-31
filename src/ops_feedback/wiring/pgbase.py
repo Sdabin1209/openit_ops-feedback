@@ -13,6 +13,7 @@ import time
 from boundary_contracts.errors import BoundaryError
 
 from ..migrate import migrate_postgres
+from . import deadline
 
 # 대기 상한(초). 근거·출처·측정 여부는 docs/adr/0008-db-timeouts.md(probe 2초는 FAULT_POLICY 원칙 5, 나머지는 측정하지 않은 추정). 환경 변수로 바꾼다(비밀이 아니므로 NAME_FILE 없이 값 그대로). 근거는 docs/boundary.md 장애 절:
 # 이 영역의 문장은 인덱스 있는 단건 INSERT/SELECT와 잡의 한 배치 조회로 정상일 때 수 ms~수십 ms이므로 3초면 느린 디스크·잠깐의 잠금은 견딘다.
@@ -115,10 +116,15 @@ class PgBase:
         끊긴 연결로 재시도하면 접속 상한(connect_timeout)이 더해진다. 락(self._lock)은 이 시간만 쥔다.
         """
         import psycopg
-        limit = (limit or self.statement_timeout) + 1.0
+        base_limit = (limit or self.statement_timeout) + 1.0
         for attempt in (1, 2):
             timer = None
             try:
+                # 요청 전체 마감(D120): 남은 시간이 없으면 시작하지 않고, 남은 시간이 고정 상한보다 짧으면 남은 시간이 상한이다
+                rem = deadline.remaining_current()
+                if rem is not None and rem <= 0:
+                    raise BoundaryError("UNAVAILABLE", f"{self.WHAT}: 요청 마감을 넘었다")
+                limit = base_limit if rem is None else min(base_limit, rem)
                 with self._lock:
                     if not self._alive():
                         self._db = self._open()
