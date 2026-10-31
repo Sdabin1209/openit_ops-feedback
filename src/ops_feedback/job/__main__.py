@@ -10,6 +10,7 @@ from typing import Optional
 
 from boundary_contracts import validator
 from boundary_contracts.errors import BoundaryError
+from boundary_contracts.secrets import SecretError
 
 from ..config import load_config
 from ..wiring.build import build_from_config
@@ -40,6 +41,10 @@ def main(argv: Optional[list[str]] = None) -> int:
                        evaluate_rollback=not a.no_rollback, release_reader=reader)
     except BoundaryError as e:
         print(json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False), file=sys.stderr)
+        return 2
+    except (ValueError, SecretError) as e:
+        # 비밀이 없거나 짧음·설정 값 오류는 스택 트레이스 없이 이유만 낸다(메시지에는 이름·길이 요구만 있고 값은 없다). 종료 코드 2(실행 못 함)
+        print(f"오류: {e}", file=sys.stderr)
         return 2
     for w in rep.warnings:
         print("경고: " + w, file=sys.stderr)

@@ -18,8 +18,7 @@ from ..wiring.validate import check
 # 이름·주소 같은 것은 패턴으로 알 수 없다: 검토 화면 안내와 사람 책임이다(docs/boundary.md). 값은 오류에 싣지 않는다.
 # 시간: 전화·주민번호 패턴은 한도가 정해진 반복만 있어 입력 길이에 선형이다. 이메일은 '@'가 없으면 정규식 자체를 돌리지 않고, '@' 하나마다
 # 앞뒤 고정 길이 창만 본다(점검 round2 M2: 앞쪽 무제한 문자 클래스 정규식은 '@' 없는 긴 문자열에서 제곱 시간이었다).
-# 문자열 하나의 길이는 MAX_FIELD_CHARS로 막는다(검토자가 쓰는 문장·JSON 값으로 충분한 임의 상한, 측정 안 함, docs/adr/0008).
-MAX_FIELD_CHARS = 20_000
+# 문자열 하나의 길이는 스키마 ReviewDecision.Bounded의 maxLength 20,000자로 입구에서 막는다(검토자가 쓰는 문장·JSON 값으로 충분한 임의 상한, 측정 안 함, docs/adr/0008).
 _EMAIL_LOCAL = re.compile(r"[A-Za-z0-9._%+-]")
 _EMAIL_TAIL = re.compile(r"[A-Za-z0-9.-]{0,254}")
 DEFAULT_REVIEW_PATTERNS = {

@@ -35,6 +35,7 @@ def migrate_sqlite(scope: str, path: str | Path) -> None:
     if str(path) == ":memory:":
         raise BoundaryError("INVALID_RECORD", "SQLite 메모리 DB에는 마이그레이션을 적용하지 않는다(메모리 구현을 쓴다)")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
+    # 10초: 같은 SQLite 파일을 동시에 여는 서버와 잡이 yoyo 잠금을 기다리는 대기 상한(마이그레이션은 표 몇 개라 수 ms). 근거: ADR 0021, 측정하지 않은 보수 값.
     _apply(f"sqlite:///{os.path.abspath(path)}", scope, "sqlite", lock_secs=10.0)
 
 

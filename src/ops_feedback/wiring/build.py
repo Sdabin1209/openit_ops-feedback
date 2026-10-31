@@ -22,7 +22,7 @@ def _resolve_args(args, env: dict, path: str = "args"):
             if not isinstance(name, str) or not name:
                 raise ValueError(f"설정 {path}: 비밀 이름은 비어 있지 않은 문자열이어야 한다")
             val = read_secret(name, environ=env)      # NAME_FILE 우선, 없으면 NAME
-            if val is None:
+            if not val:      # 없거나 빈 파일/값: 빈 비밀은 없는 것과 같다
                 raise ValueError(f"비밀 {name}가 없다(NAME_FILE 또는 NAME)")
             return val
         return {k: _resolve_args(v, env, f"{path}.{k}") for k, v in args.items()}
@@ -34,7 +34,6 @@ def _resolve_args(args, env: dict, path: str = "args"):
 def _import(path: str):
     mod, _, fn = path.partition(":")
     return getattr(importlib.import_module(mod), fn)
-
 
 
 def make_pseudonymizer(salt: str):

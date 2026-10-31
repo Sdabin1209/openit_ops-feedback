@@ -4,6 +4,8 @@ from __future__ import annotations
 import time
 from typing import Optional
 
+from boundary_contracts.errors import BoundaryError
+
 from ..components.failure_case_store import FailureCaseStore
 from .clock import parse_ts, utc_now
 from .log_store import LogStore, supported_trace_versions
@@ -44,8 +46,12 @@ class IngestService:
         return self._failures.get_case(case_id, version=version)
 
     def list_cases(self, *, review_status, failure_type, source_release_id, updated_since: Optional[str], latest_only: bool, cursor, limit: int):
+        try:
+            since = parse_ts(updated_since) if updated_since else None
+        except ValueError:      # 형식은 맞지만 없는 날짜(예: 13월)는 입력 잘못이다: 4xx이지 서버 결함(503)이 아니다
+            raise BoundaryError("INVALID_RECORD", "updated_since가 올바른 시각이 아니다") from None
         return self._failures.list_cases(review_status=review_status, failure_type=failure_type, source_release_id=source_release_id,
-                                         updated_since=parse_ts(updated_since) if updated_since else None, latest_only=latest_only, cursor=cursor, limit=limit)
+                                         updated_since=since, latest_only=latest_only, cursor=cursor, limit=limit)
 
     def get_trace(self, ref: str) -> dict:
         return self._failures.get_trace(ref)

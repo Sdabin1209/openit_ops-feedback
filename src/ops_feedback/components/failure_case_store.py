@@ -16,7 +16,7 @@ from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 
 from ..migrate import migrate_sqlite
-from ..wiring.clock import fmt_ts, parse_ts
+from ..wiring.clock import fmt_ts
 from ..wiring.pgbase import PgBase
 from ..wiring.validate import check
 

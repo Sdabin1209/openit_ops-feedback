@@ -1,0 +1,12 @@
+{
+  "jobs": [
+    {
+      "name": "ops-feedback-job",
+      "argv": ["python", "-m", "ops_feedback.job", "--config", "/etc/ops-feedback/job.yaml"],
+      "idempotent": true,
+      "secret_files": ["OPS_DEID_SALT_FILE", "OPS_LOG_DATABASE_URL_FILE", "OPS_FAILURE_DATABASE_URL_FILE"],
+      "config": {"container_path": "/etc/ops-feedback/job.yaml", "schema": "OpsFeedbackJobConfig.schema.json"},
+      "needs": ["postgres"]
+    }
+  ]
+}

@@ -134,14 +134,6 @@ RULES: dict[str, Callable[[dict, dict], Optional[dict]]] = {
     "REASK_STREAK": _reask_streak,
 }
 
-# v2(D74)에서 없어진 규칙. 뜻이 달라져 이름만 바꿔 받지 않고, 바꿀 이름을 알려 준다.
-RETIRED_RULES = {
-    "PARSER_EMPTY": "EXTRACT_FAILED (파서 입력·항목이 없어졌다. 조건: extract_status!=OK 또는 값 없는 비REDIRECT 추출)",
-    "GENERATOR_FALLBACK": "RESPONSE_FALLBACK (v1 이름. 뜻은 같다: response_outcome==fallback. ADR 0015)",
-    "UNRECOGNIZED_STREAK": "REASK_STREAK (planner가 없어졌다. 서비스가 pause_reason=REASK_LIMIT로 남긴 턴)",
-}
-
-
 class RuleDetector:
     name = "rule"
 

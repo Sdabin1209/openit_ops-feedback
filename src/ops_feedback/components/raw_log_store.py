@@ -10,7 +10,7 @@ import sqlite3
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
 from boundary_contracts.errors import BoundaryError
 

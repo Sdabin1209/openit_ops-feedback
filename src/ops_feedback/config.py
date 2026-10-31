@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 from boundary_contracts import validator
 
-from .wiring.validate import brief, validator as area_validator
+from .wiring.validate import validator as area_validator
 
 
 def _path(e) -> str:
@@ -28,7 +28,12 @@ def _check(v, cfg, what: str) -> None:
 
 
 def load_config(path: str | Path) -> dict:
-    cfg = yaml.safe_load(Path(path).read_text("utf-8"))
+    try:
+        cfg = yaml.safe_load(Path(path).read_text("utf-8"))
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"설정 파일을 읽지 못했다: {type(e).__name__}") from None
+    except yaml.YAMLError:
+        raise ValueError("설정 파일이 YAML이 아니다") from None      # 파싱 오류 메시지에 설정 조각(비밀 가능)이 들어갈 수 있어 이유만 낸다
     _check(area_validator("JobConfigChecks"), cfg, "JobConfigChecks")
     _check(validator("OpsFeedbackJobConfig"), cfg, "OpsFeedbackJobConfig")
     return cfg
@@ -45,12 +50,14 @@ def validate_server_env(environ) -> None:
 
 
 def parse_read_tokens(spec: str) -> dict[str, str]:
-    """'역할=토큰,역할=토큰' -> {토큰: 역할}"""
+    """'역할=토큰,역할=토큰' -> {토큰: 역할}. OPS_READ_TOKENS와 OPS_REVIEW_TOKENS가 같은 형식이다. 같은 토큰이 두 번 나오면(역할 하나가 조용히 사라진다) 거부한다."""
     out: dict[str, str] = {}
     for part in filter(None, (x.strip() for x in spec.split(","))):
         role, sep, tok = part.partition("=")
         if not sep or not role or not tok:
-            raise ValueError("OPS_READ_TOKENS 형식은 역할=토큰,역할=토큰")
+            raise ValueError("토큰 목록(OPS_READ_TOKENS, OPS_REVIEW_TOKENS) 형식은 역할=토큰,역할=토큰")
+        if tok in out:
+            raise ValueError("토큰 목록에 같은 토큰이 두 번 있다(토큰은 역할마다 달라야 한다)")
         out[tok] = role
     return out
 

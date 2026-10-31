@@ -645,3 +645,60 @@ def test_delete_session_dry_run_counts_raw_rows(tmp_path):
     assert real.returncode == 0 and json.loads(real.stdout)["raw_rows"] == 1
     gone = subprocess.run(base + ["--dry-run"], env=env, capture_output=True, text=True)
     assert gone.returncode == 3
+
+
+# ---- U429 점검에서 고친 결함의 시험 ----
+
+def test_config_file_problems_are_value_errors_not_tracebacks(tmp_path):
+    """없는 파일·깨진 YAML은 잡이 스택 트레이스 없이 이유만 내도록 ValueError로 닫는다."""
+    with pytest.raises(ValueError, match="읽지 못했다"):
+        load_config(tmp_path / "none.yaml")
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("a: [unclosed\n  token: s3cr3t-value")
+    with pytest.raises(ValueError, match="YAML이 아니다") as e:
+        load_config(bad)
+    assert "s3cr3t-value" not in str(e.value)
+    empty = tmp_path / "empty.yaml"
+    empty.write_text("")
+    with pytest.raises(ValueError):
+        load_config(empty)
+
+
+def test_a_token_listed_twice_in_a_token_spec_is_rejected():
+    with pytest.raises(ValueError, match="두 번"):
+        parse_read_tokens("a=tok1,b=tok1")
+    assert parse_read_tokens("a=tok1,b=tok2") == {"tok1": "a", "tok2": "b"}
+
+
+def test_nonexistent_calendar_time_in_updated_since_is_a_client_error():
+    from ops_feedback.wiring.ingest_service import IngestService
+    svc = IngestService(LogStore.memory(), FailureStoreImpl.memory())
+    with pytest.raises(BoundaryError) as e:
+        svc.list_cases(review_status=None, failure_type=None, source_release_id=None, updated_since="2026-13-45T00:00:00Z", latest_only=True, cursor=None, limit=10)
+    assert e.value.code == "INVALID_RECORD" and not e.value.retryable
+
+
+def test_an_empty_secret_value_is_refused_without_printing_it(tmp_path):
+    from boundary_contracts.secrets import SecretError
+    from ops_feedback.wiring.build import _resolve_args
+    f = tmp_path / "empty"
+    f.write_text("")
+    with pytest.raises((SecretError, ValueError)):      # 빈 파일은 읽는 단계(read_secret)에서, 이름이 비면 여기서 거부한다
+        _resolve_args({"secret": "X_TOKEN"}, {"X_TOKEN_FILE": str(f)})
+    with pytest.raises(ValueError, match="없다"):
+        _resolve_args({"secret": "X_TOKEN"}, {})
+
+
+def test_job_main_turns_secret_and_config_value_errors_into_exit_2(tmp_path, monkeypatch, capsys):
+    import yaml
+    import ops_feedback.job.__main__ as job
+    from boundary_contracts.secrets import SecretError
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(yaml.safe_dump(base_config()))
+    for exc in (SecretError("OPS_DEID_SALT_FILE=/x 파일이 비어 있다"), ValueError("의사 식별자 salt 비밀이 없다")):
+        def boom(*a, **k):
+            raise exc
+        monkeypatch.setattr(job, "build_from_config", boom)
+        assert job.main(["--config", str(cfg)]) == 2
+        err = capsys.readouterr().err
+        assert "오류:" in err and "Traceback" not in err

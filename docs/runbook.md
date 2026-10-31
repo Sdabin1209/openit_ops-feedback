@@ -129,3 +129,7 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - 수동 정리: `admin purge --raw-days N --cases-days M --metrics-days K [--include-confirmed] [--include-unprocessed]`, `admin minimize-raw`.
 - DDL 없는 앱 계정: 소유자 계정으로 `admin migrate`를 실행한 뒤 서버·잡을 `OPS_DB_SCHEMA=verify`로 띄운다. 앱 계정에는 스키마 USAGE, 표 SELECT/INSERT/UPDATE/DELETE, 시퀀스 USAGE/SELECT만 준다(`tests/test_audit_fixes.py::test_verify_mode_needs_no_ddl_privilege`가 이 권한으로 시작·수집을 확인).
 - 시험: `scripts/dev-postgres.sh`(또는 `make test-pg`)가 PostgreSQL 컨테이너를 띄워 전체 시험을 돌리고 내린다.
+
+## 잡 선언 라벨 (io.openit.jobs)
+
+이미지 라벨 `io.openit.jobs`는 리포의 `deploy-jobs.json`이 정본이다. `scripts/build-image.sh`가 계약 `JobsDeclaration`으로 검증한 뒤(R7, 어기면 이미지를 만들지 않는다) 한 줄 JSON으로 단다. 선언한 명령·설정 경로·비밀 파일 이름이 코드와 맞는지는 `tests/test_jobs_declaration.py`가 본다. 잡 설정 파일 경로(`/etc/ops-feedback/job.yaml`)와 `needs`(`postgres`)는 이 영역의 제안 값이며 deploy가 아직 이 라벨을 읽지 않는다(deploy가 compose에 직접 적는다).

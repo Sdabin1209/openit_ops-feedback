@@ -1,4 +1,4 @@
-"""PostgreSQL 공통(접속·스키마 멱등 생성·오류 변환). 원본 쪽 백엔드는 logstore.py, 실패 사례 쪽은 failurestore.py에 있어 저장소 분리가 소스에서도 유지된다. SQLite 백엔드와 같은 인터페이스·같은 의미이고 같은 적합성 시험을 통과한다.
+"""PostgreSQL 공통(접속·스키마 멱등 생성·오류 변환). 원본 쪽 백엔드는 components/raw_log_store.py, 실패 사례 쪽은 components/failure_case_store.py에 있어 저장소 분리가 소스에서도 유지된다. SQLite 백엔드와 같은 인터페이스·같은 의미이고 같은 적합성 시험을 통과한다.
 
 접속 문자열(암호 포함 가능)은 이 모듈 밖으로 나가지 않는다. 오류·로그·/readyz에는 예외 클래스 이름만 쓴다.
 스키마는 시작 시 마이그레이션(yoyo, migrate.py)으로 만든다(yoyo 잠금으로 서버와 잡이 동시에 떠도 안전). JSON은 TEXT로 저장해 SQLite와 바이트까지 같다.

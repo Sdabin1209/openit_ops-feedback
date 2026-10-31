@@ -51,7 +51,7 @@ def test_job_cli_refuses_short_salt_with_exit_2_and_no_value(tmp_path):
     _, p = _cfg(tmp_path)
     r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(p)],
                        env=_env(OPS_DEID_SALT=SHORT31), capture_output=True, text=True)
-    assert r.returncode != 0 and SHORT31 not in r.stdout + r.stderr
+    assert r.returncode == 2 and SHORT31 not in r.stdout + r.stderr and "Traceback" not in r.stderr      # 문서의 "실행 못 함" 종료 코드 2, 스택 트레이스 없음
 
 
 def test_admin_delete_session_refuses_short_salt(tmp_path):

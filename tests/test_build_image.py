@@ -112,6 +112,9 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         exposure = json.loads(lb["io.openit.exposure"])                 # 노출 선언 라벨(U47): 리포의 deploy-exposure.json 그대로
         assert not list(validator("Exposure").iter_errors(exposure))
         assert exposure == json.loads((ROOT / "deploy-exposure.json").read_text(encoding="utf-8"))
+        jobs = json.loads(lb["io.openit.jobs"])                          # 잡 선언 라벨(U429): 리포의 deploy-jobs.json 그대로, 계약 JobsDeclaration을 지킨다
+        assert not list(validator("JobsDeclaration").iter_errors(jobs))
+        assert jobs == json.loads((ROOT / "deploy-jobs.json").read_text(encoding="utf-8"))
         def layers():
             out = subprocess.run(["docker", "image", "inspect", f"ops-feedback-buildtest:t42-{UNIQ}", "--format", "{{json .RootFS.Layers}}"], capture_output=True, text=True)
             return json.loads(out.stdout)
