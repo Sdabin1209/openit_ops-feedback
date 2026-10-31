@@ -2,25 +2,57 @@
   "service": "ops-feedback-ingest",
   "routes": [
     {
-      "paths": ["/v1/cases", "/v1/cases/*", "/v1/deidentified-traces/*"],
-      "methods": ["GET"],
-      "auth": {"kind": "account", "roles": ["reviewer"]},
+      "paths": [
+        "/v1/cases",
+        "/v1/cases/*",
+        "/v1/deidentified-traces/*"
+      ],
+      "methods": [
+        "GET"
+      ],
+      "auth": {
+        "kind": "account",
+        "roles": [
+          "reviewer"
+        ]
+      },
       "upstream_token": "ops-read-reviewer",
       "user_header": "set",
-      "timeouts_ms": {"dial": 2000, "response_header": 10000}
+      "timeouts_ms": {
+        "dial": 1000,
+        "response_header": 10000
+      }
     },
     {
-      "paths": ["/v1/cases/*/review"],
-      "methods": ["POST"],
-      "auth": {"kind": "account", "roles": ["reviewer"]},
+      "paths": [
+        "/v1/cases/*/review"
+      ],
+      "methods": [
+        "POST"
+      ],
+      "auth": {
+        "kind": "account",
+        "roles": [
+          "reviewer"
+        ]
+      },
       "upstream_token": "ops-review-reviewer",
       "user_header": "set",
-      "timeouts_ms": {"dial": 2000, "response_header": 10000}
+      "timeouts_ms": {
+        "dial": 1000,
+        "response_header": 10000
+      }
     },
     {
-      "paths": ["/v1/traces"],
-      "methods": ["POST"],
-      "auth": {"kind": "denied"}
+      "paths": [
+        "/v1/traces"
+      ],
+      "methods": [
+        "POST"
+      ],
+      "auth": {
+        "kind": "denied"
+      }
     }
   ]
 }

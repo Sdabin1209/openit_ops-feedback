@@ -60,3 +60,30 @@ def test_declared_exposed_routes_exist_in_the_service(env):
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(rq)
     assert e.value.code == 403
+
+
+# ---- U427: 노출 선언의 시한(시간 사슬 D119, deploy ADR 0048)과 서버 쪽 시한 ----
+
+def _timeouts():
+    return [r["timeouts_ms"] for r in EXPOSURE["routes"] if "timeouts_ms" in r]
+
+
+def test_declared_gateway_timeouts_for_reviewer_paths():
+    """검토 경로(읽기 3 + 검토 게시 1)의 게이트웨이 상한: 연결 1초, 응답 머리글 10초. deploy ADR 0048이 정한 값이다."""
+    assert _timeouts() == [{"dial": 1000, "response_header": 10000}] * 2
+
+
+def _db_worst_case_ms():
+    """설정 값으로만 계산한다(시간을 재지 않는다). 연결이 끊긴 호출 하나: 문장 상한+1초(소켓 abort 타이머) 뒤 재접속(접속 상한) 뒤 한 번 더 문장 상한+1초(PgBase._x, ADR 0008)."""
+    from ops_feedback.wiring import pgbase
+    stmt, conn = pgbase.DEFAULTS["OPS_DB_STATEMENT_TIMEOUT"], pgbase.DEFAULTS["OPS_DB_CONNECT_TIMEOUT"]
+    return int(((stmt + 1) + conn + (stmt + 1)) * 1000)
+
+
+@pytest.mark.xfail(strict=True, reason="U427 보고: 기본 DB 상한이면 연결이 끊긴 호출 하나의 최악이 11000ms로 게이트웨이 response_header 10000ms보다 길다. 헤드가 사슬을 다시 정하면 이 표시를 지운다")
+def test_server_worst_case_for_one_db_call_is_shorter_than_the_gateway_response_header():
+    assert _db_worst_case_ms() < max(t["response_header"] for t in _timeouts())
+
+
+def test_db_worst_case_numbers_from_the_settings():
+    assert _db_worst_case_ms() == 11000      # (3+1) + 3 + (3+1)초: 문장 상한 3, 접속 상한 3(pgbase.DEFAULTS, ADR 0008)
