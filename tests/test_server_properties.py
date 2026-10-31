@@ -162,3 +162,52 @@ def test_shutdown_flush_loop_ends_when_the_injected_clock_passes_its_limit(fake)
     s._srv._map = {1: Busy()}
     s.shutdown(grace=1.0)
     assert slept and abs(sum(slept) - api.SHUTDOWN_FLUSH_SECONDS) < 0.05 and fake.calls[-1][0] == "close_all"
+
+
+# ---- R7: 목록 응답을 내보내기 전에 계약으로 검증한다(U424) ----
+
+class ListStub(StubService):
+    read_enabled = True
+    review_enabled = False
+
+    def __init__(self, result):
+        super().__init__()
+        self.result = result
+
+    def list_cases(self, **kw):
+        return self.result
+
+
+def list_call(result):
+    app = api.make_app(ListStub(result), "tok", read_tokens={"rt": "reader"}, clock=FakeClock())
+    got, body = {}, []
+
+    def sr(status, headers, *a):
+        got["status"] = status
+    body = app({"REQUEST_METHOD": "GET", "PATH_INFO": "/v1/cases", "QUERY_STRING": "", "wsgi.input": io.BytesIO(b""), "HTTP_AUTHORIZATION": "Bearer rt"}, sr)
+    return got["status"], b"".join(body)
+
+
+def test_case_list_envelope_is_valid_for_the_contract_before_it_is_sent():
+    import json
+    case = json.loads((api_example()).read_text("utf-8"))
+    st, body = list_call(([case], None))
+    assert st.startswith("200") and json.loads(body)["next_cursor"] is None
+    st, body = list_call(([case], "c1"))
+    assert st.startswith("200") and json.loads(body)["next_cursor"] == "c1"
+
+
+def test_a_broken_envelope_is_not_sent():
+    """봉투가 계약 ListEnvelope를 어기면(next_cursor가 빈 문자열) 응답하지 않고 서버 결함(503)으로 닫는다."""
+    st, body = list_call(([], ""))
+    assert st.startswith("503") and b"UNAVAILABLE" in body
+
+
+def test_a_broken_element_is_not_sent():
+    st, body = list_call(([{"case_id": "x"}], None))
+    assert not st.startswith("200") and b"case_id" not in body      # 원소가 FailureCase를 어기면 내보내지 않는다(기존 동작: 오류 본문)
+
+
+def api_example():
+    from pathlib import Path
+    return Path(__file__).resolve().parent.parent / "examples" / "output.FailureCase.json"
