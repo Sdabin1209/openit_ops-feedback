@@ -1,6 +1,6 @@
 # 컴포넌트 (U400, D117)
 
-입력은 이 영역이 계약(boundary-contracts v3.1.1)과 [브리프](brief.md)에서 받고 내는 것이다. 그 일을 업무 단계로 나누어 컴포넌트를 정했다. 기존 코드는 빠진 업무 규칙과 거부 조건을 찾는 대조 자료로만 썼다.
+입력은 이 영역이 계약(boundary-contracts v3.1.2)과 [브리프](brief.md)에서 받고 내는 것이다. 그 일을 업무 단계로 나누어 컴포넌트를 정했다. 기존 코드는 빠진 업무 규칙과 거부 조건을 찾는 대조 자료로만 썼다.
 한 컴포넌트 = 입력 스키마 하나 -> 출력 스키마 하나(`schemas/`의 같은 이름 파일, 타입은 `src/ops_feedback/types/`에서 생성). 컴포넌트끼리는 import하지 않는다. 어느 출력을 어느 입력에 넘길지는 `wiring/`의 몫이다.
 계약 타입은 복사하지 않고 `$ref`로 가리킨다(`../boundary/<이름>.schema.json`). 왜 이렇게 나눴는지: [ADR 0025](adr/0025-component-decomposition.md). 스키마가 못 다루는 조건: [schemas/README.md](../schemas/README.md).
 

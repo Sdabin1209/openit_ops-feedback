@@ -1,5 +1,9 @@
 # 변경 이력
 
+## 0.18.1 (제안, U431 고정 갱신)
+
+- 계약 핀 v3.1.1 -> v3.1.2(스키마 변경 없음), openit-link v0.4.1 -> v0.4.3(음수 Content-Length 400, 처리 함수의 예기치 않은 예외를 BoundaryError 503으로). 이 영역은 model-runtime을 쓰지 않는다. 문진 스키마는 survey-schema-v3.0.0 그대로.
+
 ## 0.18.0 (제안, U400 영역 구조 개편, D117)
 
 - 영역을 컴포넌트로 나눴다(22개, [components.md](components.md), ADR 0025). 코드는 `components/`(컴포넌트마다 파일 하나)와 `wiring/`(연결·주입)으로 옮겼고 컴포넌트끼리 import하지 않는다. 타입은 `schemas/`(40개)에서 `types/`로 생성한다(ADR 0024).
