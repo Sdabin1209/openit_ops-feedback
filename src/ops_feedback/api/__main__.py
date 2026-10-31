@@ -68,9 +68,10 @@ def main() -> int:
     srv = make_server(IngestService(store, failures), token, port=st["port"], read_tokens=rtoks, review_tokens=vtoks,
                       max_connections=st["max_connections"], readyz_cache_seconds=st["readyz_cache_seconds"], retention_declared=declared,
                       require_reviewer_identity=require_user)
-    log.info("listening on %s", srv.server_address[1])
     # SIGTERM(docker stop)에 새 연결을 멈추고 끝낸다. 쓰기는 자동 커밋 단일 문장이라 처리 중이던 요청은 완결되거나 호출자가 재시도한다.
+    # 왜 "listening on"보다 먼저 등록하나: 그 로그 줄을 기동 신호로 삼는 쪽(시험·운영 도구)이 곧바로 SIGTERM을 보내도 핸들러가 이미 있어야 한다.
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=srv.shutdown, daemon=True).start())
+    log.info("listening on %s", srv.server_address[1])
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
