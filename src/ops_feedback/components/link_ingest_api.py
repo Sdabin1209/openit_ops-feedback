@@ -172,7 +172,11 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
                                         source_release_id=one.get("source_release_id"), updated_since=one.get("updated_since"),
                                         latest_only=one.get("latest_only", "true") == "true", cursor=one.get("cursor"), limit=int(one.get("limit", 100)))
         for it in items:
-            check("FailureCase", it, contract=True)
+            try:
+                check("FailureCase", it, contract=True)
+            except BoundaryError:
+                # 원소가 계약을 어기는 것은 요청이 아니라 서버 자신의 출력 결함이다: 400이 아니라 503으로 내보내지 않는다(CONVENTIONS 9절, openit_link의 response_schema 위반 처리와 같다)
+                raise BoundaryError("UNAVAILABLE", "응답 원소가 FailureCase를 어긴다(서버 결함)") from None
         return Response(200, {"items": items, "next_cursor": nxt})
 
     @guarded

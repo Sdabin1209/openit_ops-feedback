@@ -205,7 +205,7 @@ def test_a_broken_envelope_is_not_sent():
 
 def test_a_broken_element_is_not_sent():
     st, body = list_call(([{"case_id": "x"}], None))
-    assert not st.startswith("200") and b"case_id" not in body      # 원소가 FailureCase를 어기면 내보내지 않는다(기존 동작: 오류 본문)
+    assert st.startswith("503") and b"UNAVAILABLE" in body and b'"case_id"' not in body      # 원소가 FailureCase를 어기면 서버 결함: 내보내지 않고 503
 
 
 def api_example():
