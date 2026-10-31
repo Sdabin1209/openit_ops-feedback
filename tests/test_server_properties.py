@@ -9,6 +9,7 @@ import ops_feedback.components.link_ingest_api as api
 from ops_feedback.components.failure_case_store import FailureCaseStore
 from ops_feedback.wiring.ingest_service import IngestService, make_ingest_server
 from ops_feedback.wiring.log_store import LogStore
+from fakeclock import FakeClock
 from waiting import HANG_GUARD_SECONDS
 
 
@@ -51,12 +52,12 @@ def fake(monkeypatch):
 
 def test_waitress_receives_our_limits(fake, monkeypatch):
     """연결 상한 N이면 일꾼 N개, waitress 상한 N+2(듣는 소켓·깨우기 포함), 멈춘 연결 정리 주기, 본문 상한을 넘긴다(ADR 0020)."""
-    api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=7, channel_timeout=12.5)      # 넘긴 값 확인(시계 아님)
+    api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=7, channel_timeout=12.5, clock=FakeClock(), sleep=FakeClock().sleep)      # 넘긴 값 확인(시계 아님)
     kw = fake.kw
     assert kw["threads"] == 7 and kw["connection_limit"] == 9
     assert kw["channel_timeout"] == 12.5 and kw["cleanup_interval"] == 5.0           # min(5, channel_timeout)
     assert kw["max_request_body_size"] == api.MAX_BODY
-    api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=1, channel_timeout=2.0)      # 넘긴 값 확인(시계 아님)
+    api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=1, channel_timeout=2.0, clock=FakeClock(), sleep=FakeClock().sleep)      # 넘긴 값 확인(시계 아님)
     assert fake.kw["cleanup_interval"] == 2.0
 
 
@@ -68,7 +69,7 @@ def test_make_server_passes_the_request_timeout_and_connection_cap(fake, monkeyp
 
 def test_shutdown_stops_listening_then_lets_in_flight_requests_finish_then_closes(fake):
     """종료 절차: 듣는 소켓을 닫고 -> 진행 중 요청을 취소하지 않고 grace까지 기다리고 -> 연결을 닫는다."""
-    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0)      # 넘긴 값 확인(시계 아님)
+    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0, clock=FakeClock(), sleep=FakeClock().sleep)      # 넘긴 값 확인(시계 아님)
     s.shutdown(grace=123.0)
     assert [c[0] for c in fake.calls] == ["close", "dispatcher.shutdown", "close_all"]
     assert fake.calls[1][1] == {"cancel_pending": False, "timeout": 123.0}
@@ -76,7 +77,7 @@ def test_shutdown_stops_listening_then_lets_in_flight_requests_finish_then_close
 
 
 def test_serve_forever_hides_the_socket_error_only_while_closing(fake):
-    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0)      # 넘긴 값 확인(시계 아님)
+    s = api.Server(lambda *a: None, "127.0.0.1", 0, connection_limit=2, channel_timeout=1.0, clock=FakeClock(), sleep=FakeClock().sleep)      # 넘긴 값 확인(시계 아님)
     with pytest.raises(OSError):
         s.serve_forever()                  # 종료 중이 아니면 오류를 올린다
     s._closing = True
@@ -93,7 +94,7 @@ def wsgi(app, method, path, length, token):
 
 def test_ingest_surface_refuses_a_body_over_its_limit_without_reading_it():
     """수집 면 본문 상한(8 MiB)이 openit_link Route에 실제로 넘어갔는지: 상한보다 큰 Content-Length 머리글만 있는 요청이 413이다(본문·소켓·시간 없음)."""
-    app = api.make_app(IngestService(LogStore.memory()), "tok")
+    app = api.make_app(IngestService(LogStore.memory()), "tok", clock=FakeClock())
     assert wsgi(app, "POST", "/v1/traces", api.MAX_BODY + 1, "tok").startswith("413")
 
 

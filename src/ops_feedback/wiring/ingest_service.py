@@ -1,6 +1,7 @@
 """ingest-api 통신 컴포넌트(link_ingest_api)에 주입하는 서비스 면. 요청을 업무 컴포넌트에 잇는 조립이다(통신 컴포넌트는 업무 컴포넌트를 모른다)."""
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from ..components.failure_case_store import FailureCaseStore
@@ -59,4 +60,6 @@ class IngestService:
 def make_ingest_server(log: LogStore, token: str, host: str = "0.0.0.0", port: int = 8080, *, failures: Optional[FailureCaseStore] = None, **kw):
     """수집 서버 조립: 서비스 면(IngestService)을 통신 컴포넌트에 주입한다."""
     from ..components.link_ingest_api import make_server
+    kw.setdefault("clock", time.monotonic)      # 실제 시계는 여기(wiring)에서 명시적으로 넘긴다(U423, ADR 0027)
+    kw.setdefault("sleep", time.sleep)
     return make_server(IngestService(log, failures), token, host, port, **kw)

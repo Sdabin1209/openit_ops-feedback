@@ -1,4 +1,5 @@
 """전수 점검(head/docs/audit/ops-feedback.md) 지적의 고침 시험: 비식별 값 검증, 삭제·보존, 엄격 설정, 배치, 서버 한도, 검토자 신원, 스키마 분리."""
+from fakeclock import FakeClock
 from waiting import HANG_GUARD_SECONDS, Proc
 import copy
 import http.client
@@ -438,7 +439,7 @@ def test_review_surface_refuses_a_body_over_its_limit_without_reading_it():
     from ops_feedback.components.link_ingest_api import MAX_REVIEW_BODY, make_app
     from ops_feedback.wiring.ingest_service import IngestService
     app = make_app(IngestService(LogStore.memory(), FailureStoreImpl.memory()), "ing", read_tokens=parse_read_tokens("r=rt"),
-                   review_tokens=parse_read_tokens("reviewer=vt"), require_reviewer_identity=False)
+                   review_tokens=parse_read_tokens("reviewer=vt"), require_reviewer_identity=False, clock=FakeClock())
     got = {}
     env = {"REQUEST_METHOD": "POST", "PATH_INFO": "/v1/cases/fc-1/review", "CONTENT_LENGTH": str(MAX_REVIEW_BODY + 1), "HTTP_AUTHORIZATION": "Bearer vt",
            "wsgi.input": io.BytesIO(b""), "CONTENT_TYPE": "application/json"}

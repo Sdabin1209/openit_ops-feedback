@@ -2,9 +2,9 @@
 
 - 상태: 채택(U422). 대체하는 결정은 없다([0008](0008-db-timeouts.md)의 값은 그대로이고, 값을 쓰는 방식만 바뀐다).
 - 맥락: 시간을 직접 읽거나 기다리는 코드(readyz 캐시의 `time.monotonic`, 종료 때 응답을 기다리는 루프, DB 문장 중단 타이머, 롤백 평가 상한의 `Thread.join(초)`)는 시험이 실제 시간을 기다리거나 재야만 확인할 수 있었다. 그런 시험은 기계가 바쁜 정도에 따라 결과가 갈렸다.
-- 결정: 우리가 정한 마감·예산·간격을 쓰는 곳은 시계·대기를 인자(또는 클래스 속성)로 받는다. 기본값이 실제 시계다. 시험은 가짜 시계를 넣고 시간을 직접 흘린다.
-  - `link_ingest_api.make_app(clock=)`: readyz 캐시 창 판단. `Server(clock=, sleep=)`: 종료 때 응답이 나가길 기다리는 루프.
-  - `PgBase.CLOCK`, `PgBase.TIMER`: probe 남은 시간 계산, 문장 중단 타이머.
+- 결정: 우리가 정한 마감·예산·간격을 쓰는 곳은 시계·대기를 인자(또는 클래스 속성)로 받는다. 컴포넌트는 `import time`도 기본값(`clock=time.monotonic`)도 갖지 않는다: 시계·대기는 **필수 인자**이고 실제 시계는 wiring(`make_ingest_server`)·진입점(`api/__main__.py`)이 명시적으로 넘긴다(숨은 의존 금지, U423). 시험은 가짜 시계(`tests/fakeclock.py`)를 넣고 시간을 직접 흘린다.
+  - `link_ingest_api.make_app(clock=)`(필수): readyz 캐시 창 판단. `Server(clock=, sleep=)`(필수): 종료 때 응답이 나가길 기다리는 루프.
+  - `PgBase.CLOCK`, `PgBase.TIMER`(wiring의 클래스 속성이 실제 시계를 명시): probe 남은 시간 계산, 문장 중단 타이머.
   - `run_once(rollback_wait=)`: `rollback.deadline_seconds`를 `wait(끝남 신호, 상한)`로 넘긴다. 시험은 즉시 False를 돌려 '상한이 지났다'를 일으킨다.
 - 왜: 의존성 주입은 시간을 시험하는 표준 방법이다(시계를 협력 객체로 보는 것). 전역 `time`을 monkeypatch하는 방법(freezegun 등)은 `Event.wait`·소켓 timeout 같은 블로킹 대기를 움직이지 못하고 시험 사이에 새며, 영역이 어디서 시간을 읽는지가 코드에 드러나지 않는다.
 - 라이브러리 안의 시간(waitress 연결 시한, PostgreSQL `statement_timeout`, psycopg 접속 시한)은 이 결정의 대상이 아니다. 우리는 그 라이브러리에 올바른 값을 넘겼는가와, 가짜 의존이 즉시 오류를 던질 때 우리 결과(UNAVAILABLE·503·재시도)가 맞는가만 시험한다. 실제 서버·DB로 끝까지 맞물리는 확인은 smoke·E2E의 몫이다.

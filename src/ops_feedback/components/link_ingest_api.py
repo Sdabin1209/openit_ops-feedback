@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from typing import Optional
 
 import waitress
@@ -41,8 +40,8 @@ INGEST, READ, REVIEW = "ingest", "read:", "review:"      # 토큰 -> 역할 이�
 class Server:
     """waitress 서버를 감싼 얇은 손잡이: 시험과 진입점이 `server_address`, `serve_forever()`, `shutdown()`으로 다룬다."""
 
-    def __init__(self, app, host: str, port: int, *, connection_limit: int, channel_timeout: float, clock=time.monotonic, sleep=time.sleep) -> None:
-        self._clock, self._sleep = clock, sleep      # 시계·대기는 주입한다(U422, ADR 0027): 운영은 실제 시계, 시험은 가짜
+    def __init__(self, app, host: str, port: int, *, connection_limit: int, channel_timeout: float, clock, sleep) -> None:
+        self._clock, self._sleep = clock, sleep      # 시계·대기는 필수 인자다(U422, ADR 0027): 실제 시계는 wiring/진입점이 명시적으로 넘기고, 시험은 가짜를 넘긴다
         # connection_limit + 2: waitress는 내부 map 크기(듣는 소켓 + 깨우기 trigger + 연결)로 상한을 재서 (상한 - 2)개까지만 받는다(실측: 상한 3에서 연결 1개). 상한 그대로 받게 2를 더한다.
         # cleanup_interval: 멈춘 연결을 channel_timeout 안팎에 닫으려고 점검 주기를 줄인다(기본 30초면 timeout이 최대 두 배 늦다).
         # 왜 이 값들: ADR 0020. threads=connection_limit은 연결마다 일꾼이 있던 이전 동작(DB가 막혀도 /healthz가 대답)을 유지하려는 것이다.
@@ -75,7 +74,7 @@ class Server:
 
 def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = None,
              review_tokens: Optional[dict[str, str]] = None, readyz_cache_seconds: float = READYZ_CACHE_SECONDS,
-             retention_declared: bool = True, require_reviewer_identity: bool = True, clock=time.monotonic):
+             retention_declared: bool = True, require_reviewer_identity: bool = True, clock):
     """WSGI 앱(PEP 3333). service는 wiring/ingest_service.py의 IngestService가 정한 면을 가진 객체다(이 컴포넌트는 업무 컴포넌트를 모른다, 구조 규칙 3)."""
     read_tokens = read_tokens or {}
     review_tokens = review_tokens or {}
@@ -220,5 +219,5 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     return app
 
 
-def make_server(service, token: str, host: str = "0.0.0.0", port: int = 8080, *, max_connections: int = 64, **app_kw) -> Server:
-    return Server(make_app(service, token, **app_kw), host, port, connection_limit=max_connections, channel_timeout=REQUEST_TIMEOUT)
+def make_server(service, token: str, host: str = "0.0.0.0", port: int = 8080, *, max_connections: int = 64, clock, sleep, **app_kw) -> Server:
+    return Server(make_app(service, token, clock=clock, **app_kw), host, port, connection_limit=max_connections, channel_timeout=REQUEST_TIMEOUT, clock=clock, sleep=sleep)

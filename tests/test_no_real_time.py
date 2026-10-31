@@ -27,3 +27,17 @@ def test_code_never_reads_or_waits_on_the_clock_directly():
             if SRC.search(line) and not line.lstrip().startswith("#"):
                 bad.append(f"{p.relative_to(ROOT)}:{i}: {line.strip()[:90]}")
     assert bad == [], bad
+
+
+COMPONENT_HIDDEN = re.compile(r"^\s*(import time\b|from time import)|=\s*time\.|\btime\.[a-z_]+\b")
+
+
+def test_components_do_not_import_or_default_to_the_real_clock():
+    """컴포넌트는 `import time`도, `clock=time.monotonic` 같은 기본값도 갖지 않는다(숨은 의존). 시계·대기는 필수 인자로 받고 실제 시계는 wiring/진입점이 명시적으로 넘긴다(ADR 0027)."""
+    bad = []
+    for p in sorted((ROOT / "src" / "ops_feedback" / "components").glob("*.py")):
+        for i, line in enumerate(p.read_text("utf-8").splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if COMPONENT_HIDDEN.search(code):
+                bad.append(f"{p.name}:{i}: {line.strip()[:90]}")
+    assert bad == [], bad
