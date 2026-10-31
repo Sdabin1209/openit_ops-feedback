@@ -101,6 +101,10 @@ class ReviewDecider:
         mine["reviewed_by"] = d.get("reviewed_by") or d["reviewer_role"]      # 사람(X-Openit-User) 또는 토큰 역할
         ext["ops-feedback"] = mine
         new["ext"] = ext
+        try:
+            check("OpsFeedbackFailureCaseExt", mine, contract=True)      # 생산자 검증(R7): 쓰는 ext가 계약을 지키는지 게시 전에 본다
+        except BoundaryError:
+            raise BoundaryError("UNAVAILABLE", "사례 ext가 OpsFeedbackFailureCaseExt를 어긴다(서버 결함)") from None
         # 같은 검토(review_status·expected·expected_kind·reviewed_input이 최신 version과 모두 같다)를 다시 보내면
         # 새 version도, reviewed_by 변경도 없이 기존 레코드를 돌려준다. failure_type은 지정했을 때만 비교한다.
         if (cur["review_status"] == d["review_status"] and cur.get("expected") == new.get("expected")

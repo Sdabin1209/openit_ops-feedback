@@ -110,7 +110,11 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureCaseStore, deid: Deident
             req["pause_reason"] = report["pause_reason"]
         if qs is not None:
             req["question_set"] = qs
-        built = case_builder.build(req)
+        try:
+            built = case_builder.build(req)
+        except BoundaryError as e:
+            rep.errors.append({"turn": pseudonymize("case", tid), "error": f"{e.code}"})      # 계약을 어기는 사례는 게시하지 않는다. 표시하지 않아 고친 뒤 다음 실행에서 다시 한다
+            continue
         case, trace_ref = built["case"], built["trace_ref"]
         store.put_trace(trace_ref, built["trace"])
         try:

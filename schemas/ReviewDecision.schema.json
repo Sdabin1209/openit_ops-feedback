@@ -21,8 +21,8 @@
       "minLength": 1
     },
     "reviewed_by": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "../boundary/_common.schema.json#/$defs/Id",
+      "description": "검토자 식별자(X-Openit-User 값). 요청에서 온 값이라 계약 Id 형식이 아니면 입구에서 400으로 거부한다(입력 잘못, 재시도 불가)."
     },
     "base_version": {
       "type": "integer",

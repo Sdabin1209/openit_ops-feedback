@@ -7,10 +7,19 @@ from __future__ import annotations
 
 from boundary_contracts import PIPELINE_SCHEMA_VERSION  # 새 레코드는 계약 상수의 버전으로 쓴다(값을 코드에 적지 않는다)
 from boundary_contracts.canonical import sha256_hash
+from boundary_contracts.errors import BoundaryError
 
 from ..types.CaseBuildRequest import CaseBuildRequest
 from ..types.CaseBuildResult import CaseBuildResult
 from ..wiring.validate import check
+
+
+def _check_ext(mine: dict) -> None:
+    """생산자 검증(R7): 쓰는 ext["ops-feedback"]가 계약 OpsFeedbackFailureCaseExt를 지키는지 내보내기 전에 본다. 어기면 내보내지 않는다(코드·탐지기 결함이지 입력 잘못이 아니다)."""
+    try:
+        check("OpsFeedbackFailureCaseExt", mine, contract=True)
+    except BoundaryError:
+        raise BoundaryError("UNAVAILABLE", "사례 ext가 OpsFeedbackFailureCaseExt를 어긴다(서버 결함)") from None
 
 
 def build(request: CaseBuildRequest) -> CaseBuildResult:
@@ -41,6 +50,7 @@ def build(request: CaseBuildRequest) -> CaseBuildResult:
     }
     if "question_set" in request:
         case["question_set"] = request["question_set"]
+    _check_ext(mine)
     out: CaseBuildResult = {"case": case, "trace_ref": trace_ref, "trace": deid["trace"]}
     check("CaseBuildResult", out)
     return out
