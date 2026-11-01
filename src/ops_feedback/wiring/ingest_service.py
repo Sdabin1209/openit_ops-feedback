@@ -12,8 +12,8 @@ from .log_store import LogStore, supported_trace_versions
 from .review_flow import ReviewFlow
 
 
-# 사람용 요청(검토 면·읽기 면)의 서버 쪽 전체 마감(초). 근거: D120, gateway 상한(연결 1초 + 응답 머리글 10초) 안에 끝내도록 11초에서 여유 2초를 뺀 값. 측정하지 않은 설계 값이다. 환경 변수로 받으려면 계약 OpsFeedbackServerEnv에 이름이 필요하다(CR-011).
-REQUEST_DEADLINE_SECONDS = 9.0
+# 사람용 요청(검토 면·읽기 면)의 서버 쪽 전체 마감(초). 왜: D125(2026-11-02) 목표(2초)와 실패 판정을 나눴고, 실패 판정 상한은 프록시 표준 60초(nginx proxy_read_timeout, ALB idle timeout) 기준이다. gateway 연결 1초 + 응답 헤더 60초 < 화면 대기 70초(admin-console)이므로 서버는 그보다 짧은 55초. 측정 최악은 11초(DB 호출 하나, ADR 0008)라 여유가 크다. 환경 변수로 받으려면 계약 OpsFeedbackServerEnv에 이름이 필요하다(CR-011).
+REQUEST_DEADLINE_SECONDS = 55.0
 
 
 class IngestService:

@@ -69,12 +69,12 @@ def _timeouts():
 
 
 def test_declared_gateway_timeouts_for_reviewer_paths():
-    """검토 경로(읽기 3 + 검토 게시 1)의 게이트웨이 상한: 연결 1초, 응답 머리글 10초. deploy ADR 0048이 정한 값이다."""
-    assert _timeouts() == [{"dial": 1000, "response_header": 10000}] * 2
+    """검토 경로(읽기 3 + 검토 게시 1)의 게이트웨이 상한: 연결 1초, 응답 머리글 60초(D125, 프록시 표준 60초). 계약 CONVENTIONS의 시간 상한 사슬 값이다."""
+    assert _timeouts() == [{"dial": 1000, "response_header": 60000}] * 2
 
 
 def test_server_side_request_deadline_is_shorter_than_the_gateway_response_header():
     """요청 전체 마감(D120, ADR 0028) < 게이트웨이 response_header: 서버가 계속 일하는 동안 화면이 504를 받는 일이 없다. 설정 값 비교(시간을 재지 않는다)."""
     from ops_feedback.wiring.ingest_service import REQUEST_DEADLINE_SECONDS
     assert REQUEST_DEADLINE_SECONDS * 1000 < min(t["response_header"] for t in _timeouts())
-    assert REQUEST_DEADLINE_SECONDS == 9.0
+    assert REQUEST_DEADLINE_SECONDS == 55.0

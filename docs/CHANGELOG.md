@@ -1,5 +1,9 @@
 # 변경 이력
 
+## 0.18.2 (제안, D125 시간 상한 개정)
+
+- 검토 경로 서버 전체 마감 9.0 -> 55.0초(`REQUEST_DEADLINE_SECONDS`), `deploy-exposure.json` response_header 10000 -> 60000(dial 1000 그대로). 시험은 새 값으로. ADR 0028 개정 한 줄, boundary.md에 사슬 한 줄.
+
 ## 0.18.1 (제안, U431 고정 갱신)
 
 - 계약 핀 v3.1.1 -> v3.1.2(스키마 변경 없음), openit-link v0.4.1 -> v0.4.3(음수 Content-Length 400, 처리 함수의 예기치 않은 예외를 BoundaryError 503으로). 이 영역은 model-runtime을 쓰지 않는다. 문진 스키마는 survey-schema-v3.0.0 그대로.

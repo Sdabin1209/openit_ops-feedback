@@ -77,6 +77,7 @@ I7 상세(구현이 정한 것):
 - `/readyz`: 주 연결과 그 락을 쓰지 않고 요청마다 새 연결로 `SELECT 1`을 한다(두 저장소는 동시에). 요청 경로가 주 연결에서 기다리는 중이어도 막히지 않는다. 실패하면 503 `{"status":"not-ready","code":"UNAVAILABLE"}`, 복구되면 다음 호출부터 200.
 - 요청 경로: 시도 하나가 `STATEMENT+1`초 안에 끝난다. 연결이 끊긴 것으로 보이면 재접속(`CONNECT` 상한)으로 한 번 재시도하므로 기본값의 최악은 약 7초(4+3)다. 이어서 `UNAVAILABLE`.
 - 잡: DB가 무응답이면 같은 상한으로 `UNAVAILABLE`이 되고 잡은 종료 코드 **2**(스택 트레이스 없이 stderr에 JSON 한 줄). 비식별 실패 등 처리 오류의 종료 코드 1과 구분된다.
+- 요청 전체 마감(검토 경로, 코드 상수 `REQUEST_DEADLINE_SECONDS`): 서버 55.0초 < gateway 연결 1초 + 응답 헤더 60초(`deploy-exposure.json`) < 화면 대기 70초(admin-console). 계약 `CONVENTIONS.md` "시간 상한 사슬"(D125)의 값이며 근거는 [ADR 0028](adr/0028-request-deadline.md). 측정 최악은 11초.
 - 측정(이 세션, 호스트의 Docker PostgreSQL 16 컨테이너를 `docker pause`, 기본값): `/readyz` 503까지 2.0초, 수집 POST 503까지 7.0초, 잡 종료 코드 2까지 3.3초. 같은 시험을 수정 전 코드로 돌리면 `/readyz`가 15초 안에 응답하지 못했다(클라이언트 포기, 상한 없음), 잡은 접속 10초 뒤 스택 트레이스와 종료 코드 1. 컨테이너 조합에서의 재측정은 deploy E2E 5p에서 헤드가 한다.
 
 ### 보존·삭제·개인정보 위치 (점검 C1·C3, D88/U4)

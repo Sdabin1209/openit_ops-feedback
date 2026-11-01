@@ -35,6 +35,7 @@
 | `test_build_image::test_real_build_*` | 이미지 라벨·재현성 | (시간 아님) | 고정 태그를 프로세스별 고유 태그로 |
 | `test_secrets`, `test_postgres_select` 서버 기동 시험 | 비밀이 출력에 없다, 파일 토큰이 동작한다 | 매달림 감시 | 기동을 폴링·sleep이 아니라 `listening on` 로그 줄 사건으로 안다(`tests/waiting.py::Proc`) |
 | `test_api`, `test_http_401`, `test_contract_schemas`, `test_secrets` 등의 숫자 timeout | 시한이 결과를 바꾸지 않는 호출 | 매달림 감시 | 숫자를 `HANG_GUARD_SECONDS`로 통일 |
+| `test_exposure::test_server_side_request_deadline_is_shorter_than_the_gateway_response_header` (D125) | 서버 마감 55.0 < gateway 응답 헤더 60초 | 2(설정 값 비교) | 값 두 개를 비교할 뿐 시간을 재지 않는다. `test_request_deadline.py`는 가짜 시계가 54.9초/55.5초를 말한다 |
 
 ## 보고할 것: 영역 시험에서 지워 smoke·E2E가 봐야 하는 것
 - 실제 waitress가 느린 연결을 `channel_timeout`에 끊는지, 연결 상한 초과가 대기열이 되는지, 종료가 진행 중 요청을 마치는지(실제 소켓).

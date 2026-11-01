@@ -39,7 +39,7 @@ def seeded(pipeline):
     return c["case_id"]
 
 
-def review(flow, cid, clock, seconds=9.0):
+def review(flow, cid, clock, seconds=55.0):
     with deadline.scope(deadline.Deadline(clock, seconds)):
         return flow.review_with_status(cid, "DISMISSED", "reviewer", reviewed_by="kim1")
 
@@ -47,7 +47,7 @@ def review(flow, cid, clock, seconds=9.0):
 def test_review_completes_just_before_the_deadline(pipeline):
     cid = seeded(pipeline)
     clock = FakeClock()
-    flow = ReviewFlow(SlowStore(pipeline["store"], clock, 8.9))      # 첫 단계가 8.9초 걸린다고 시계가 말한다: 아직 0.1초 남았다
+    flow = ReviewFlow(SlowStore(pipeline["store"], clock, 54.9))      # 첫 단계가 54.9초 걸린다고 시계가 말한다: 아직 0.1초 남았다
     rec, created = review(flow, cid, clock)
     assert created and rec["version"] == 2
 
@@ -55,7 +55,7 @@ def test_review_completes_just_before_the_deadline(pipeline):
 def test_review_past_the_deadline_stops_without_writing_and_the_same_request_is_safe_to_resend(pipeline):
     cid = seeded(pipeline)
     clock = FakeClock()
-    slow = SlowStore(pipeline["store"], clock, 9.5)            # 첫 단계가 9.5초: 마감을 넘었다
+    slow = SlowStore(pipeline["store"], clock, 55.5)            # 첫 단계가 55.5초: 마감을 넘었다
     with pytest.raises(BoundaryError) as e:
         review(ReviewFlow(slow), cid, clock)
     assert e.value.code == "UNAVAILABLE" and e.value.retryable
@@ -72,13 +72,13 @@ def test_db_call_limit_is_the_remaining_time_when_it_is_shorter_than_the_fixed_l
     s = store(Conn())
     s.TIMER = FakeTimer
     clock = FakeClock()
-    with deadline.scope(deadline.Deadline(clock, 9.0)):
-        clock.advance(6.5)                                     # 남은 2.5초 < 고정 상한 statement 3+1초
+    with deadline.scope(deadline.Deadline(clock, 55.0)):
+        clock.advance(52.5)                                     # 남은 2.5초 < 고정 상한 statement 3+1초
         s._x(lambda: 1)
         assert FakeTimer.made[-1].secs == 2.5
     s._x(lambda: 1)                                           # 마감이 없는 호출(수집·잡)은 고정 상한 그대로
     assert FakeTimer.made[-1].secs == 4.0
-    with deadline.scope(deadline.Deadline(clock, 9.0)):
+    with deadline.scope(deadline.Deadline(clock, 55.0)):
         s._x(lambda: 1)                                       # 남은 시간이 더 길면 고정 상한이 상한이다
         assert FakeTimer.made[-1].secs == 4.0
 
@@ -103,8 +103,8 @@ def test_http_review_past_the_deadline_is_503_unavailable_and_retryable(pipeline
     from ops_feedback.wiring.ingest_service import IngestService
     cid = seeded(pipeline)
     clock = FakeClock()
-    svc = IngestService(__import__("ops_feedback.wiring.log_store", fromlist=["LogStore"]).LogStore.memory(), SlowStore(pipeline["store"], clock, 9.5))
-    app = api.make_app(svc, "ing", read_tokens={"rt": "r"}, review_tokens={"vt": "reviewer"}, require_reviewer_identity=False, clock=clock, request_deadline=9.0)
+    svc = IngestService(__import__("ops_feedback.wiring.log_store", fromlist=["LogStore"]).LogStore.memory(), SlowStore(pipeline["store"], clock, 55.5))
+    app = api.make_app(svc, "ing", read_tokens={"rt": "r"}, review_tokens={"vt": "reviewer"}, require_reviewer_identity=False, clock=clock, request_deadline=55.0)
 
     def post():
         got = {}
