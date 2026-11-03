@@ -137,7 +137,7 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - 기본값 차이: 잡은 확정 사례도 `cases_days` 뒤 지운다(`cases_purge_confirmed: true`), `admin purge`는 `--include-confirmed` 없이는 보존한다. 재시도 대상 원본은 `failed_raw_days`를 적었을 때만 그 기한에, 적지 않으면 `raw_days`에 지운다(기본값 없음). `delete-session`이 종료 코드 3이면 지울 것을 찾지 못한 것이다(salt·정책 확인).
 - 요청 시 삭제: `OPS_DEID_SALT_FILE=... python -m ops_feedback.admin delete-session --session-id <ID> [--dry-run]`(저장소는 서버와 같은 `OPS_*_DATABASE_URL[_FILE]`). 출력은 건수만. 지표·롤백 기록(aux)은 세션 정보가 없어 지우지 않는다.
 - 수동 정리: `admin purge --raw-days N --cases-days M --metrics-days K [--include-confirmed] [--include-unprocessed]`, `admin minimize-raw`.
-- DDL 없는 앱 계정: 소유자 계정으로 `admin migrate`를 실행한 뒤 서버·잡을 `OPS_DB_SCHEMA=verify`로 띄운다. 앱 계정에는 스키마 USAGE, 표 SELECT/INSERT/UPDATE/DELETE, 시퀀스 USAGE/SELECT만 준다(`tests/test_audit_fixes.py::test_verify_mode_needs_no_ddl_privilege`가 이 권한으로 시작·수집을 확인).
+- DB 계정 분리(L08, docs/adr/0031): PostgreSQL 계정은 둘이다. 소유자는 DDL만(`admin migrate` 잡 전용), 앱은 스키마 USAGE, 표 SELECT/INSERT/UPDATE/DELETE, 시퀀스 USAGE/SELECT만 가진다. 서버·잡은 `OPS_DB_SCHEMA=verify`만 허용한다(값이 없으면 verify, `apply`는 시작 거부). 스키마가 최신이 아니면 기동을 거부한다. 배포 순서: 소유자 접속 문자열 파일(`OPS_LOG_DATABASE_URL_FILE`, `OPS_FAILURE_DATABASE_URL_FILE`)로 `admin migrate`를 먼저 돌리고, 같은 이름에 앱 접속 문자열 파일을 준 서버·잡을 띄운다. 새 표가 생기면 앱 계정에 권한을 다시 준다(소유자에 `ALTER DEFAULT PRIVILEGES`를 걸어 두면 자동). 시험: `tests/test_db_roles.py`(앱 계정의 CREATE·ALTER·DROP이 InsufficientPrivilege).
 - 시험: `scripts/dev-postgres.sh`(또는 `make test-pg`)가 PostgreSQL 컨테이너를 띄워 전체 시험을 돌리고 내린다.
 
 ## 잡 선언 라벨 (io.openit.jobs)

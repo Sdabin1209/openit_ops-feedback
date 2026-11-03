@@ -74,7 +74,9 @@ def test_job_run_once_on_postgres(tmp_path, request):
     cp = tmp_path / "job.yaml"
     cp.write_text(yaml.safe_dump(cfg))
     from ops_feedback.wiring.log_store import LogStore
-    log = LogStore.postgres(log_url)
+    from ops_feedback.components.failure_case_store import FailureCaseStore
+    log = LogStore.postgres(log_url)                    # 소유자 단계(apply). 잡은 verify만 허용한다(ADR 0031)
+    FailureCaseStore.postgres(fail_url)._b.close()
     log.send(envelope(pii_trace("s-1", "t-1")))
     log.send(envelope(make_trace("s-1", "t-2")))
     env = _scrub(OPS_DEID_SALT="test-salt-0123456789abcdef-0123456789abcdef", OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", log_url),
@@ -98,6 +100,10 @@ def test_ingest_api_on_postgres(tmp_path, request):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
+    from ops_feedback.wiring.log_store import LogStore
+    from ops_feedback.components.failure_case_store import FailureCaseStore
+    LogStore.postgres(log_url)._raw._backend.close()      # 소유자 단계(apply). 서버는 verify만 허용한다(ADR 0031)
+    FailureCaseStore.postgres(fail_url)._b.close()
     env = _scrub(OPS_INGEST_TOKEN="tok", OPS_READ_TOKENS="reader=rt", OPS_PORT=str(port),
                  OPS_LOG_DATABASE_URL_FILE=_file(tmp_path, "lu", log_url), OPS_FAILURE_DATABASE_URL_FILE=_file(tmp_path, "fu", fail_url))
     p = Proc([sys.executable, "-m", "ops_feedback.api"], env)

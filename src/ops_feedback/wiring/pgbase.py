@@ -13,7 +13,7 @@ from typing import Mapping, Optional
 
 from boundary_contracts.errors import BoundaryError
 
-from ..migrate import migrate_postgres
+from ..migrate import expected_ids, migrate_postgres
 from . import deadline
 
 # 대기 상한(초). 근거·출처·측정 여부는 docs/adr/0008-db-timeouts.md(probe 2초는 FAULT_POLICY 원칙 5, 나머지는 측정하지 않은 추정). 환경 변수로 바꾼다(비밀이 아니므로 NAME_FILE 없이 값 그대로). 근거는 docs/boundary.md 장애 절:
@@ -93,14 +93,17 @@ class PgBase:
         if mode not in ("apply", "verify"):
             raise BoundaryError("INVALID_RECORD", "OPS_DB_SCHEMA는 apply 또는 verify")
         if mode == "apply":
-            # 스키마는 마이그레이션(yoyo)이 만든다. 접속·문장 상한은 DDL 상한을 쓰고, 동시 기동은 yoyo 잠금이 직렬화한다(ADR 0021).
+            # 소유자 계정으로 `admin migrate`만 apply로 들어온다(서버·잡은 storage.require_verify가 막는다, ADR 0031). yoyo 잠금이 동시 적용을 직렬화한다(ADR 0021).
             migrate_postgres(self.SCOPE, self._url, self.connect_timeout, ddl_timeout)
         else:
-            # verify: 앱은 스키마를 만들지 않는다(DDL 권한이 필요 없다). 표가 없으면 시작을 거부하고 `python -m ops_feedback.admin migrate`를 안내한다.
+            # verify: 앱 계정은 DDL을 하지 않는다. 표가 없거나 마이그레이션 기록이 최신이 아니면 시작을 거부하고 `admin migrate`를 안내한다.
             try:
                 self._x(lambda: [self._db.execute(f"SELECT 1 FROM {t} LIMIT 0") for t in self.TABLES])
+                done = self._x(lambda: {r[0] for r in self._db.execute("SELECT migration_id FROM _yoyo_migration").fetchall()})
             except BoundaryError:
                 raise BoundaryError("FAILED_PRECONDITION", f"{self.WHAT}의 스키마가 없다. 먼저 `python -m ops_feedback.admin migrate`를 실행한다(OPS_DB_SCHEMA=verify)") from None
+            if not set(expected_ids(self.SCOPE, self.KIND)) <= done:
+                raise BoundaryError("FAILED_PRECONDITION", f"{self.WHAT}의 스키마가 최신이 아니다. 먼저 `python -m ops_feedback.admin migrate`를 실행한다(OPS_DB_SCHEMA=verify)")
 
     def _open(self):
         return _connect(self._url, self.WHAT, self.connect_timeout, self.statement_timeout)

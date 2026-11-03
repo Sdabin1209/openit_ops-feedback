@@ -1,5 +1,9 @@
 # 변경 이력
 
+## 0.19.1 (제안)
+
+- L08: 서버·잡은 `OPS_DB_SCHEMA=verify`만 허용(없으면 verify, apply는 시작 거부), 스키마가 최신이 아니면 기동 거부, 스키마는 소유자 계정의 `admin migrate`만. 앱 계정 DDL 실패 시험. ADR 0031.
+
 ## 0.19.0 (제안, 계약 3.2.0 / link v0.4.4)
 
 - 계약 핀 v3.2.0, openit-link v0.4.4. 잡·admin도 `OpsFeedbackServerEnv`로 모르는 `OPS_` 변수를 거부.

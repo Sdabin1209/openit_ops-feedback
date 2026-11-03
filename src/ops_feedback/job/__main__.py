@@ -15,6 +15,7 @@ from boundary_contracts.secrets import SecretError
 from ..config import load_config, validate_server_env
 from ..wiring.build import build_from_config
 from ..wiring.pipeline import run_once
+from ..wiring.storage import require_verify
 
 _JOB_RESULT = validator("OpsFeedbackJobResult")
 
@@ -36,7 +37,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 2
     # DB가 무응답이면 문장·접속 상한(OPS_DB_*_TIMEOUT) 안에 BoundaryError(UNAVAILABLE)로 끝난다. 무한 대기하지 않고 종료 코드 2로 끝낸다(스택 트레이스 없이 코드만).
     try:
-        log, store, deid, pseudonymize, detector, classifier, planner, reader = build_from_config(cfg, dict(os.environ))
+        log, store, deid, pseudonymize, detector, classifier, planner, reader = build_from_config(cfg, require_verify(os.environ))
         rep = run_once(cfg=cfg, log=log, store=store, deid=deid, pseudonymize=pseudonymize, detector=detector, classifier=classifier, planner=planner,
                        limit=a.limit, reprocess=a.reprocess, retry_deid_failed=a.retry_deid_failed,
                        evaluate_rollback=not a.no_rollback, release_reader=reader)

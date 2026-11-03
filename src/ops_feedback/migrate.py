@@ -31,6 +31,11 @@ def _pg_uri(url: str, connect_secs: float, ddl_secs: float) -> str:
             + "&".join(f"{quote(k)}={quote(str(v), safe='')}" for k, v in q.items()))
 
 
+def expected_ids(scope: str, kind: str) -> list[str]:
+    """이 코드가 요구하는 마이그레이션 ID 목록(최신 스키마의 정의). verify가 DB의 적용 기록과 대조한다."""
+    return [m.id for m in read_migrations(str(_DIR / scope / kind))]
+
+
 def migrate_sqlite(scope: str, path: str | Path) -> None:
     if str(path) == ":memory:":
         raise BoundaryError("INVALID_RECORD", "SQLite 메모리 DB에는 마이그레이션을 적용하지 않는다(메모리 구현을 쓴다)")

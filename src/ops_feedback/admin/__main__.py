@@ -8,7 +8,7 @@
   python -m ops_feedback.admin minimize-raw [--dry-run]
       처리가 끝난 원본의 봉투 내용을 지운다(중복 판별 키·해시·시각·릴리스는 남긴다).
   python -m ops_feedback.admin migrate
-      스키마를 만든다. 서버·잡을 OPS_DB_SCHEMA=verify로 띄우면 앱 계정에 DDL 권한이 필요 없다(docs/runbook.md).
+      스키마를 만든다. 서버·잡은 OPS_DB_SCHEMA=verify만 허용하므로 스키마는 이 명령(소유자 계정)으로만 만든다(ADR 0031).
 
 저장소는 서버·잡과 같은 환경 변수(OPS_LOG_DATABASE_URL[_FILE], OPS_FAILURE_DATABASE_URL[_FILE], 없으면 --log-db/--failure-db SQLite 경로)로 고른다.
 종료 코드: 0 성공, 2 사용 오류·접속 실패, 3 지울 것을 찾지 못함(delete-session; salt·정책 확인). 출력은 건수만이며 세션 ID·내용은 출력하지 않는다.

@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Mapping, Optional
 
 from boundary_contracts import read_secret
+from boundary_contracts.errors import BoundaryError
 
 from ..components.failure_case_store import FailureCaseStore
 from .clock import Clock, utc_now
@@ -14,6 +15,14 @@ from .log_store import LogStore
 
 LOG_URL = "OPS_LOG_DATABASE_URL"
 FAILURE_URL = "OPS_FAILURE_DATABASE_URL"
+
+
+def require_verify(env: Mapping[str, str]) -> dict:
+    """서버·잡용 환경 사본: OPS_DB_SCHEMA는 verify뿐이다(없으면 verify). apply는 소유자 계정의 `admin migrate`만 한다(ADR 0031)."""
+    mode = (env.get("OPS_DB_SCHEMA") or "verify").strip()
+    if mode != "verify":
+        raise BoundaryError("INVALID_RECORD", "서버·잡은 OPS_DB_SCHEMA=verify만 허용한다. 스키마는 소유자 계정의 `python -m ops_feedback.admin migrate`로 만든다")
+    return {**env, "OPS_DB_SCHEMA": "verify"}
 
 
 def open_log_store(env: Mapping[str, str], sqlite_path: str, *, clock: Clock = utc_now) -> LogStore:

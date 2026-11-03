@@ -18,7 +18,7 @@ from ..components.link_ingest_api import READYZ_CACHE_SECONDS, make_server
 from ..config import JsonFormatter, parse_read_tokens, validate_server_env
 from ..wiring.check_settings import server_settings
 from ..wiring.ingest_service import REQUEST_DEADLINE_SECONDS, IngestService
-from ..wiring.storage import open_failure_store, open_log_store
+from ..wiring.storage import open_failure_store, open_log_store, require_verify
 
 log = logging.getLogger("ingest-api")
 
@@ -43,10 +43,11 @@ def main() -> int:
         log.error("OPS_INGEST_TOKEN_FILE 또는 OPS_INGEST_TOKEN이 필요하다")
         return 2
     try:
-        store = open_log_store(os.environ, os.environ.get("OPS_LOG_DB", "/data/log.db"))
+        env = require_verify(os.environ)
+        store = open_log_store(env, os.environ.get("OPS_LOG_DB", "/data/log.db"))
         failures, rtoks = None, {}
         if read_raw:
-            failures = open_failure_store(os.environ, os.environ.get("OPS_FAILURE_DB"))
+            failures = open_failure_store(env, os.environ.get("OPS_FAILURE_DB"))
             if failures is not None:
                 rtoks = parse_read_tokens(read_raw)
     except (BoundaryError, SecretError) as e:
