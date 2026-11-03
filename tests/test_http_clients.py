@@ -28,7 +28,7 @@ QS = {"id": "qs-main", "version": "3", "content_hash": "sha256:" + "1" * 64}
 
 def _manifest(rid):
     m = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": rid, "created_at": "2026-10-14T00:00:00Z", "gate_decision_id": "gd-1",
-         "question_set": QS,
+         "question_sets": [dict(QS, title="시험 문진표")],   # 계약 3.3.0: 문진표 목록(QuestionSetRef)
          "lora_a": {"id": "lora-a", "version": "1", "content_hash": "sha256:" + "2" * 64},
          "lora_b": {"id": "lora-b", "version": "1", "content_hash": "sha256:" + "3" * 64},
          "runtime_contract_version": 1, "action_rules_version": load_rules()["rules_version"], "model_runtime_version": FAKE_MODEL_RUNTIME_VERSION,
@@ -96,7 +96,7 @@ def test_release_reader_factory_from_config(tmp_path, gate, monkeypatch, cfg):
     env = {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef", "GATE_READ": "gate-read"}
     log, store, deid, pseudonymize, detector, classifier, planner, reader = build_from_config(load_config(p), env)
     assert isinstance(reader, HttpReleaseReader) and isinstance(reader, ReleaseReader)
-    assert reader.get_release("rel-0002")["question_set"] == QS     # 클라이언트 자체가 읽을 수 있어야 한다
+    assert reader.get_release("rel-0002")["question_sets"][0]["id"] == QS["id"]     # 클라이언트 자체가 읽을 수 있어야 한다
     log.send(envelope(pii_trace("s-1", "t-1"), release_id="rel-0002"))
     rep = run_once(cfg=load_config(p), log=log, store=store, deid=deid, pseudonymize=pseudonymize, detector=detector, classifier=classifier,
                    clock=lambda: "2026-10-15T00:00:00Z", release_reader=reader)

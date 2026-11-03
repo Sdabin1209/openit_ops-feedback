@@ -128,7 +128,21 @@ class _Reader:
         self.calls += 1
         if self.fail:
             raise BoundaryError("UNAVAILABLE", "x")
-        return {"release_id": rid, "question_set": QS}
+        return {"release_id": rid, "question_sets": [dict(QS, title="시험 문진표")]}   # 계약 3.3.0: 문진표 목록
+
+
+def test_question_set_chosen_by_envelope_when_release_has_many(pipeline):
+    """3.3.0: 릴리스에 문진표가 둘이면 TraceEnvelope.question_set_id 로 고르고, 없으면 지어내지 않고 생략한다."""
+    from ops_feedback.components.link_release_read import ReleaseLink
+    other = {"id": "qs-b", "version": "1", "content_hash": "sha256:" + "9" * 64}
+
+    class Two(_Reader):
+        def get_release(self, rid):
+            return {"release_id": rid, "question_sets": [dict(QS, title="A"), dict(other, title="B")]}
+    rr = ReleaseLink(Two())
+    assert rr.question_set_of("rel-1", "qs-b") == other
+    assert rr.question_set_of("rel-1", None) is None
+    assert rr.question_set_of("rel-1", "qs-none") is None
 
 
 def test_question_set_filled_from_release(pipeline):

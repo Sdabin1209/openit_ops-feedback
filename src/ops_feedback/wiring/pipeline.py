@@ -102,7 +102,7 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureCaseStore, deid: Deident
             rep.no_failure += 1
             continue
         cls = classifier.classify({"detections": report["detections"]})
-        qs = release_link.question_set_of(env["release_id"]) if release_link is not None else None
+        qs = release_link.question_set_of(env["release_id"], env.get("question_set_id")) if release_link is not None else None   # 3.3.0: 세션의 문진표
         req = {"release_id": env["release_id"], "runtime_contract_version": env["runtime_contract_version"], "received_at": row["received_at"],
                "session_pseudonym": pseudonymize("case", sid), "turn_pseudonym": pseudonymize("case", tid), "deid": res,
                "policy_id": deid.policy.policy_id, "classification": cls, "detections": report["detections"]}
