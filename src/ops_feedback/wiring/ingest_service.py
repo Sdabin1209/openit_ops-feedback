@@ -56,6 +56,10 @@ class IngestService:
     def get_trace(self, ref: str) -> dict:
         return self._failures.get_trace(ref)
 
+    def get_review_trace(self, ref: str, role: str, user: Optional[str]) -> dict:
+        """검토 면 전용: 원문 발화가 든 검토 사본. 읽을 때마다 접근 기록(누가·언제·어느 trace)을 남긴다."""
+        return self._failures.get_review_trace(ref, reader_role=role, reader_user=user, accessed_at=self._clock())
+
     # 검토 면
     @property
     def review_enabled(self) -> bool:

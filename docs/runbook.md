@@ -111,6 +111,16 @@ OPS_DEID_SALT=... python -m ops_feedback.job --config config/job.yaml
 
 HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMISSED|PENDING, expected?, expected_kind?, reviewed_input?}`(`reviewed_input`은 개인정보를 뺀 문장으로 검토자가 직접 쓴 입력이며 expected_kind에 맞는 ActionExtractionInput(LORA_A)|ResponseRequest(LORA_B)), `Authorization: Bearer <검토 토큰>`. 201이면 새 version, 같은 검토 재전송은 200과 같은 결과, 없는 사례는 404. `expected`는 CONFIRMED에만 붙일 수 있고 `expected_kind`(LORA_A|LORA_B)가 필수이며, LORA_A면 `ActionExtraction`(객체), LORA_B면 `ResponseText`(문자열)를 지켜야 한다(아니면 400과 사유). 2.0.0부터 비식별 trace에 입력 필드가 있는지는 보지 않는다. `X-Openit-User: <Id 형식>` 헤더가 있으면 그 값이, 없으면 토큰 역할 이름이 `ext["ops-feedback"].reviewed_by`에 새 version마다 기록된다. 같은 검토(review_status·expected·expected_kind·reviewed_input이 최신 version과 같음)의 재전송은 200과 기존 레코드(reviewed_by 불변), 하나라도 다르면 201 새 version이다. 검토자는 읽기 면으로 비식별 trace를 보고 쓴다. 내부 호출은 `ReviewQueue(store).pending()`으로 목록, `review(case_id, "CONFIRMED"|"DISMISSED", role, expected=..., base_version=...)`로 결과 게시(새 version). 검토 화면(UI)은 아직 없다.
 
+## 검토 사본: 환자 발화 원문 (ADR 0030)
+
+- 설정: 잡 설정 `deid.review_utterance: {keep: true, max_chars: 1000}`(예시는 `config/job.example.yaml`). `keep: false`나 생략이면 이전과 같다.
+- 읽기: `GET /v1/review-traces/{ref}`는 검토 토큰(reviewer)만, `X-Openit-User` 필수(`OPS_REVIEW_REQUIRE_USER` 기본). 읽기 토큰으로는 403이다. 기존 `GET /v1/deidentified-traces/{ref}`는 발화가 마스킹된 채 그대로다. 게이트웨이 노출은 `deploy-exposure.json`에 선언했다.
+- **보존**: 원문 발화는 `failures.db`(aux kind `review_trace`)에 사례와 같은 수명으로 남는다. 가명 정보가 아니라 원문이므로 확정 사례는 `cases_days`(기본 180일) 동안 남고, DB 백업에도 담긴다(백업 보존은 deploy). 세션 삭제(`admin delete-session`)와 보존 정리는 사본도 함께 지운다.
+- **접근 기록**: 읽을 때마다 `aux` kind `trace_access`에 누가·역할·언제·trace ref·원문 제공 여부를 남기고, 남기지 못하면 읽기를 거부한다. 보존은 `metrics_days`(기본 365일). 원문 발화는 기록에 없다.
+- 정책 지문 영향: `keep: true`는 정책 지문을 바꾼다. 이미 게시된 사례는 내용이 같아 `skipped_diff`가 되지 않고 그대로 두며, 그 사례의 사본은 없다(검토 경로는 마스킹본을 낸다). 사본을 채우려면 원본 `log.db`가 남아 있는 범위에서 `--reprocess`로 잡을 다시 돌린다(사례는 바뀌지 않고 사본만 생긴다).
+- 잔존 패턴(전화·주민번호·이메일)이 원문 발화에 걸리면 그 턴은 사례가 되지 않고 `DEID_FAILED`로 남는다. 이름·주소는 패턴으로 알 수 없어 검토자와 접근 통제가 책임이다.
+- `reviewed_input`에 보존한 발화 원문을 그대로 붙여 넣으면 400으로 거부된다(읽기 역할 전체가 `FailureCase`로 읽기 때문).
+
 ## 롤백 요청
 
 `rollback` 설정과 `release_reader` 팩토리가 있으면 잡이 평가한다. `auto_submit: false`면 요청을 `aux`(kind `rollback_request`)에만 기록한다. 게이트가 실제로 적용했는지는 영수증(kind `rollback_receipt`)을 본다. 수동 개입은 게이트 쪽에서 한다(이 영역은 포인터를 바꾸지 않는다).

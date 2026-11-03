@@ -117,6 +117,8 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureCaseStore, deid: Deident
             continue
         case, trace_ref = built["case"], built["trace_ref"]
         store.put_trace(trace_ref, built["trace"])
+        if "review_trace" in built:
+            store.put_review_trace(trace_ref, built["review_trace"])       # 원문 발화 사본. 사례가 이미 있어도 쓴다(--reprocess로 보존을 새로 켠 경우)
         try:
             decision = case_reconciler.reconcile({"existing": _existing(store, case["case_id"]), "candidate": case})["action"]
             if decision == "PUBLISH":

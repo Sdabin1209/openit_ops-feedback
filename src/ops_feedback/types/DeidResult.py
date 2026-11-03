@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from .DeidStats import DeidStats
 
@@ -14,3 +14,4 @@ class DeidResult(TypedDict, closed=True):
     trace: dict[str, Any]
     stats: DeidStats
     policy_fingerprint: str
+    review_trace: NotRequired[dict[str, Any]]

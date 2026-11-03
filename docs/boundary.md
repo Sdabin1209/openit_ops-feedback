@@ -23,6 +23,7 @@ I7 상세(구현이 정한 것):
 - `list_cases`: 정렬은 게시 순서(append), `next_cursor`는 불투명 문자열. `latest_only=True`면 사례별 최신 version만. `updated_since`는 version의 `created_at` 기준.
 - HTTP(HTTP.md): `GET /v1/cases/{case_id}?version=`, `GET /v1/cases`(필터 + `{items, next_cursor}`, `limit` 기본 100 최대 500), `GET /v1/deidentified-traces/{ref}`. 읽기 토큰은 `OPS_READ_TOKENS`의 역할별 값이고 수집 토큰과 분리된다(서로의 경로 403). 응답은 `FailureCase` 스키마 검증을 거친다. `publish_case`는 열지 않는다.
 - 검토 게시(Protocol 밖, HTTP.md): `POST /v1/cases/{case_id}/review` 쓰기 역할 `reviewer`(`OPS_REVIEW_TOKENS`). `ReviewQueue`를 재사용해 version을 올린 FailureCase(201, 재전송 200, 없으면 404)를 게시하고 스키마로 검증한다. `reviewed_input`(선택, 검토자가 개인정보 없이 직접 쓴 입력)은 `expected_kind`에 맞는 ActionExtractionInput(LORA_A)|ResponseRequest(LORA_B)이어야 하고 CONFIRMED에만 붙는다. `expected`는 LORA_A면 `ActionExtraction`(객체), LORA_B면 `ResponseText`(문자열)이어야 한다(검토자가 쓴 값 자체의 개인정보 여부는 저장소가 판별하지 못한다. 검토 화면은 비식별 trace만 보여 줘야 한다).
+- `get_review_trace`(Protocol 밖, HTTP.md): `GET /v1/review-traces/{ref}`, 검토 역할 전용. 발화 두 칸만 원문인 `OpsFeedbackReviewTrace`. 읽을 때마다 접근 기록(aux `trace_access`, 365일)을 남긴다. 근거 ADR 0030.
 - `get_trace`: 비식별 trace. 결과가 `TurnTrace` 스키마를 통과하지 않을 수 있다(CR-001).
 - 소비자: `review_status == CONFIRMED`이고 `expected`가 있는 것만 정답 있는 회귀 케이스로 쓴다(I7 규정).
 
@@ -87,6 +88,8 @@ I7 상세(구현이 정한 것):
 | `raw_traces.envelope`(원본 DB) | TraceEnvelope 전체(발화·답변·직원 ID 포함) | 있음, 평문 | 처리 끝난 것 30일(`retention.raw_days`), 처리 전인 것은 지우지 않음. `raw_after_processing: minimize`면 처리 직후 내용만 삭제 |
 | `raw_traces`의 키·해시·시각·릴리스·처리 표시 | 중복 판별과 집계 | session_id·turn_id가 원본 값 그대로 | 위와 같은 행 수명(`purge`가 행째 지움) |
 | `cases.record`, `traces`(사례 DB) | 비식별 뒤 FailureCase·trace | 비식별(ADR 0004). session_id·turn_id는 salt 해시 | 사례 180일(`cases_days`), 고아 trace 함께 |
+| `aux` kind `review_trace` | 검토 사본: 환자 발화 두 칸 **원문** | **있음, 평문**(잔존 패턴 검사 뒤, 이름·주소는 못 거름) | 사례와 같음(확정 사례 180일), 사례·세션 삭제 때 함께 지움 |
+| `aux` kind `trace_access` | 검토 사본 읽기 기록(누가·언제·trace ref) | 검토자 ID | 365일(`metrics_days`) |
 | `aux`(지표·롤백 요청·영수증) | 집계, 릴리스 ID | 없음 | 365일(`metrics_days`) |
 | 서버 로그 | 요청 줄(메서드·경로), 거절 경고 | 없음(경로에 ID가 들어갈 수 있으나 이 서비스 경로는 case_id/ref) | 로그 보존은 deploy |
 

@@ -5,10 +5,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class CaseBuildResult(TypedDict, closed=True):
     case: dict[str, Any]
     trace_ref: str
     trace: dict[str, Any]
+    review_trace: NotRequired[dict[str, Any]]

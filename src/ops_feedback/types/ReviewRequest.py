@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from .ReviewDecision import ReviewDecision
 
@@ -14,3 +14,4 @@ class ReviewRequest(TypedDict, closed=True):
     current: dict[str, Any]
     decision: ReviewDecision
     now: str
+    preserved_utterances: NotRequired[list[str]]

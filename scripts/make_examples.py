@@ -12,8 +12,11 @@ from ops_feedback.wiring.log_store import LogStore
 from ops_feedback.wiring.pipeline import run_once
 
 cfg = base_config()
+cfg["deid"]["review_utterance"] = {"keep": True}          # 검토 사본 예시(ADR 0030)
 log, store = LogStore.memory(clock=lambda: "2026-10-14T00:00:01Z"), FailureCaseStore.memory()
-env = envelope(pii_trace("s-001", "t-004"), release_id="rel-0002")
+tr = pii_trace("s-001", "t-004")
+tr["frontend_message"]["utterance"] = tr["extract_input"]["user_utterance"] = "혈압약은 아침마다 먹고 있어요"      # 잔존 패턴이 없는 발화
+env = envelope(tr, release_id="rel-0002")
 log.send(env)
 ps = make_pseudonymizer("example-salt")
 run_once(cfg=cfg, log=log, store=store, deid=Deidentifier(DeidPolicy.from_config(cfg["deid"]), ps), pseudonymize=ps,
@@ -24,3 +27,4 @@ def w(n, o): (out / n).write_text(json.dumps(o, ensure_ascii=False, indent=2) + 
 w("input.TraceEnvelope.json", env)
 w("output.FailureCase.json", case)
 w("output.deidentified_trace.json", store.get_trace(case["deidentified_trace_ref"]))
+w("output.review_trace.json", store.get_review_trace(case["deidentified_trace_ref"], reader_role="reviewer", reader_user="example.reviewer", accessed_at="2026-10-15T00:00:00Z"))

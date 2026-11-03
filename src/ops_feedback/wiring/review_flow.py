@@ -29,7 +29,12 @@ class ReviewFlow:
         deadline.check_current()                                  # 요청 전체 마감(D120): 단계마다 남은 시간을 본다
         cur = self._store.get_case(case_id)                       # 없으면 NOT_FOUND
         deadline.check_current()
-        out = self._decider.decide({"current": cur, "decision": d, "now": self._clock()})
+        req = {"current": cur, "decision": d, "now": self._clock()}
+        if reviewed_input is not None:
+            kept = self._store.review_utterances(cur["deidentified_trace_ref"])
+            if kept:
+                req["preserved_utterances"] = kept
+        out = self._decider.decide(req)
         if not out["changed"]:
             return out["case"], False
         deadline.check_current()                                  # 쓰기는 이 한 문장뿐이다: 그 전에 멈추면 반쯤 쓴 상태가 없다

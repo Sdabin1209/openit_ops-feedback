@@ -52,5 +52,7 @@ def build(request: CaseBuildRequest) -> CaseBuildResult:
         case["question_set"] = request["question_set"]
     _check_ext(mine)
     out: CaseBuildResult = {"case": case, "trace_ref": trace_ref, "trace": deid["trace"]}
+    if "review_trace" in deid:
+        out["review_trace"] = deid["review_trace"]          # 참조(ref)는 마스킹된 trace의 해시라 원문이 ref에 섞이지 않는다
     check("CaseBuildResult", out)
     return out

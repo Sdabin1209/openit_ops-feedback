@@ -75,6 +75,8 @@ class DeidPolicy:
     keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(기본 + 설정)
     count_map_keys: frozenset = frozenset()               # 건수 맵(키 -> 정수)으로 남길 필드 이름(예: extract_protections). 기본은 비어 있어 자유 객체로 비운다
     keep_pause_reason: bool = False                       # 정지 사유 열거(RISK|REASK_LIMIT|OTHER)를 남긴다. docs/adr/0014
+    review_utterance_keep: bool = False                   # 검토 사본에 환자 발화 두 칸만 원문으로 보존한다. docs/adr/0030
+    review_utterance_max_chars: int = 1000                # 계약 OpsFeedbackReviewTrace의 발화 상한(1000자)과 같다. 넘으면 앞부분만 남긴다
 
     def unvalidated_keep_keys(self) -> list:
         """값 검증 패턴이 없는 keep 키. 값이 그대로 통과하므로 시작 때 경고한다."""
@@ -99,12 +101,16 @@ class DeidPolicy:
             keep_patterns={k: v for k, v in kp.items() if k in keep},
             count_map_keys=frozenset(cfg.get("keep_count_map_keys") or []),
             keep_pause_reason=bool(cfg.get("keep_pause_reason", False)),
+            review_utterance_keep=bool((cfg.get("review_utterance") or {}).get("keep", False)),
+            review_utterance_max_chars=int((cfg.get("review_utterance") or {}).get("max_chars", 1000)),
         )
 
     def fingerprint(self) -> str:
         extra = {"count_map_keys": sorted(self.count_map_keys)} if self.count_map_keys else {}
         if self.keep_pause_reason:
             extra = {**extra, "keep_pause_reason": True}      # 켠 설정만 지문에 넣어, 안 쓰는 기존 설정의 지문은 그대로다(ADR 0013과 같은 방식)
+        if self.review_utterance_keep:
+            extra = {**extra, "review_utterance": {"keep": True, "max_chars": self.review_utterance_max_chars}}      # 같은 이유(ADR 0030)
         return sha256_hash({**extra,
             "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
@@ -115,6 +121,8 @@ class DeidPolicy:
 # 정지 사유(boundary-contracts 2.1.0, CR-H002)가 실릴 수 있는 자리(문진 스키마의 TurnFailureSignal). 스키마 걷기는 열거에 없는 값을 마스킹하고
 # 스키마가 이 필드를 모르는 옛 스냅샷에서는 버리므로, 걷기 밖에서 원본 값을 열거값으로 정규화해 같은 자리에 다시 넣는다(모르는 값은 OTHER).
 PAUSE_REASONS = ("RISK", "REASK_LIMIT", "OTHER")
+# 검토 사본에서만 원문으로 남기는 발화 두 칸(계약 OpsFeedbackReviewTrace). 키 이름 기준(keep_string_keys)이 아니라 경로로 지정한다(계약 OpsFeedbackJobConfig.deid.review_utterance).
+REVIEW_UTTERANCE_PATHS = (("frontend_message", "utterance"), ("extract_input", "user_utterance"))
 PAUSE_REASON_PATHS = (("frontend_input", "turn_failure_signal"), ("orchestrator_output", "turn_failure_signal"),
                       ("log_entry", "turn_failure_signal"), ("orchestrator_output", "log_entry", "turn_failure_signal"))
 
@@ -330,6 +338,26 @@ class Deidentifier:
         self._pseudonymize = pseudonymize
         self._residual = {n: re.compile(p) for n, p in policy.residual_patterns.items()}
 
+    def _scan(self, s: str) -> None:
+        for name, rx in self._residual.items():
+            if any(rx.search(s[i:i + SCAN_WINDOW]) for i in range(0, max(len(s) - SCAN_OVERLAP, 1), SCAN_WINDOW - SCAN_OVERLAP)):
+                raise DeidError(f"비식별 결과에 잔존 패턴({name})이 있다")
+
+    def _review_copy(self, raw_trace: dict, masked: dict) -> dict:
+        """검토 사본: 비식별 trace와 같되 발화 두 칸만 원문. 원문에 잔존 패턴(전화·주민번호·이메일 등 설정)이 있으면 DeidError로 닫는다(사례를 만들지 않는다).
+        원문이 문자열이 아니거나 비어 있으면 그 칸은 마스킹된 채 둔다. 상한(max_chars)을 넘으면 앞부분만 남기고, 검사는 남기는 부분에 한다."""
+        import copy
+        out = copy.deepcopy(masked)
+        for path in REVIEW_UTTERANCE_PATHS:
+            src, dst = _node(raw_trace, path[:-1]), _node(out, path[:-1])
+            raw = src.get(path[-1]) if isinstance(src, dict) else None
+            if not (isinstance(dst, dict) and isinstance(raw, str) and raw):
+                continue
+            text = raw[:self.policy.review_utterance_max_chars]
+            self._scan(text)
+            dst[path[-1]] = text
+        return out
+
     def deidentify(self, request: DeidRequest) -> DeidResult:
         check("DeidRequest", request)
         envelope = request["envelope"]
@@ -359,10 +387,13 @@ class Deidentifier:
             for name, rx in self._residual.items():
                 if any(rx.search(s[i:i + SCAN_WINDOW]) for i in range(0, max(len(s) - SCAN_OVERLAP, 1), SCAN_WINDOW - SCAN_OVERLAP)):
                     raise DeidError(f"비식별 결과에 잔존 패턴({name})이 있다")
+        review = self._review_copy(envelope["trace"], out) if self.policy.review_utterance_keep else None
         stats = {k: v for k, v in w.stats.items() if not k.startswith("path_")}
         stats["masked_paths"] = sorted(k[len("path_masked:"):] for k in w.stats if k.startswith("path_masked:"))
         stats["dropped_paths"] = sorted(k[len("path_dropped:"):] for k in w.stats if k.startswith("path_dropped:"))
         result: DeidResult = {"trace": out, "stats": stats, "policy_fingerprint": self.policy.fingerprint()}
+        if review is not None:
+            result["review_trace"] = review
         # 자기 검사: 출력이 I7이 약속한 비식별 뷰(OpsFeedbackDeidentifiedTrace)를 담은 DeidResult인지 확인한다. 어긋나면 게시하지 않고 닫는다(fail-closed).
         # 왜 위반 내용을 싣지 않나: 위반 값에 원본 조각이 있을 수 있어 경로와 규칙 종류만 낸다.
         try:

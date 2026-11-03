@@ -9,7 +9,9 @@
       "enum": [
         "metric",
         "rollback_request",
-        "rollback_receipt"
+        "rollback_receipt",
+        "review_trace",
+        "trace_access"
       ]
     },
     "key": {

@@ -72,9 +72,19 @@ class ReviewDecider:
                 if rx.search(s_):
                     raise BoundaryError("INVALID_RECORD", f"{what}에 개인정보로 보이는 패턴({name})이 있다. 개인정보 없이 다시 쓴다")
 
+    def _reject_preserved(self, value, originals: list) -> None:
+        """reviewed_input은 읽기 역할 전체가 읽는 FailureCase에 실린다. 검토 사본에만 두기로 한 환자 발화 원문이 그대로 들어 있으면 reviewer 전용 경계가 무너지므로 거부한다.
+        한계(측정하지 않은 보수 값): 10자 미만 발화는 다른 문장의 일부와 구별되지 않아 완전히 같은 문자열일 때만 막고, 바꿔 쓴 문장은 막지 못한다(개인정보 없는 문장을 쓰는 것은 검토자 책임)."""
+        for s_ in _strings(value):
+            for o in originals:
+                if s_.strip() == o.strip() or (len(o.strip()) >= 10 and o.strip() in s_):
+                    raise BoundaryError("INVALID_RECORD", "reviewed_input에 환자 발화 원문이 그대로 들어 있다. 개인정보 없이 다시 쓴다")
+
     def decide(self, request: ReviewRequest) -> ReviewOutcome:
         check("ReviewRequest", request)
         cur, d = request["current"], request["decision"]
+        if d.get("reviewed_input"):
+            self._reject_preserved(d["reviewed_input"], request.get("preserved_utterances") or [])
         for what in ("expected", "reviewed_input", "note"):
             if d.get(what):
                 self._reject_pii(d[what], what)

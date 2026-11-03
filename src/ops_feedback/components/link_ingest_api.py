@@ -193,6 +193,14 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
         return Response(200, service.get_trace(req.params["ref"]))
 
     @guarded_human
+    def get_review_trace(req: Request) -> Response:
+        # 원문 발화가 든 사본: 검토 역할 토큰만(읽기 토큰은 403). 읽을 때마다 서비스가 접근 기록을 남긴다. 신원 필수 설정이면 X-Openit-User가 있어야 한다(Route가 401로 거른다).
+        check("ReviewHeaders", {} if req.user is None else {"user": req.user})
+        if not service.review_enabled:
+            raise BoundaryError("NOT_FOUND", "검토 면이 꺼져 있다")
+        return Response(200, service.get_review_trace(req.params["ref"], req.role[len(REVIEW):], req.user))
+
+    @guarded_human
     def review(req: Request) -> Response:
         check("ReviewHeaders", {} if req.user is None else {"user": req.user})       # Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)
         if not service.review_enabled:
@@ -209,6 +217,7 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
         Route("GET", "/v1/cases", list_cases, roles=roles(READ), response_schema="ListEnvelope"),      # 봉투는 Route가, 원소(FailureCase)는 핸들러가 계약으로 검증한다(ListEnvelope는 원소 모양을 정하지 않는다): R7
         Route("GET", "/v1/cases/{case_id}", get_case, roles=roles(READ), response_schema="FailureCase"),
         Route("GET", "/v1/deidentified-traces/{ref}", get_trace, roles=roles(READ)),
+        Route("GET", "/v1/review-traces/{ref}", get_review_trace, roles=roles(REVIEW), response_schema="OpsFeedbackReviewTrace", require_user=require_reviewer_identity),
         Route("POST", "/v1/cases/{case_id}/review", review, roles=roles(REVIEW), request_schema="CaseReviewRequest", response_schema="FailureCase",
               require_user=require_reviewer_identity, max_body=MAX_REVIEW_BODY),
     ]

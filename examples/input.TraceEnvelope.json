@@ -12,14 +12,14 @@
     "frontend_message": {
       "session_id": "s-001",
       "kind": "UTTERANCE",
-      "utterance": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요"
+      "utterance": "혈압약은 아침마다 먹고 있어요"
     },
     "intervention_decision": null,
     "orchestrator_input": null,
     "extract_input": {
       "question_id": "Q1",
       "current_question": "혈압이 어떻게 되시나요?",
-      "user_utterance": "저는 홍길동이고 010-1234-5678 이메일은 gildong@example.com 혈압은 120에 80이에요",
+      "user_utterance": "혈압약은 아침마다 먹고 있어요",
       "state": {
         "Q1": {
           "sys": {

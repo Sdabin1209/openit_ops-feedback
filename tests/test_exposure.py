@@ -13,7 +13,7 @@ from test_api_review import env, post  # noqa: F401  (검토 서버와 사례 �
 ROOT = Path(__file__).resolve().parents[1]
 EXPOSURE = json.loads((ROOT / "deploy-exposure.json").read_text(encoding="utf-8"))
 # 이 서비스가 /v1 아래에서 실제로 내는 (메서드, 경로 모양). 새 라우트를 코드에 더하면 여기와 deploy-exposure.json에 함께 적어야 한다.
-SERVED = {("GET", "/v1/cases"), ("GET", "/v1/cases/*"), ("GET", "/v1/deidentified-traces/*"), ("POST", "/v1/cases/*/review"), ("POST", "/v1/traces")}
+SERVED = {("GET", "/v1/cases"), ("GET", "/v1/cases/*"), ("GET", "/v1/deidentified-traces/*"), ("GET", "/v1/review-traces/*"), ("POST", "/v1/cases/*/review"), ("POST", "/v1/traces")}
 
 
 def test_exposure_file_follows_the_contract():
@@ -69,8 +69,8 @@ def _timeouts():
 
 
 def test_declared_gateway_timeouts_for_reviewer_paths():
-    """검토 경로(읽기 3 + 검토 게시 1)의 게이트웨이 상한: 연결 1초, 응답 머리글 60초(D125, 프록시 표준 60초). 계약 CONVENTIONS의 시간 상한 사슬 값이다."""
-    assert _timeouts() == [{"dial": 1000, "response_header": 60000}] * 2
+    """검토 경로(읽기 3 + 검토 사본 1 + 검토 게시 1)의 게이트웨이 상한: 연결 1초, 응답 머리글 60초(D125, 프록시 표준 60초). 계약 CONVENTIONS의 시간 상한 사슬 값이다."""
+    assert _timeouts() == [{"dial": 1000, "response_header": 60000}] * 3
 
 
 def test_server_side_request_deadline_is_shorter_than_the_gateway_response_header():

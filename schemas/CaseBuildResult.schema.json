@@ -13,6 +13,10 @@
     },
     "trace": {
       "$ref": "../boundary/OpsFeedbackDeidentifiedTrace.schema.json"
+    },
+    "review_trace": {
+      "$ref": "../boundary/OpsFeedbackReviewTrace.schema.json",
+      "description": "정책 deid.review_utterance.keep=true일 때만 있다: 발화 두 칸만 원문인 검토 사본(reviewer 역할 전용 경로로만 나간다, ADR 0030)"
     }
   },
   "required": [

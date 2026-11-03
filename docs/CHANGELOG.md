@@ -1,5 +1,12 @@
 # 변경 이력
 
+## 0.19.0 (제안, 계약 3.2.0 / link v0.4.4)
+
+- 계약 핀 v3.2.0, openit-link v0.4.4. 잡·admin도 `OpsFeedbackServerEnv`로 모르는 `OPS_` 변수를 거부.
+- 결함 수정: `admin migrate`가 환경의 `OPS_DB_SCHEMA=verify`에 막혀 적용 없이 성공을 말하던 것(PgBase가 환경을 인자로 받음).
+- L07: 롤백 근거는 CONFIRMED만(ADR 0029, CR-012). L22: 검토 이메일 탐지의 254자 사각 제거.
+- L12: 검토 사본(환자 발화 두 칸 원문), `GET /v1/review-traces/{ref}`, 접근 기록, `reviewed_input` 원문 거부(ADR 0030).
+
 ## 0.18.2 (제안, D125 시간 상한 개정)
 
 - 검토 경로 서버 전체 마감 9.0 -> 55.0초(`REQUEST_DEADLINE_SECONDS`), `deploy-exposure.json` response_header 10000 -> 60000(dial 1000 그대로). 시험은 새 값으로. ADR 0028 개정 한 줄, boundary.md에 사슬 한 줄.

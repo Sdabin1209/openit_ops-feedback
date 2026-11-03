@@ -134,6 +134,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0027](docs/adr/0027-inject-clock-and-wait.md) | 시계·타이머·대기를 인자로 주입한다(시험에서 실제 시간 0) |
 | [0028](docs/adr/0028-request-deadline.md) | 사람용 요청에 서버 쪽 요청 전체 마감 55.0초(D120, D125 개정) |
 | [0029](docs/adr/0029-rollback-evidence-confirmed-only.md) | 롤백 요청의 근거는 사람이 CONFIRMED로 검토한 사례만 센다(L07) |
+| [0030](docs/adr/0030-review-utterance-copy.md) | 검토 사본: 환자 발화 두 칸만 원문, reviewer 전용 경로, 읽기마다 접근 기록(L12) |
 
 ## 7. 더 자세한 문서
 

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 import sqlite3
 import threading
 from abc import ABC, abstractmethod
@@ -389,6 +390,35 @@ class FailureCaseStore:
             raise BoundaryError("NOT_FOUND", f"비식별 trace 없음: {deidentified_trace_ref}")
         return t
 
+    # --- 검토 사본(원문 발화 두 칸, ADR 0030) ---
+    def put_review_trace(self, ref: str, review_trace: dict) -> None:
+        """검토 사본 저장. 마스킹된 trace(ref)가 먼저 있어야 한다. 같은 ref는 같은 입력이라 이미 있으면 그대로 둔다."""
+        check("OpsFeedbackReviewTrace", review_trace, contract=True)
+        if self._b.get_trace(ref) is None:
+            raise BoundaryError("FAILED_PRECONDITION", "검토 사본의 비식별 trace가 먼저 저장되어야 한다")
+        self.put_aux("review_trace", ref, {"trace_ref": ref, "trace": review_trace})
+
+    def review_utterances(self, ref: str) -> list:
+        """검토 사본에 보존된 발화 원문 목록(접근 기록 없음: 서버 내부 검사용이며 밖으로 내보내지 않는다)."""
+        rec = self._b.get_aux("review_trace", ref)
+        if rec is None:
+            return []
+        t = rec["trace"]
+        cells = ((t.get("frontend_message") or {}).get("utterance"), (t.get("extract_input") or {}).get("user_utterance"))
+        return sorted({c for c in cells if isinstance(c, str) and c not in ("[MASKED]", "[DROPPED]")})
+
+    def get_review_trace(self, ref: str, *, reader_role: str, reader_user: Optional[str], accessed_at: str) -> dict:
+        """검토 면 전용 읽기. 읽기 전에 접근 기록을 남기고(남기지 못하면 내보내지 않는다, fail-closed) 검토 사본을 낸다.
+        검토 사본이 없으면(정책이 보존을 껐거나 켜기 전의 사례) 마스킹된 trace를 낸다(계약 OpsFeedbackReviewTrace는 마스킹 토큰도 허용한다)."""
+        rec = self._b.get_aux("review_trace", ref)
+        trace = rec["trace"] if rec is not None else self.get_trace(ref)
+        access = {"access_id": "ta-" + uuid.uuid4().hex, "accessed_at": accessed_at, "trace_ref": ref, "reader_role": reader_role,
+                  "original_kept": rec is not None}
+        if reader_user:
+            access["reader_user"] = reader_user
+        self.put_aux("trace_access", access["access_id"], access)
+        return trace
+
     # --- 삭제(관리 도구 전용, I7 Protocol에는 없다) ---
     def traces_of_session(self, pseudonymized_session_id: str) -> list[str]:
         """비식별 trace 중 session_id(의사 식별자)가 일치하는 ref."""
@@ -398,6 +428,8 @@ class FailureCaseStore:
         """주어진 비식별 trace를 가리키는 사례(모든 version)와 그 trace를 지운다."""
         refs = set(refs)
         case_ids = {r["case_id"] for _, r in self._b.scan(0) if r["deidentified_trace_ref"] in refs}
+        for ref in refs:
+            self._b.delete_aux("review_trace", ref)          # 원문 발화가 든 검토 사본도 지운다
         return {"cases": self._b.delete_cases(sorted(case_ids)), "traces": self._b.delete_traces(sorted(refs))}
 
     def purge_cases_created_before(self, cutoff: str, *, include_confirmed: bool = False) -> dict:
@@ -413,9 +445,13 @@ class FailureCaseStore:
         n = self._b.delete_cases(old)
         used = {r["deidentified_trace_ref"] for _, r in self._b.scan(0)}
         orphans = [ref for ref, _ in self._b.scan_traces() if ref not in used]
+        for rec in self._b.list_aux("review_trace"):          # 검토 사본(원문 발화)은 사례와 같은 수명이다: 사례가 사라지면 함께 지운다
+            if rec["trace_ref"] not in used:
+                self._b.delete_aux("review_trace", rec["trace_ref"])
         return {"cases": n, "traces": self._b.delete_traces(orphans)}
 
-    _AUX_TIME = {"metric": "window_end", "rollback_request": "requested_at", "rollback_receipt": "decided_at"}
+    _AUX_TIME = {"metric": "window_end", "rollback_request": "requested_at", "rollback_receipt": "decided_at", "trace_access": "accessed_at"}
+    _AUX_KEY = {"metric": "metric_id", "trace_access": "access_id"}      # 나머지는 request_id
 
     def purge_aux_before(self, cutoff: str) -> int:
         """지표 스냅샷·롤백 요청·영수증 중 기록 시각이 cutoff보다 이른 것을 지운다. 개인정보는 없지만 무한 증가를 막는다."""
@@ -423,7 +459,7 @@ class FailureCaseStore:
         for kind, field_ in self._AUX_TIME.items():
             for rec in self._b.list_aux(kind):
                 t = rec.get(field_)
-                key = rec.get("metric_id") if kind == "metric" else rec.get("request_id")
+                key = rec.get(self._AUX_KEY.get(kind, "request_id"))
                 if t and key and t < cutoff:
                     n += self._b.delete_aux(kind, key)
         return n

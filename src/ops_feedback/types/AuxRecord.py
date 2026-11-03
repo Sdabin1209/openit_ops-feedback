@@ -9,6 +9,8 @@ from typing_extensions import TypedDict
 
 
 class AuxRecord(TypedDict, closed=True):
-    kind: Literal['metric', 'rollback_request', 'rollback_receipt']
+    kind: Literal[
+        'metric', 'rollback_request', 'rollback_receipt', 'review_trace', 'trace_access'
+    ]
     key: str
     record: dict[str, Any]
