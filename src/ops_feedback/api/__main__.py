@@ -67,7 +67,8 @@ def main() -> int:
         log.warning("보관 기간 미설정: 원본이 무기한 보관된다(RAW_RETENTION_UNSET). 보관 기간은 사용자 결정이며, 정해지면 잡 retention.raw_days와 OPS_RAW_RETENTION_DAYS에 같은 값을 둔다")
     if not require_user:
         log.warning("검토자 신원 필수가 꺼져 있다(REVIEW_IDENTITY_NOT_REQUIRED): 검토 게시가 개인 식별 없이 기록될 수 있다")
-    srv = make_server(IngestService(store, failures), token, port=st["port"], read_tokens=rtoks, review_tokens=vtoks,
+    # 왜 OPS_HOST: 바인드 주소는 배치 설정이다(계약 3.4.2, 선택). 기본 0.0.0.0은 컨테이너 안 사이드카가 접근하는 기존 동작과 같다.
+    srv = make_server(IngestService(store, failures), token, host=(os.environ.get("OPS_HOST") or "").strip() or "0.0.0.0", port=st["port"], read_tokens=rtoks, review_tokens=vtoks,
                       max_connections=st["max_connections"], readyz_cache_seconds=st["readyz_cache_seconds"], retention_declared=declared,
                       require_reviewer_identity=require_user, clock=time.monotonic, sleep=time.sleep, request_deadline=REQUEST_DEADLINE_SECONDS)      # 실제 시계는 진입점이 명시적으로 넘긴다(ADR 0027)
     # SIGTERM(docker stop)에 새 연결을 멈추고 끝낸다. 쓰기는 자동 커밋 단일 문장이라 처리 중이던 요청은 완결되거나 호출자가 재시도한다.

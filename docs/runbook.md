@@ -52,6 +52,7 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | `OPS_INGEST_TOKEN` | ingest-api | 필수. 서비스 토큰 |
 | `OPS_LOG_DB` | ingest-api | 기본 `/data/log.db` |
 | `OPS_PORT` | ingest-api | 기본 8080 |
+| `OPS_HOST` | ingest-api | 바인드 주소(선택, 기본 0.0.0.0, 계약 3.4.2). 127.0.0.1이면 그 주소에만 붙는다 |
 | `OPS_FAILURE_DB`, `OPS_READ_TOKENS` | ingest-api | 둘 다 있을 때만 I7 읽기 면을 켠다. 토큰은 `역할=토큰,역할=토큰` |
 | `OPS_REVIEW_TOKENS` | ingest-api | 검토 게시(`POST /v1/cases/{id}/review`)용 쓰기 토큰, 역할은 보통 `reviewer`. 읽기 면과 같이 켜진다. 수집·읽기·검토 토큰은 서로 달라야 하고 서로의 경로는 403 |
 | `OPS_DB_CONNECT_TIMEOUT`, `OPS_DB_STATEMENT_TIMEOUT`, `OPS_DB_PROBE_TIMEOUT`, `OPS_DB_DDL_TIMEOUT` | ingest-api, 잡 | PostgreSQL일 때만. 초 단위, 기본 3/3/2/30. 의미와 근거는 docs/boundary.md "DB 대기 상한". 잡은 DB 무응답이면 종료 코드 2 |

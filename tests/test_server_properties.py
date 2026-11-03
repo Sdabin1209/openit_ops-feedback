@@ -211,3 +211,23 @@ def test_a_broken_element_is_not_sent():
 def api_example():
     from pathlib import Path
     return Path(__file__).resolve().parent.parent / "examples" / "output.FailureCase.json"
+
+
+def test_ops_host_binds_only_that_address(tmp_path):
+    """OPS_HOST=127.0.0.1이면 그 주소에만 붙는다(같은 loopback 대역의 127.0.0.2에서는 연결이 거부된다)."""
+    import os, socket, sys
+    from waiting import HANG_GUARD_SECONDS
+    from waiting import Proc
+    with socket.socket() as sk:
+        sk.bind(("127.0.0.1", 0))
+        port = sk.getsockname()[1]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("OPS_")}
+    env.update(OPS_INGEST_TOKEN="tok", OPS_LOG_DB=str(tmp_path / "l.db"), OPS_PORT=str(port), OPS_HOST="127.0.0.1")
+    p = Proc([sys.executable, "-m", "ops_feedback.api"], env)
+    try:
+        p.wait_for("listening on")
+        socket.create_connection(("127.0.0.1", port), timeout=HANG_GUARD_SECONDS).close()
+        with pytest.raises(OSError):
+            socket.create_connection(("127.0.0.2", port), timeout=HANG_GUARD_SECONDS).close()
+    finally:
+        p.stop()
