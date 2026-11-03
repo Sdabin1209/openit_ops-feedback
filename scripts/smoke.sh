@@ -25,12 +25,25 @@ json.dump({"source_dir": __import__("os").getcwd(), "revision": rev, "versions":
            "dependency_sources": {"boundary": deps + "/bc", "survey_schema": deps + "/ss/schema"}, "image_tag": img}, open(path, "w"))
 PY
 bash scripts/build-image.sh "$REQ" | tail -1 | tee "$DEPS/result.json"
-trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $DEPS' EXIT
+# 실패로 끝나면 컨테이너를 지우기 전에 State와 로그 끝을 표준 오류로 낸다(원인을 사라지기 전에 남긴다). 전체 inspect는 환경 변수가 보이므로 State 필드만 고른다.
+cleanup() {
+  local rc=$?
+  if [ "$rc" -ne 0 ] && $DOCKER inspect "$NAME" >/dev/null 2>&1; then
+    {
+      echo "--- smoke 실패(종료 코드 $rc): 컨테이너 $NAME 진단 ---"
+      $DOCKER inspect "$NAME" --format 'status={{.State.Status}} ExitCode={{.State.ExitCode}} OOMKilled={{.State.OOMKilled}} Error={{.State.Error}} StartedAt={{.State.StartedAt}} FinishedAt={{.State.FinishedAt}}' || true
+      echo "--- docker logs --tail 100 $NAME ---"
+      $DOCKER logs --tail 100 "$NAME" 2>&1 || true
+      echo "--- 진단 끝 ---"
+    } >&2
+  fi
+  $DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf ${SECDIR:-} ${DEPS:-}
+}
+trap cleanup EXIT
 # 비밀은 환경 변수가 아니라 파일로 준다(NAME_FILE, D84). docker inspect/exec env에 값이 보이지 않아야 한다.
 SECDIR=$(mktemp -d); chmod 755 $SECDIR
 printf 'smoke-token' > $SECDIR/ingest; printf 'synthetic-data=read-token' > $SECDIR/read; printf 'reviewer=review-token' > $SECDIR/review; printf 'smoke-salt-0123456789abcdef-0123456789abcdef' > $SECDIR/salt
 chmod 644 $SECDIR/*
-trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf $SECDIR $DEPS' EXIT
 $DOCKER run -d --name $NAME -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro \
   -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read -e OPS_REVIEW_TOKENS_FILE=/run/secrets/review \
   -e OPS_DEID_SALT_FILE=/run/secrets/salt $IMG >/dev/null
