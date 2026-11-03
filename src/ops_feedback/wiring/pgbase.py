@@ -25,6 +25,10 @@ DEFAULTS = {"OPS_DB_CONNECT_TIMEOUT": 3.0,     # 접속 상한. libpq는 정수 
             "OPS_DB_DDL_TIMEOUT": 30.0}        # 시작 때 스키마 마이그레이션(다른 인스턴스의 yoyo 잠금을 기다릴 수 있다)
 
 
+# 백업 덤프의 문장 상한(초): 잡 timeout_seconds(deploy-jobs.json)와 같은 값. 측정하지 않은 시작값(ADR 0032).
+DUMP_STATEMENT_SECONDS = 1800.0
+
+
 def _setting(name: str, environ: Mapping[str, str]) -> float:
     raw = environ.get(name)
     if raw is None or raw.strip() == "":
@@ -175,6 +179,30 @@ class PgBase:
                     conn.close()
                 except Exception:
                     pass
+
+    def dump(self, out) -> int:
+        """이 저장소의 표 전부를 `COPY 표 FROM STDIN;` 텍스트로 out(바이너리 파일 객체)에 쓴다(백업, ADR 0032). 한 시점의 일관된 모습: 새 연결의 REPEATABLE READ 읽기 전용 트랜잭션 하나.
+        문장 상한은 일반 호출보다 길다(표 전체를 읽는다): DUMP_STATEMENT_SECONDS. 쓴 바이트 수."""
+        import psycopg
+        n = 0
+        conn = psycopg.connect(autocommit=False, **_params(self._url, self.connect_timeout, DUMP_STATEMENT_SECONDS))
+        try:
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            for t in self.TABLES:
+                head = f"COPY {t} FROM STDIN;\n".encode()
+                out.write(head)
+                n += len(head)
+                with conn.cursor().copy(f"COPY {t} TO STDOUT") as cp:
+                    for chunk in cp:
+                        out.write(bytes(chunk))
+                        n += len(chunk)
+                out.write(b"\\.\n\n")
+                n += 4
+        except psycopg.Error as e:
+            raise BoundaryError("UNAVAILABLE", f"{self.WHAT} 덤프 실패: {type(e).__name__}") from None
+        finally:
+            conn.close()
+        return n
 
     def close(self) -> None:
         self._db.close()

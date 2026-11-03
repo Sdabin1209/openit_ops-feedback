@@ -36,6 +36,7 @@
 | purge 기준 | `components/purge_planner.py` | `PurgeRequest` | `PurgeCutoffs` | 관리 도구 purge의 일 수를 기준 시각으로 바꾼다(기간은 사용자가 정한다) |
 | 수집·읽기·검토 서버(받는 쪽) | `components/link_ingest_api.py` | HTTP 요청(`TraceEnvelope`, `CaseReviewRequest`, `ListCasesQuery`, `ReviewHeaders`) | HTTP 응답(`IngestResult`, `FailureCase`, 목록, 비식별 trace, readyz) | `openit_link.App/Route` 위에 경로·토큰별 역할·쿼리 검증·`/readyz`를 적는다. 인증·상한·계약 검증·오류 본문은 openit_link가 한다 |
 | 릴리스 읽기(보내는 쪽) | `components/link_release_read.py` | 릴리스 ID | 문항 세트 ref, 활성 포인터, 릴리스 ID 쪽 | release-gate의 읽기 SDK(I4)를 부른다. 한 번 UNAVAILABLE이면 이번 실행에서는 더 부르지 않는다 |
+| 영역 밖 출구(보내는 쪽) | `components/link_egress.py` | 환경, 주소 | 출구 주소(`OPENIT_EGRESS_PROXY`), TLS 주소 검사 | 영역 밖 호출의 출구와 TLS 규칙만 안다(RUNTIME R1.1·R1.8). release-gate 클라이언트 생성(`wiring/build.py`)과 백업 잡(`wiring/backup_flow.py`)이 쓴다 |
 | 롤백 요청 전달(보내는 쪽) | `components/link_gate_send.py` | `RollbackRequest`(계약) | `RollbackReceipt`(계약) | release-gate에 요청을 보내고 영수증이 계약·요청 ID에 맞는지 확인한다(I5) |
 
 ## 컴포넌트가 아닌 것

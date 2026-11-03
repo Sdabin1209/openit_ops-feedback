@@ -308,6 +308,13 @@ class RawLogStore:
     def postgres(cls, url: str, environ=None) -> "RawLogStore":
         return cls(PostgresRawBackend(url, environ))
 
+    def dump(self, out) -> int:
+        """백업용 논리 덤프(PostgreSQL 구현만, ADR 0032)."""
+        fn = getattr(self._backend, "dump", None)
+        if fn is None:
+            raise BoundaryError("INVALID_RECORD", "덤프는 PostgreSQL 저장소만 지원한다")
+        return fn(out)
+
     def backend_kind(self) -> str:
         return getattr(self._backend, "KIND", "sqlite" if isinstance(self._backend, SqliteBackend) else "memory")
 

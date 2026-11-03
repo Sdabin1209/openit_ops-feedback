@@ -7,6 +7,8 @@
       원본(기본은 처리 표시가 있는 것만)과 오래된 사례·고아 trace를 지운다. 기간 값은 사용자가 정하며 기본값이 없다.
   python -m ops_feedback.admin minimize-raw [--dry-run]
       처리가 끝난 원본의 봉투 내용을 지운다(중복 판별 키·해시·시각·릴리스는 남긴다).
+  python -m ops_feedback.admin backup
+      PostgreSQL 두 저장소를 논리 덤프 한 파일로 꺼내 restic 으로 platform 백업 저장소에 보낸다. 결과는 BackupJobResult, 종료 코드 0·75·1 (RUNTIME R10.1, ADR 0032). 설정: OPENIT_BACKUP_URL, OPENIT_BACKUP_CREDENTIALS_FILE, OPENIT_BACKUP_REPO_PASSWORD_FILE, 출구 OPENIT_EGRESS_PROXY.
   python -m ops_feedback.admin migrate
       스키마를 만든다. 서버·잡은 OPS_DB_SCHEMA=verify만 허용하므로 스키마는 이 명령(소유자 계정)으로만 만든다(ADR 0031).
 
@@ -22,6 +24,7 @@ import sys
 
 from boundary_contracts import read_secret
 from boundary_contracts.errors import BoundaryError
+from boundary_contracts.secrets import SecretError
 
 from ..components.pseudonymizer import check_salt
 from ..config import validate_server_env
@@ -54,6 +57,7 @@ def main(argv=None) -> int:
     m = sub.add_parser("minimize-raw")
     m.add_argument("--dry-run", action="store_true")
     sub.add_parser("migrate")
+    sub.add_parser("backup")
     a = ap.parse_args(argv)
     env = dict(os.environ)
     try:
@@ -62,6 +66,16 @@ def main(argv=None) -> int:
         print(f"오류: {e}", file=sys.stderr)
         return 2
     try:
+        if a.cmd == "backup":
+            from ..wiring import backup_flow
+            from ..wiring.clock import utc_now
+            started = utc_now()
+            try:
+                res = backup_flow.run(env)
+            except (BoundaryError, SecretError, ValueError) as e:       # 실패도 같은 계약 모양(BackupJobResult)으로 마지막 줄에 낸다
+                res = backup_flow.failed(e, started)
+            print(json.dumps(res, sort_keys=True, ensure_ascii=False))
+            return backup_flow.exit_code(res)
         if a.cmd == "migrate":
             env["OPS_DB_SCHEMA"] = "apply"
             log, fail = _open(a, env)
@@ -100,6 +114,9 @@ def main(argv=None) -> int:
                 return 0
             print(json.dumps({"minimized": log.minimize_processed()}))
             return 0
+    except SecretError as e:
+        print(json.dumps({"error": "INVALID_RECORD", "message": str(e)}, ensure_ascii=False), file=sys.stderr)
+        return 2
     except BoundaryError as e:
         print(json.dumps({"error": e.code, "message": e.message}, ensure_ascii=False), file=sys.stderr)
         return 2

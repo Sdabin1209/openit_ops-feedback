@@ -20,6 +20,8 @@ LABEL io.openit.service="ops-feedback" \
       io.openit.contracts.survey-schema=$SURVEY_SCHEMA_VERSION \
       io.openit.model-runtime=$MODEL_RUNTIME_VERSION
 COPY --from=build /install /usr/local
+# 백업 잡(admin backup, ADR 0032)이 restic 을 부른다. Debian 패키지 표준 설치. 서비스(ingest-api)는 쓰지 않는다.
+RUN apt-get update && apt-get install -y --no-install-recommends restic ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --no-create-home app && mkdir /data && chown app /data
 USER app
 ENV PYTHONUNBUFFERED=1 OPS_LOG_DB=/data/log.db OPS_FAILURE_DB=/data/failures.db OPS_PORT=8080

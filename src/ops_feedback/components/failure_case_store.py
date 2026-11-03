@@ -320,6 +320,13 @@ class FailureCaseStore:
     def postgres(cls, url: str, environ=None) -> "FailureCaseStore":
         return cls(PostgresFailureBackend(url, environ))
 
+    def dump(self, out) -> int:
+        """백업용 논리 덤프(PostgreSQL 구현만, ADR 0032)."""
+        fn = getattr(self._b, "dump", None)
+        if fn is None:
+            raise BoundaryError("INVALID_RECORD", "덤프는 PostgreSQL 저장소만 지원한다")
+        return fn(out)
+
     def backend_kind(self) -> str:
         return getattr(self._b, "KIND", "sqlite" if isinstance(self._b, SqliteBackend) else "memory")
 

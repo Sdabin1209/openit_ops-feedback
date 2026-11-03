@@ -120,3 +120,17 @@ def test_policy_counting_anything_but_confirmed_is_refused(pipeline, statuses, t
         load_config(p)
     with pytest.raises(BoundaryError):                                # 판단 컴포넌트 입구에서도 거부한다
         rollback_assessor.assess({"now": NOW, "release_id": "rel-0002", "total_turns": 10, "cases": [], "policy": pol})
+
+
+def test_gate_409_for_same_request_id_with_other_content_is_surfaced_not_applied(pipeline):
+    """RUNTIME R10.8·C11: 같은 request_id 에 다른 내용이라 게이트가 409 CONFLICT 를 주면 성공으로 말하지 않는다: 영수증을 저장하지 않고 submit_error=CONFLICT 로 남긴다(조용히 버리지 않는다)."""
+    from boundary_contracts.errors import BoundaryError
+
+    class Conflict(FakeGate):
+        def request_rollback(self, request):
+            self.calls.append(request)
+            raise BoundaryError("CONFLICT", "같은 request_id, 다른 내용")
+    gate = Conflict()
+    out = build(pipeline, 3, 3, gate=gate).evaluate()
+    assert out["action"] == "REQUEST_CREATED" and out["submit_error"] == "CONFLICT" and "receipt_status" not in out
+    assert pipeline["store"].get_aux("rollback_receipt", out["request_id"]) is None

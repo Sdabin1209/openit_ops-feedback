@@ -136,6 +136,9 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0029](docs/adr/0029-rollback-evidence-confirmed-only.md) | 롤백 요청의 근거는 사람이 CONFIRMED로 검토한 사례만 센다(L07) |
 | [0030](docs/adr/0030-review-utterance-copy.md) | 검토 사본: 환자 발화 두 칸만 원문, reviewer 전용 경로, 읽기마다 접근 기록(L12) |
 | [0031](docs/adr/0031-db-owner-and-app-roles.md) | DB 계정 분리: 소유자(DDL, migrate만)와 앱(DML), 서버·잡은 verify만(L08) |
+| [0032](docs/adr/0032-backup-logical-dump-restic.md) | 백업: COPY 논리 덤프를 restic 으로 platform 백업 저장소에(R10.1) |
+| [0033](docs/adr/0033-gateway-token-identity-header.md) | 사람 신원 헤더는 게이트웨이 토큰에서만 쓴다(CONVENTIONS 6절) |
+| [0034](docs/adr/0034-request-body-limits.md) | 경로별 요청 본문 상한을 노출 선언에 적고 서버 상한과 같게 둔다(3.4.7) |
 
 ## 7. 더 자세한 문서
 

@@ -2,11 +2,71 @@
   "jobs": [
     {
       "name": "ops-feedback-job",
-      "argv": ["python", "-m", "ops_feedback.job", "--config", "/etc/ops-feedback/job.yaml"],
+      "argv": [
+        "python",
+        "-m",
+        "ops_feedback.job",
+        "--config",
+        "/etc/ops-feedback/job.yaml"
+      ],
       "idempotent": true,
-      "secret_files": ["OPS_DEID_SALT_FILE", "OPS_LOG_DATABASE_URL_FILE", "OPS_FAILURE_DATABASE_URL_FILE"],
-      "config": {"container_path": "/etc/ops-feedback/job.yaml", "schema": "OpsFeedbackJobConfig.schema.json"},
-      "needs": ["postgres"]
+      "secret_files": [
+        "OPS_DEID_SALT_FILE",
+        "OPS_LOG_DATABASE_URL_FILE",
+        "OPS_FAILURE_DATABASE_URL_FILE",
+        "OPS_GATE_READ_TOKEN_FILE",
+        "OPS_GATE_WRITE_TOKEN_FILE"
+      ],
+      "config": {
+        "container_path": "/etc/ops-feedback/job.yaml",
+        "schema": "OpsFeedbackJobConfig.schema.json"
+      },
+      "needs": [
+        "postgres",
+        "release-network"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "name": "ops-feedback-migrate",
+      "argv": [
+        "python",
+        "-m",
+        "ops_feedback.admin",
+        "migrate"
+      ],
+      "idempotent": true,
+      "secret_files": [
+        "OPS_LOG_DATABASE_URL_FILE",
+        "OPS_FAILURE_DATABASE_URL_FILE"
+      ],
+      "needs": [
+        "postgres"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "name": "ops-feedback-backup",
+      "argv": [
+        "python",
+        "-m",
+        "ops_feedback.admin",
+        "backup"
+      ],
+      "idempotent": true,
+      "secret_files": [
+        "OPS_LOG_DATABASE_URL_FILE",
+        "OPS_FAILURE_DATABASE_URL_FILE",
+        "OPENIT_BACKUP_CREDENTIALS_FILE",
+        "OPENIT_BACKUP_REPO_PASSWORD_FILE"
+      ],
+      "env": [
+        "OPENIT_BACKUP_URL"
+      ],
+      "needs": [
+        "postgres"
+      ],
+      "timeout_seconds": 1800
     }
   ]
 }

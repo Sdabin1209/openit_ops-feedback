@@ -1,5 +1,9 @@
 {
   "service": "ops-feedback-ingest",
+  "egress": [
+    "release-gate",
+    "external:backup"
+  ],
   "routes": [
     {
       "paths": [
@@ -41,7 +45,8 @@
       "timeouts_ms": {
         "dial": 1000,
         "response_header": 60000
-      }
+      },
+      "max_body_bytes": 1048576
     },
     {
       "paths": [
@@ -72,7 +77,8 @@
       ],
       "auth": {
         "kind": "denied"
-      }
+      },
+      "max_body_bytes": 8388608
     }
   ]
 }

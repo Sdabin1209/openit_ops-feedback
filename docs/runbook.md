@@ -150,3 +150,10 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - 이 서비스는 TLS 서버가 아니다(deploy의 사이드카가 HTTPS를 끝낸다). 바깥 호출(release-gate I4/I5)의 주소는 잡 설정의 `base_url`이며 코드에 고정된 주소는 없다(`tests/test_tls_outbound.py`). https 주소를 쓴다.
 - 사설 루트는 표준 환경 변수 `SSL_CERT_FILE`로 믿는다(클라이언트는 `ssl` 기본 검증을 쓰고 검증을 끄는 코드가 없다). 임시 루트와 서버 인증서로 시험한다.
 - DB는 접속 문자열(비밀 파일)의 `sslmode`, `sslrootcert`를 그대로 libpq에 넘긴다(코드가 덮어쓰지 않는다). 예: `postgresql://user:pw@host/db?sslmode=verify-full&sslrootcert=/run/secrets/root.pem`.
+
+## 백업과 영역 게이트웨이 출구 (코드 단계 C2, 계약 3.4.6)
+
+- 백업: `python -m ops_feedback.admin backup`(잡 `ops-feedback-backup`, 상한 1800초). 설정은 공통 이름 `OPENIT_BACKUP_URL`(https, restic REST), `OPENIT_BACKUP_CREDENTIALS_FILE`(`<사용자>:<암호>` 한 줄), `OPENIT_BACKUP_REPO_PASSWORD_FILE`. 영역 밖 길은 `OPENIT_EGRESS_PROXY`뿐이다. 근거·감수: docs/adr/0032. 복구: `admin migrate` 뒤 restic 에서 `log.copy`, `failure.copy`를 꺼내 psql 로 되돌린다(복구 시험은 하지 않았다).
+- 이웃 호출(release-gate I4·I5): 잡 설정의 클라이언트 생성에 `egress_proxy_from(environ)`을 넘긴다(`wiring/build.py`). `deploy-exposure.json`의 `egress`는 `release-gate`, `external:backup`이다.
+- 지표: `GET /metrics`(인증 없음, 저장소가 멈춰도 200)는 카운터 넷(`ops_feedback_{auth_rejected,ingest_accepted,ingest_duplicate,unavailable}_total`)을 낸다.
+- 사람 신원 헤더는 역할 `reviewer`의 읽기·검토 토큰(게이트웨이 토큰)에서만 쓴다(docs/adr/0033).

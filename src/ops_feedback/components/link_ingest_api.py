@@ -48,6 +48,9 @@ SHUTDOWN_FLUSH_SECONDS = 1.0   # 근거: 임의 보수값, 측정 안 함(ADR 00
 READYZ_CACHE_SECONDS = 1.5    # 근거: probe 상한 2초(FAULT_POLICY 5)보다 짧게 두어 장애 감지를 크게 늦추지 않으면서 반복 호출을 흡수하는 임의값, 측정 안 함(ADR 0008).    # 인증 없는 /readyz가 호출마다 DB 연결을 열지 못하게 결과를 짧게 공유한다(0이면 끈다)
 
 INGEST, READ, REVIEW = "ingest", "read:", "review:"      # 토큰 -> 역할 이름의 접두. 면마다 이름 공간을 나눠 설정의 역할 이름과 부딪치지 않게 한다
+# 게이트웨이 토큰(CONVENTIONS 6절): platform 공개 입구가 사람 요청을 넘길 때 붙이는 토큰 = deploy-exposure.json 의 upstream_token(ops-read-reviewer, ops-review-reviewer)이 가리키는
+# 토큰. 이 서비스의 설정에서는 역할 이름 reviewer 의 읽기·검토 토큰이다(tests/test_gateway_token_headers.py 가 deploy-exposure.json 과 일치를 본다).
+GATEWAY_ROLES = frozenset({READ + "reviewer", REVIEW + "reviewer"})
 
 
 class Server:
@@ -118,6 +121,13 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
                 raise BoundaryError("UNAVAILABLE", "내부 오류") from None
         return run
 
+    def acting_user(req: Request) -> Optional[str]:
+        """사람 신원 헤더는 게이트웨이 토큰이 붙은 요청에서만 쓴다. 그 밖의 토큰(수집·다른 읽기·검토 토큰)의 같은 헤더는 무시한다(CONVENTIONS 6절 신뢰 경계, 3.4.5)."""
+        user = req.user if req.role in GATEWAY_ROLES else None
+        if user is None and require_reviewer_identity:
+            raise BoundaryError("PERMISSION_DENIED", "사람 행위자(X-Openit-User)가 없다", {"http_status": 401})
+        return user
+
     def guarded_human(fn):
         return guarded(fn, human=True)
 
@@ -146,7 +156,7 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     def ready():
         code = check_ready()
         if code is not None:
-            return False, {"status": "not-ready", "code": code}
+            return False, {"status": "not_ready", "code": code}       # R5.1: 옛 표기 not-ready는 not_ready로 옮긴다(HealthStatus, 3.4.5부터 OpsFeedbackReadyz도 받는다)
         body = {"status": "ready", "log_store": service.log_kind(), "failure_store": service.failure_kind(),
                 "supported_runtime_contract_versions": service.supported_versions(), "counters": dict(counters)}
         warns = []
@@ -209,17 +219,19 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     @guarded_human
     def get_review_trace(req: Request) -> Response:
         # 원문 발화가 든 사본: 검토 역할 토큰만(읽기 토큰은 403). 읽을 때마다 서비스가 접근 기록을 남긴다. 신원 필수 설정이면 X-Openit-User가 있어야 한다(Route가 401로 거른다).
-        check("ReviewHeaders", {} if req.user is None else {"user": req.user})
+        user = acting_user(req)
+        check("ReviewHeaders", {} if user is None else {"user": user})
         if not service.review_enabled:
             raise BoundaryError("NOT_FOUND", "검토 면이 꺼져 있다")
-        return Response(200, service.get_review_trace(req.params["ref"], req.role[len(REVIEW):], req.user))
+        return Response(200, service.get_review_trace(req.params["ref"], req.role[len(REVIEW):], user))
 
     @guarded_human
     def review(req: Request) -> Response:
-        check("ReviewHeaders", {} if req.user is None else {"user": req.user})       # Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)
+        user = acting_user(req)
+        check("ReviewHeaders", {} if user is None else {"user": user})       # Id 형식([A-Za-z0-9][A-Za-z0-9._:-]*, 128자 이하)
         if not service.review_enabled:
             raise BoundaryError("NOT_FOUND", "검토 면이 꺼져 있다")
-        rec, created = service.review(req.params["case_id"], req.body, req.role[len(REVIEW):], req.user)
+        rec, created = service.review(req.params["case_id"], req.body, req.role[len(REVIEW):], user)
         return Response(201 if created else 200, rec)
 
     def roles(prefix: str) -> frozenset:
@@ -237,8 +249,20 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
     ]
     inner = App(routes, tokens, ready=ready)
 
+    def metrics_text() -> bytes:
+        """R10.11: Prometheus 텍스트 형식(exposition format 0.0.4). 프로세스 안의 누적값만 낸다: DB를 부르지 않으므로 저장소가 멈춘 동안에도 200이다."""
+        lines = []
+        for name, help_ in (("auth_rejected", "rejected requests (401/403)"), ("ingest_accepted", "traces accepted"),
+                            ("ingest_duplicate", "traces already received"), ("unavailable", "503 UNAVAILABLE responses")):
+            lines += [f"# HELP ops_feedback_{name}_total {help_}", f"# TYPE ops_feedback_{name}_total counter", f"ops_feedback_{name}_total {counters[name]}"]
+        return ("\n".join(lines) + "\n").encode()
+
     def app(environ, start_response):
         log.info("%s %s", environ.get("REQUEST_METHOD"), environ.get("PATH_INFO"))          # 요청 줄만(본문·쿼리는 남기지 않는다)
+        if environ.get("PATH_INFO") == "/metrics" and environ.get("REQUEST_METHOD") == "GET":
+            body = metrics_text()          # 인증을 보지 않는다(토큰이 있어도 무시, 401·403 없음): 접근 통제는 망이고 공개 입구로 닿지 않는다(R10.11, R6.2)
+            start_response("200 OK", [("Content-Type", "text/plain; version=0.0.4; charset=utf-8"), ("Content-Length", str(len(body)))])
+            return [body]
 
         def sr(status, headers, *a):
             code = int(status.split()[0])

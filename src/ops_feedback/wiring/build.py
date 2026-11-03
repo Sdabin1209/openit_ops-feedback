@@ -5,6 +5,7 @@ import importlib
 
 from boundary_contracts import read_secret
 
+from ..components.link_egress import egress_proxy
 from ..components.deidentifier import Deidentifier, DeidPolicy
 from ..components.failure_classifier import FailureClassifier
 from ..components.failure_detector import FailureDetector
@@ -12,14 +13,6 @@ from ..components.pseudonymizer import check_salt, pseudonymize as _pseudonymize
 from .clock import Clock, utc_now
 from .rollback_flow import RollbackPlanner
 from .storage import open_failure_store, open_log_store
-
-
-# RUNTIME R10.3: 시간 한도 사슬에 행이 없는 서비스 사이 호출은 계약 클라이언트 timeout 30초(시작값, 측정 안 함). 설정이 timeout을 주면 그 값을 쓴다.
-CLIENT_TIMEOUT_SECONDS = 30.0
-
-
-def _client_args(args: dict) -> dict:
-    return {"timeout": CLIENT_TIMEOUT_SECONDS, **args}
 
 
 def _resolve_args(args, env: dict, path: str = "args"):
@@ -66,8 +59,10 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     planner = None
     rb = cfg.get("rollback")
     rr = cfg.get("release_reader")
-    reader = _import(rr["factory"])(**_client_args(_resolve_args(rr.get("args") or {}, env, "release_reader.args"))) if rr else None
+    # 영역 밖(release-gate) 호출은 자기 영역 게이트웨이 출구로만 나간다: OPENIT_EGRESS_PROXY 하나만 꺼내 넘긴다(RUNTIME R1.8, CONVENTIONS 13절). 없으면 None(출구 없는 개발·시험 구성).
+    egress = egress_proxy(env)
+    reader = _import(rr["factory"])(**_resolve_args(rr.get("args") or {}, env, "release_reader.args"), egress_proxy=egress) if rr else None
     if rb and rr:
-        gate = _import(cfg["gate_service"]["factory"])(**_client_args(_resolve_args(cfg["gate_service"].get("args") or {}, env, "gate_service.args"))) if cfg.get("gate_service") else None
+        gate = _import(cfg["gate_service"]["factory"])(**_resolve_args(cfg["gate_service"].get("args") or {}, env, "gate_service.args"), egress_proxy=egress) if cfg.get("gate_service") else None
         planner = RollbackPlanner(store=store, log=log, release_reader=reader, gate=gate, policy=rb, clock=clock)
     return log, store, deid, pseudonymize, detector, classifier, planner, reader
