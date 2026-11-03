@@ -169,7 +169,7 @@ def test_explicit_forever_allowed_with_warning(tmp_path):
 @pytest.mark.parametrize("val", ["false", "no", "False", 0, None])
 def test_auto_submit_must_be_a_real_boolean(tmp_path, val):
     def m(c):
-        c["rollback"] = {"window_hours": 1, "min_turns": 1, "max_failure_rate": 0.1, "counted_review_statuses": ["PENDING"],
+        c["rollback"] = {"window_hours": 1, "min_turns": 1, "max_failure_rate": 0.1, "counted_review_statuses": ["CONFIRMED"],
                          "requested_by_role": "r", "auto_submit": val}
     with pytest.raises(ValueError):
         _write(tmp_path, m)
@@ -431,6 +431,17 @@ def test_review_pii_scan_gives_the_right_answer_on_hostile_inputs():
         v = mk(MAX_FIELD)[:MAX_FIELD]
         assert _timed(lambda x: q._decider._reject_pii(x, "expected"), v) in (None, "rejected")      # 숫자열은 전화·주민번호 모양이라 거부될 수 있다(둘 다 맞는 답)
         assert _timed(lambda x: q._decider._reject_pii(x, "expected"), v + " a@b.co") == "rejected"      # 끝에 이메일이 있으면 잡는다
+
+
+def test_review_email_scan_has_no_domain_length_blind_spot():
+    """L22: 예전에는 '@' 뒤 254자까지만 보아 첫 '.'이 254자 뒤에 있는 이메일 모양을 놓쳤다. 길이와 상관없이 정규식 `@[A-Za-z0-9.-]*\\.[A-Za-z]{2,}`와 같은 답을 낸다."""
+    from ops_feedback.components.review_decider import _has_email
+    assert _has_email("a@" + "b" * 300 + ".com")           # 254자 창 밖에 점이 있는 경우(예전에는 놓침)
+    assert _has_email("a@" + "b" * 249 + ".com")           # 도메인 253자(DNS 최대)
+    assert _has_email("x " * 5000 + "me@example.org" + " y" * 5000)
+    assert not _has_email("a@" + "b" * 300)                # 점·최상위 이름이 없다
+    assert not _has_email("a@" + "b" * 300 + ".c")         # 최상위 이름이 한 글자
+    assert not _has_email("@" + "b" * 300 + ".com")        # 앞에 지역 부분이 없다
 
 
 def test_review_surface_refuses_a_body_over_its_limit_without_reading_it():
@@ -702,3 +713,17 @@ def test_job_main_turns_secret_and_config_value_errors_into_exit_2(tmp_path, mon
         assert job.main(["--config", str(cfg)]) == 2
         err = capsys.readouterr().err
         assert "오류:" in err and "Traceback" not in err
+
+
+def test_admin_migrate_applies_even_when_environment_says_verify(request, monkeypatch):
+    """결함 회귀: 환경에 OPS_DB_SCHEMA=verify가 있어도 `admin migrate`는 apply로 실제 표를 만든다(예전에는 사본에만 apply를 넣고 pgbase가 os.environ을 읽어 적용 없이 migrated:true를 냈다)."""
+    from conftest import _pg_schema_url
+    import psycopg
+    log_url, fail_url = _pg_schema_url(request), _pg_schema_url(request)
+    monkeypatch.setenv("OPS_DB_SCHEMA", "verify")
+    monkeypatch.setenv("OPS_LOG_DATABASE_URL", log_url)
+    monkeypatch.setenv("OPS_FAILURE_DATABASE_URL", fail_url)
+    assert admin_cli.main(["migrate"]) == 0
+    for url, table in ((log_url, "raw_traces"), (fail_url, "cases")):
+        with psycopg.connect(url, autocommit=True) as c:
+            assert c.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 0          # 표가 있다

@@ -316,8 +316,8 @@ class FailureCaseStore:
         return cls(SqliteBackend(path))
 
     @classmethod
-    def postgres(cls, url: str) -> "FailureCaseStore":
-        return cls(PostgresFailureBackend(url))
+    def postgres(cls, url: str, environ=None) -> "FailureCaseStore":
+        return cls(PostgresFailureBackend(url, environ))
 
     def backend_kind(self) -> str:
         return getattr(self._b, "KIND", "sqlite" if isinstance(self._b, SqliteBackend) else "memory")

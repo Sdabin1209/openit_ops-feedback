@@ -9,6 +9,7 @@ import os
 import socket
 import threading
 import time
+from typing import Mapping, Optional
 
 from boundary_contracts.errors import BoundaryError
 
@@ -24,8 +25,8 @@ DEFAULTS = {"OPS_DB_CONNECT_TIMEOUT": 3.0,     # 접속 상한. libpq는 정수 
             "OPS_DB_DDL_TIMEOUT": 30.0}        # 시작 때 스키마 마이그레이션(다른 인스턴스의 yoyo 잠금을 기다릴 수 있다)
 
 
-def _setting(name: str) -> float:
-    raw = os.environ.get(name)
+def _setting(name: str, environ: Mapping[str, str]) -> float:
+    raw = environ.get(name)
     if raw is None or raw.strip() == "":
         return DEFAULTS[name]
     try:
@@ -77,15 +78,18 @@ class PgBase:
     CLOCK = staticmethod(time.monotonic)      # 시계와 타이머는 주입 자리다(U422, ADR 0027): 시험은 가짜로 바꿔 실제 시간을 쓰지 않는다
     TIMER = threading.Timer
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, environ: Optional[Mapping[str, str]] = None) -> None:
+        # 왜 환경을 인자로 받나: OPS_DB_* 설정을 전역 os.environ에서 몰래 읽으면 호출자가 넘긴 환경(admin migrate가 apply로 바꾼 것)이 무시된다(실제 결함이었다).
+        # 인자가 없으면 프로세스 환경을 쓴다(서버·잡의 진입점과 기존 시험).
+        environ = os.environ if environ is None else environ
         self._url = url                      # 어디에도 출력하지 않는다
         self._lock = threading.RLock()
-        self.connect_timeout = _setting("OPS_DB_CONNECT_TIMEOUT")
-        self.statement_timeout = _setting("OPS_DB_STATEMENT_TIMEOUT")
-        self.probe_timeout = _setting("OPS_DB_PROBE_TIMEOUT")
-        ddl_timeout = _setting("OPS_DB_DDL_TIMEOUT")
+        self.connect_timeout = _setting("OPS_DB_CONNECT_TIMEOUT", environ)
+        self.statement_timeout = _setting("OPS_DB_STATEMENT_TIMEOUT", environ)
+        self.probe_timeout = _setting("OPS_DB_PROBE_TIMEOUT", environ)
+        ddl_timeout = _setting("OPS_DB_DDL_TIMEOUT", environ)
         self._db = self._open()
-        mode = (os.environ.get("OPS_DB_SCHEMA") or "apply").strip()
+        mode = (environ.get("OPS_DB_SCHEMA") or "apply").strip()
         if mode not in ("apply", "verify"):
             raise BoundaryError("INVALID_RECORD", "OPS_DB_SCHEMA는 apply 또는 verify")
         if mode == "apply":

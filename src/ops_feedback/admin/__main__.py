@@ -24,6 +24,7 @@ from boundary_contracts import read_secret
 from boundary_contracts.errors import BoundaryError
 
 from ..components.pseudonymizer import check_salt
+from ..config import validate_server_env
 from ..wiring import admin_flow
 from ..wiring.storage import open_failure_store, open_log_store
 
@@ -55,6 +56,11 @@ def main(argv=None) -> int:
     sub.add_parser("migrate")
     a = ap.parse_args(argv)
     env = dict(os.environ)
+    try:
+        validate_server_env(env)        # 모르는 OPS_ 변수(오타)는 시작을 거부한다(OpsFeedbackServerEnv)
+    except ValueError as e:
+        print(f"오류: {e}", file=sys.stderr)
+        return 2
     try:
         if a.cmd == "migrate":
             env["OPS_DB_SCHEMA"] = "apply"

@@ -12,7 +12,7 @@ from boundary_contracts import validator
 from boundary_contracts.errors import BoundaryError
 from boundary_contracts.secrets import SecretError
 
-from ..config import load_config
+from ..config import load_config, validate_server_env
 from ..wiring.build import build_from_config
 from ..wiring.pipeline import run_once
 
@@ -28,6 +28,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--no-rollback", action="store_true")
     a = ap.parse_args(argv)
     try:
+        validate_server_env(os.environ)        # 모르는 OPS_ 변수(오타)는 시작을 거부한다(OpsFeedbackServerEnv, 서버·admin과 같다)
         cfg = load_config(a.config)
     except ValueError as e:
         # 설정 오류는 스택 트레이스 없이 이유만 내고 종료 코드 2(접속 실패 등과 같은 "실행 못 함" 코드)

@@ -35,8 +35,8 @@ class LogStore:
         return cls(RawLogStore.sqlite(path), clock=clock)
 
     @classmethod
-    def postgres(cls, url: str, *, clock: Clock = utc_now) -> "LogStore":
-        return cls(RawLogStore.postgres(url), clock=clock)
+    def postgres(cls, url: str, *, clock: Clock = utc_now, environ=None) -> "LogStore":
+        return cls(RawLogStore.postgres(url, environ), clock=clock)
 
     # --- I6 ---
     def send(self, envelope: dict) -> dict:

@@ -18,11 +18,11 @@ FAILURE_URL = "OPS_FAILURE_DATABASE_URL"
 
 def open_log_store(env: Mapping[str, str], sqlite_path: str, *, clock: Clock = utc_now) -> LogStore:
     url = read_secret(LOG_URL, environ=env)
-    return LogStore.postgres(url, clock=clock) if url else LogStore.sqlite(sqlite_path, clock=clock)
+    return LogStore.postgres(url, clock=clock, environ=env) if url else LogStore.sqlite(sqlite_path, clock=clock)
 
 
 def open_failure_store(env: Mapping[str, str], sqlite_path: Optional[str]) -> Optional[FailureCaseStore]:
     url = read_secret(FAILURE_URL, environ=env)
     if url:
-        return FailureCaseStore.postgres(url)
+        return FailureCaseStore.postgres(url, environ=env)
     return FailureCaseStore.sqlite(sqlite_path) if sqlite_path else None

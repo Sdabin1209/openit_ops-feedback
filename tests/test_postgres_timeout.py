@@ -1,6 +1,8 @@
 """PostgreSQL 시한·연결 끊김에 대한 이 영역의 책임(U421). statement_timeout이 실제로 자르는가, libpq 접속 시한, docker pause 같은 일은 PostgreSQL·psycopg의 동작이라 시험하지 않는다.
 여기서는 (1) 넘긴 값이 맞는가(연결 파라미터·설정 읽기) (2) 가짜 드라이버가 시간 초과·연결 끊김 오류를 즉시 던질 때 우리 코드가 맞게 처리하는가를 본다. 시계를 쓰지 않는다."""
 import psycopg
+import os
+
 import pytest
 from boundary_contracts.errors import BoundaryError
 
@@ -20,16 +22,16 @@ def test_connection_parameters_carry_statement_and_connect_timeouts_and_keep_sea
 def test_default_limits_and_env_override(monkeypatch):
     for k in pgbase.DEFAULTS:
         monkeypatch.delenv(k, raising=False)
-    assert {k: pgbase._setting(k) for k in pgbase.DEFAULTS} == pgbase.DEFAULTS
+    assert {k: pgbase._setting(k, os.environ) for k in pgbase.DEFAULTS} == pgbase.DEFAULTS
     monkeypatch.setenv("OPS_DB_STATEMENT_TIMEOUT", "7")
-    assert pgbase._setting("OPS_DB_STATEMENT_TIMEOUT") == 7.0
+    assert pgbase._setting("OPS_DB_STATEMENT_TIMEOUT", os.environ) == 7.0
 
 
 @pytest.mark.parametrize("bad", ["0", "-1", "abc", "3601"])
 def test_invalid_timeout_setting_is_rejected(monkeypatch, bad):
     monkeypatch.setenv("OPS_DB_STATEMENT_TIMEOUT", bad)
     with pytest.raises(BoundaryError):
-        pgbase._setting("OPS_DB_STATEMENT_TIMEOUT")
+        pgbase._setting("OPS_DB_STATEMENT_TIMEOUT", os.environ)
 
 
 # ---- (2) 가짜 드라이버가 즉시 오류를 던질 때 ----

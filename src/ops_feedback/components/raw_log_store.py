@@ -305,8 +305,8 @@ class RawLogStore:
         return cls(SqliteBackend(path))
 
     @classmethod
-    def postgres(cls, url: str) -> "RawLogStore":
-        return cls(PostgresRawBackend(url))
+    def postgres(cls, url: str, environ=None) -> "RawLogStore":
+        return cls(PostgresRawBackend(url, environ))
 
     def backend_kind(self) -> str:
         return getattr(self._backend, "KIND", "sqlite" if isinstance(self._backend, SqliteBackend) else "memory")
