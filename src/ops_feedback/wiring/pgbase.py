@@ -162,7 +162,9 @@ class PgBase:
             timer = self.TIMER(remain, _abort, args=(conn,))
             timer.daemon = True
             timer.start()
-            conn.execute("SELECT 1").fetchone()
+            # R3.10: 쓰기 불가(읽기 전용 전환, 디스크 가득 뒤 복구 모드 등)면 준비되지 않음이다. SELECT 1만으로는 읽기 전용 DB가 정상으로 보인다.
+            if conn.execute("SELECT current_setting('transaction_read_only')").fetchone()[0] != "off":
+                raise RuntimeError("read-only")
         except Exception as e:
             raise BoundaryError("UNAVAILABLE", f"{self.WHAT} 확인 실패: {type(e).__name__}") from None
         finally:

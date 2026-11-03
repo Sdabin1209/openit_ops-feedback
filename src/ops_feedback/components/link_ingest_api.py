@@ -26,6 +26,18 @@ from ..wiring import deadline as request_deadline_scope
 from ..wiring.validate import check
 
 log = logging.getLogger("ingest-api")
+
+
+def _log_unavailable(e: BaseException) -> None:
+    """R8.1: 503이면 예외 종류와 위치를 남긴다. 메시지·발화·비밀은 싣지 않는다(원인 예외의 클래스 이름과 가장 안쪽 프레임의 파일:줄만)."""
+    root = e
+    while root.__cause__ is not None or root.__context__ is not None:
+        root = root.__cause__ or root.__context__
+    tb = root.__traceback__
+    while tb is not None and tb.tb_next is not None:
+        tb = tb.tb_next
+    where = f"{tb.tb_frame.f_code.co_filename.rsplit('/', 1)[-1]}:{tb.tb_lineno}" if tb is not None else "?"
+    log.error("503 UNAVAILABLE 원인=%s 위치=%s", type(root).__name__, where)
 _READYZ = validator("OpsFeedbackReadyz")
 MAX_BODY = 8 * 1024 * 1024        # 수집 본문 상한: TurnTrace 봉투 하나. 임의 상한, 측정 안 함(ADR 0008)
 MAX_REVIEW_BODY = 1024 * 1024     # 검토 게시 본문: 검토자가 쓰는 짧은 JSON이라 수집(8 MiB)보다 작게 둔다. 임의 상한, 측정 안 함(ADR 0008)
@@ -97,7 +109,9 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
                     with request_deadline_scope.scope(request_deadline_scope.Deadline(clock, request_deadline)):
                         return fn(req)
                 return fn(req)
-            except BoundaryError:
+            except BoundaryError as e:
+                if e.code == "UNAVAILABLE":
+                    _log_unavailable(e)
                 raise
             except Exception:                    # 예상 밖 오류도 연결을 끊지 않고 503 본문으로 알린다
                 log.exception("처리 중 예외")

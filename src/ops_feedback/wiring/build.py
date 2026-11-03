@@ -14,6 +14,14 @@ from .rollback_flow import RollbackPlanner
 from .storage import open_failure_store, open_log_store
 
 
+# RUNTIME R10.3: 시간 한도 사슬에 행이 없는 서비스 사이 호출은 계약 클라이언트 timeout 30초(시작값, 측정 안 함). 설정이 timeout을 주면 그 값을 쓴다.
+CLIENT_TIMEOUT_SECONDS = 30.0
+
+
+def _client_args(args: dict) -> dict:
+    return {"timeout": CLIENT_TIMEOUT_SECONDS, **args}
+
+
 def _resolve_args(args, env: dict, path: str = "args"):
     """설정의 {secret: 이름} 또는 {env: 이름}을 read_secret(이름)으로 푼다(중첩 포함). 비밀 값을 설정 파일에 두지 않는다."""
     if isinstance(args, dict):
@@ -58,8 +66,8 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     planner = None
     rb = cfg.get("rollback")
     rr = cfg.get("release_reader")
-    reader = _import(rr["factory"])(**_resolve_args(rr.get("args") or {}, env, "release_reader.args")) if rr else None
+    reader = _import(rr["factory"])(**_client_args(_resolve_args(rr.get("args") or {}, env, "release_reader.args"))) if rr else None
     if rb and rr:
-        gate = _import(cfg["gate_service"]["factory"])(**_resolve_args(cfg["gate_service"].get("args") or {}, env, "gate_service.args")) if cfg.get("gate_service") else None
+        gate = _import(cfg["gate_service"]["factory"])(**_client_args(_resolve_args(cfg["gate_service"].get("args") or {}, env, "gate_service.args"))) if cfg.get("gate_service") else None
         planner = RollbackPlanner(store=store, log=log, release_reader=reader, gate=gate, policy=rb, clock=clock)
     return log, store, deid, pseudonymize, detector, classifier, planner, reader
