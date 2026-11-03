@@ -13,6 +13,8 @@ import pytest
 from boundary_contracts.clients import HttpReleaseReader
 from boundary_contracts.errors import BoundaryError
 
+from waiting import HANG_GUARD_SECONDS
+
 SRC = Path(__file__).resolve().parent.parent / "src" / "ops_feedback"
 
 
@@ -49,7 +51,7 @@ def test_sslmode_from_connection_string_is_kept():
 def test_https_call_trusts_private_root_via_ssl_cert_file(tmp_path, monkeypatch):
     d = tmp_path
     def sh(*a):
-        subprocess.run(a, cwd=d, check=True, capture_output=True, timeout=30)
+        subprocess.run(a, cwd=d, check=True, capture_output=True, timeout=HANG_GUARD_SECONDS)
     sh("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem", "-days", "1", "-subj", "/CN=test-root")
     sh("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", "srv.key", "-out", "srv.csr", "-subj", "/CN=localhost")
     (d / "ext.cnf").write_text("subjectAltName=DNS:localhost,IP:127.0.0.1\n")
