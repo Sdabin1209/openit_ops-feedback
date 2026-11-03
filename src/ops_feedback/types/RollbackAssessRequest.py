@@ -3,11 +3,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Literal
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from .CaseSummary import CaseSummary
+
+
+class Policy(TypedDict):
+    counted_review_statuses: NotRequired[list[Literal['CONFIRMED']]]
 
 
 class RollbackAssessRequest(TypedDict, closed=True):
@@ -15,4 +19,4 @@ class RollbackAssessRequest(TypedDict, closed=True):
     release_id: str
     total_turns: int
     cases: list[CaseSummary]
-    policy: dict[str, Any]
+    policy: Policy

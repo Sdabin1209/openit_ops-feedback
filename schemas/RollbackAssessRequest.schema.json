@@ -22,7 +22,15 @@
       }
     },
     "policy": {
-      "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/rollback"
+      "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/rollback",
+      "properties": {
+        "counted_review_statuses": {
+          "items": {
+            "const": "CONFIRMED"
+          }
+        }
+      },
+      "description": "롤백 기준(계약) + 영역 조건: 실패율에는 사람이 CONFIRMED로 검토한 사례만 센다. 자동 탐지만 거친 사례(PENDING)를 세면 수집 토큰만 가진 쪽이 위조 Trace로 롤백 요청을 만들 수 있다(L07, ADR 0029)."
     }
   },
   "required": [

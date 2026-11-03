@@ -68,12 +68,12 @@ scripts/smoke.sh                                                # 이미지 빌�
 
 
 확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
-- docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): 시험·smoke 결과는 docs/STATUS.md의 해당 날짜 기록과 아래 시험 현황을 본다(여기에 개수를 복사하지 않는다).
-- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 현재 시험 상태는 아래 시험 현황이 정본이다.
+- docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): 시험·smoke 결과는 docs/STATUS.md의 해당 날짜 기록을 본다(그 값은 그 시점의 이력이다. 현재 건수는 실행 명령으로 센다).
+- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 현재 시험 상태는 실행 명령으로 센다.
 - 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
 
 이 세션에서 직접 돌려 확인한 것 (PostgreSQL 대기 상한, FAULT_MATRIX P0-3 D1·D4; 변경 내용은 docs/CHANGELOG.md 0.11.2, 근거와 수치는 docs/boundary.md "DB 대기 상한"):
-- `pytest -q`: 건수는 5절 "시험 현황"에만 적는다.
+- `pytest -q`: 건수는 어느 문서에도 적지 않는다. `.venv/bin/python -m pytest -q`(PostgreSQL까지는 `make test-pg`)를 실행해 센다.
 - 이웃 장애·중복·중단 칸(FAULT_MATRIX D2·D3·D5·D6·A6)의 현재 동작은 docs/boundary.md "장애 칸별 현황"(실제 HTTP 가짜 상류로 시험, 실제 이웃 서비스와는 연결하지 않음).
 - DB를 `docker pause`로 얼렸을 때(기본 상한): `/readyz` 503까지 2.0초 후 복구하면 200, 수집 POST는 7.0초 안에 503 후 복구, 잡은 3.3초에 종료 코드 2.
 - `scripts/smoke.sh`: SMOKE OK(SQLite 구성, WSL 한 환경, 0.11.3 기준).
@@ -95,7 +95,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 | D-A | 원본 보관 기간 등(운영 도메인, 토큰 회전 포함) | 사용자 결정 |
 | D-E | 회귀 평가가 읽는 v2 TurnTrace 입력 키 이름 확정 | 다른 영역 의존(survey-service 확정 후) |
 
-시험 현황은 최신 커밋 메시지와 docs/STATUS.md를 본다(U400 구조 개편 뒤 값은 거기에 적는다. 여기에 개수를 복사하지 않는다). 두 번째 머신에서의 실행은 아직 하지 않았다.
+시험 건수는 문서에 적지 않고 실행 명령으로 센다(`.venv/bin/python -m pytest -q`, PostgreSQL 포함은 `make test-pg`). 두 번째 머신에서의 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
 
@@ -133,6 +133,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0026](docs/adr/0026-openit-link-for-link-components.md) | 받는 쪽 통신 컴포넌트는 openit_link 위에 쓴다 |
 | [0027](docs/adr/0027-inject-clock-and-wait.md) | 시계·타이머·대기를 인자로 주입한다(시험에서 실제 시간 0) |
 | [0028](docs/adr/0028-request-deadline.md) | 사람용 요청에 서버 쪽 요청 전체 마감 55.0초(D120, D125 개정) |
+| [0029](docs/adr/0029-rollback-evidence-confirmed-only.md) | 롤백 요청의 근거는 사람이 CONFIRMED로 검토한 사례만 센다(L07) |
 
 ## 7. 더 자세한 문서
 
@@ -146,5 +147,5 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | `docs/runbook.md` | 설치·실행, 환경 변수, 잡 설정 키, 비밀 NAME_FILE, 장애 대응 |
 | `docs/STATUS.md` | 한 일, 시험 결과, 남은 일 |
 | `docs/CHANGELOG.md` | 변경 이력 |
-| `docs/change-requests/` | 헤드에게 낸 변경 요청 CR-001~008 |
+| `docs/change-requests/` | 헤드에게 낸 변경 요청(파일 목록이 정본) |
 | `CLAUDE.md` | 이 영역 에이전트용 지침 |

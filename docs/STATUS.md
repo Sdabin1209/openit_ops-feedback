@@ -12,7 +12,7 @@
 
 ## 시험
 
-- `.venv/bin/python -m pytest -q`: 전부 통과(건수는 README 5절/시험 현황이 정본).
+- `.venv/bin/python -m pytest -q`: 전부 통과(건수는 문서에 적지 않고 실행 명령으로 센다).
 - 헤드 회신 후속(0.1.1) 반영 후 재실행 결과는 CHANGELOG 0.1.1과 최신 커밋 기준.
 - `scripts/smoke.sh`: `SMOKE OK`.
 

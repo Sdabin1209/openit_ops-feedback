@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "JobConfigChecks",
-  "description": "계약 OpsFeedbackJobConfig가 정하지 못한 설정 조건: (1) 키 이름이 token/secret/password/credential/api_key/authorization/private_key를 포함하면(이름이 _env로 끝나는 것 제외) 문자열 값을 직접 적을 수 없다({secret: NAME}/{env: NAME}만) (D84), (2) REASK_STREAK 규칙이 켜져 있으면 deid.keep_pause_reason이 true여야 한다(비식별이 pause_reason을 지우면 이 규칙은 조용히 아무것도 못 잡는다, ADR 0019).",
+  "description": "계약 OpsFeedbackJobConfig가 정하지 못한 설정 조건: (1) 키 이름이 token/secret/password/credential/api_key/authorization/private_key를 포함하면(이름이 _env로 끝나는 것 제외) 문자열 값을 직접 적을 수 없다({secret: NAME}/{env: NAME}만) (D84), (2) REASK_STREAK 규칙이 켜져 있으면 deid.keep_pause_reason이 true여야 한다(비식별이 pause_reason을 지우면 이 규칙은 조용히 아무것도 못 잡는다, ADR 0019). (3) rollback이 있으면 counted_review_statuses는 CONFIRMED만 허용한다: 사람이 확인한 사례만 롤백 요청의 근거가 된다(L07, ADR 0029).",
   "allOf": [
     {
       "$ref": "#/$defs/Walk"
@@ -63,6 +63,26 @@
             "properties": {
               "keep_pause_reason": {
                 "const": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "rollback"
+        ]
+      },
+      "then": {
+        "properties": {
+          "rollback": {
+            "properties": {
+              "counted_review_statuses": {
+                "items": {
+                  "const": "CONFIRMED"
+                }
               }
             }
           }

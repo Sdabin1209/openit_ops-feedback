@@ -15,7 +15,7 @@ from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts.clients import HttpGateService, HttpReleaseReader
 from boundary_contracts.errors import BoundaryError
 
-from conftest import envelope, make_trace, pii_trace
+from conftest import confirm_all, envelope, make_trace, pii_trace
 from fakes import FakeReleaseReader
 from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
 from ops_feedback.wiring.pipeline import run_once
@@ -23,7 +23,7 @@ from ops_feedback.wiring.rollback_flow import RollbackPlanner
 from test_conformance_failurestore import case as mk_case, TRACE
 
 NOW = "2026-10-15T00:00:00Z"
-POLICY = {"window_hours": 24, "min_turns": 4, "max_failure_rate": 0.2, "counted_review_statuses": ["PENDING", "CONFIRMED"],
+POLICY = {"window_hours": 24, "min_turns": 4, "max_failure_rate": 0.2, "counted_review_statuses": ["CONFIRMED"],
           "requested_by_role": "ops-feedback", "auto_submit": True}
 POINTER = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": "rel-0002", "pointer_version": 1,
            "activated_at": "2026-10-15T00:00:00Z", "cause": "ACTIVATE"}
@@ -102,11 +102,14 @@ def run(p, planner, cfg=None, **kw):
                     classifier=p["classifier"], clock=lambda: "2026-10-14T12:00:00Z", planner=planner, **kw)
 
 
-def seed(p, fails=3, oks=3):
+def seed(p, fails=3, oks=3, confirm=True):
     for i in range(fails):
         p["log"].send(envelope(pii_trace("s", f"f{i}"), release_id="rel-0002", sent_at=NOW))
     for i in range(oks):
         p["log"].send(envelope(make_trace("s", f"o{i}"), release_id="rel-0002", sent_at=NOW))
+    if confirm:
+        run(p, None, evaluate_rollback=False)          # 사례를 게시하고 사람이 확정한 상태로 만든다: 롤백 근거는 CONFIRMED만 센다(L07)
+        confirm_all(p["store"])
 
 
 def planner(p, upstream, reader=None):
@@ -176,7 +179,7 @@ def test_auto_submit_false_never_calls_gate(pipeline, upstream):
 @pytest.mark.parametrize("mode,code", [("drop", "UNAVAILABLE"), ("500", "UNAVAILABLE"), ("badjson", "UNAVAILABLE"),
                                        ("401", "PERMISSION_DENIED"), ("403", "PERMISSION_DENIED"), ("shape", "INTEGRITY_ERROR")])
 def test_release_read_fault_is_visible_and_does_not_lose_cases(pipeline, upstream, mode, code):
-    seed(pipeline)
+    seed(pipeline, confirm=False)          # 이 시험은 같은 실행 안에서 사례가 게시되는 것을 본다
     upstream.mode["/v1/active-pointer"] = mode
     pl = planner(pipeline, upstream, reader=HttpReleaseReader(upstream.url, "t", timeout=HANG_GUARD_SECONDS))      # 매달림 감시
     rep = run(pipeline, pl)
@@ -209,7 +212,7 @@ def test_release_read_down_for_question_set_is_tried_once_per_run(pipeline):
 
 @pytest.mark.parametrize("where", ["after_publish_before_mark", "before_publish"])
 def test_job_killed_midway_leaves_no_half_state(pipeline, where):
-    seed(pipeline, fails=2, oks=1)
+    seed(pipeline, fails=2, oks=1, confirm=False)          # 이 시험은 도중에 죽는 첫 게시를 본다
     store = pipeline["store"]
     orig = store.publish_case
     calls = {"n": 0}

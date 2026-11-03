@@ -3,7 +3,7 @@ import copy
 
 import pytest
 
-from conftest import base_config, envelope, make_trace
+from conftest import base_config, confirm_all, envelope, make_trace
 from test_detect import ext, log_entry
 from ops_feedback.components.deidentifier import DeidPolicy
 from tdeid import Deidentifier
@@ -115,10 +115,11 @@ def test_case_and_metrics_carry_reason(pipeline):
         pipeline["log"].send(envelope(t, release_id="rel-0002", sent_at=now))
     run_once(cfg=pipeline["cfg"], log=pipeline["log"], store=pipeline["store"], deid=pipeline["deid"], detector=pipeline["detector"], pseudonymize=pipeline["pseudonymize"],
              classifier=pipeline["classifier"], clock=lambda: "2026-10-14T12:00:00Z", evaluate_rollback=False)
+    confirm_all(pipeline["store"])          # 롤백 근거는 CONFIRMED만 센다(L07)
     items, _ = pipeline["store"].list_cases(source_release_id="rel-0002", cursor=None, limit=50)
     reasons = sorted(str(((c.get("ext") or {}).get("ops-feedback") or {}).get("pause_reason")) for c in items)
     assert reasons == ["None", "REASK_LIMIT", "REASK_LIMIT", "RISK"]
-    pol = {"window_hours": 24, "min_turns": 2, "max_failure_rate": 0.2, "counted_review_statuses": ["PENDING", "CONFIRMED"],
+    pol = {"window_hours": 24, "min_turns": 2, "max_failure_rate": 0.2, "counted_review_statuses": ["CONFIRMED"],
            "requested_by_role": "ops-feedback", "auto_submit": False}
     out = RollbackPlanner(store=pipeline["store"], log=pipeline["log"], release_reader=FakeReleaseReader(["rel-0002", "rel-0001"], "rel-0002"),
                           gate=None, policy=pol, clock=lambda: now).evaluate()

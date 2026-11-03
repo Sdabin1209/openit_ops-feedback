@@ -32,8 +32,8 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | `deid.pseudonymize_keys`, `mask_defs`, `drop_defs`, `mask_number_keys`, `mask_value_keys`, `residual_patterns` | 아니오 | 4절 처리 방식의 정책 값 |
 | `detection.detectors[]` | 예 | `{type: rule, rules: [{id, enabled, params}]}` 또는 `{factory: "모듈:함수", args}` |
 | `classification.default_failure_type` | 예 | 나머지(`rule_to_type`, `priority`)는 선택 |
-| `retention.raw_days` | 예 | 숫자 또는 null(삭제 안 함) |
-| `rollback.*` | 선택(있으면 모두 필수) | `window_hours, min_turns, max_failure_rate, counted_review_statuses, requested_by_role, auto_submit` |
+| `retention.raw_days` 등 | 아니오(생략하면 기본 30/180/365일, ADR 0007) | 일 수(0 초과) 또는 `"forever"`(무기한, 경고). `null`은 거부 |
+| `rollback.*` | 선택(있으면 모두 필수) | `window_hours, min_turns, max_failure_rate, counted_review_statuses, requested_by_role, auto_submit`. `counted_review_statuses`는 `[CONFIRMED]`만 허용한다: 롤백 요청의 근거는 사람이 확정한 사례뿐이다(ADR 0029) |
 | `release_reader`, `gate_service` | 선택 | `{factory: "모듈:함수", args: {...}}`. args 값 `{env: 이름}`은 환경 변수 값으로 바뀐다. `release_reader`가 있으면 사례에 `question_set`도 채운다 |
 
 ## 설정 (사용자 결정 사항 포함)
@@ -41,7 +41,7 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 `config/job.example.yaml`을 복사해 쓴다. 예시의 값은 사용자가 정한 기준이 아니다. 다음은 사용자가 정해야 한다.
 
 - `deid.*`: 남길 키, 정의별 처리, 잔존 패턴. 정하기 전에는 예시(자유 문자열 전부 마스킹)를 쓴다.
-- `retention.raw_days`: 숫자면 그보다 오래된 원본을 잡이 삭제한다. `null`이면 삭제하지 않는다.
+- `retention.*`: 일 수면 그보다 오래된 것을 잡이 삭제한다(원본은 처리가 끝난 것만). 무기한은 `"forever"`이고 `null`은 거부한다(계약 `OpsFeedbackJobConfig`). 생략하면 기본값을 쓴다(ADR 0007).
 - `classification`: 분류체계(O11, 대장 번호 없음).
 - `rollback.*`: 기준 수치.
 
@@ -85,8 +85,8 @@ docker run ... -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run
 ```
 OPS_INGEST_TOKEN_FILE=/run/secrets/ingest OPS_LOG_DB=/data/log.db python -m ops_feedback.api   # 값 직접 지정(OPS_INGEST_TOKEN=...)은 개발용
 # 컨테이너
-scripts/build_wheels.sh   # git archive v2.0.2 -> wheel (build/wheels)
-docker build -t ops-feedback-ingest --build-arg COMMIT=$(git rev-parse --short HEAD) .
+bash scripts/build-image.sh <BuildImageRequest JSON>   # 영역 빌드 진입점(ADR 0022): wheel을 만들고 이미지를 빌드해 BuildImageResult 한 줄을 낸다
+# 로컬 스모크는 scripts/smoke.sh가 같은 진입점으로 빌드한다. scripts/build_wheels.sh는 폐기 예정이라 쓰지 않는다
 docker run -p 8080:8080 -v ops-log:/data -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest ops-feedback-ingest
 ```
 

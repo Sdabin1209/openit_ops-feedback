@@ -57,7 +57,7 @@ retention:                              # D88/U4 최소 보존 잠정 기본값(
 #   window_hours: 24
 #   min_turns: 100
 #   max_failure_rate: 0.05
-#   counted_review_statuses: [PENDING, CONFIRMED]
+#   counted_review_statuses: [CONFIRMED]      # CONFIRMED만 허용(사람이 확정한 사례만 롤백 근거, ADR 0029)
 #   requested_by_role: ops-feedback
 #   auto_submit: false
 # release_reader:                       # I4 읽기. 클라이언트가 나오면(boundary-contracts v1.2.0) 아래처럼 HTTP로 고른다.

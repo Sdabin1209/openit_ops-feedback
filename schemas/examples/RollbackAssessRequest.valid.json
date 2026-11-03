@@ -15,7 +15,6 @@
     "min_turns": 100,
     "max_failure_rate": 0.05,
     "counted_review_statuses": [
-      "PENDING",
       "CONFIRMED"
     ],
     "requested_by_role": "ops",

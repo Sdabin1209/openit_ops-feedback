@@ -65,7 +65,14 @@ def test_job_config_contract_invalid_examples_rejected(p, tmp_path):
 
 @pytest.mark.parametrize("p", _examples("examples", "OpsFeedbackJobConfig"), ids=lambda p: p.name)
 def test_job_config_contract_valid_examples_accepted(p, tmp_path):
-    load_config(_write_cfg(tmp_path, json.loads(p.read_text())))
+    cfg = json.loads(p.read_text())
+    counted = (cfg.get("rollback") or {}).get("counted_review_statuses", ["CONFIRMED"])
+    if set(counted) != {"CONFIRMED"}:
+        # 계약 예시는 PENDING을 세어도 유효로 본다. 이 영역은 ADR 0029(L07)로 더 좁게 받는다: 계약을 고치지 않고 변경 요청 docs/change-requests/CR-012로 알렸다.
+        with pytest.raises(ValueError, match="JobConfigChecks"):
+            load_config(_write_cfg(tmp_path, cfg))
+        return
+    load_config(_write_cfg(tmp_path, cfg))
 
 
 # ---- OpsFeedbackServerEnv ----

@@ -129,3 +129,16 @@ def failure_store(request, tmp_path):
     if request.param == "sqlite":
         return FailureStoreImpl.sqlite(tmp_path / "f.db")
     return FailureStoreImpl.postgres(_pg_schema_url(request))
+
+
+def confirm_all(store) -> int:
+    """잡이 게시한 PENDING 사례를 모두 사람이 CONFIRMED로 검토한 것으로 만든다(롤백 근거는 CONFIRMED만 센다, L07)."""
+    from ops_feedback.wiring.review_flow import ReviewFlow
+    flow, n, cursor = ReviewFlow(store), 0, None
+    while True:
+        items, cursor = store.list_cases(review_status="PENDING", latest_only=True, cursor=cursor, limit=500)
+        for c in items:
+            flow.review(c["case_id"], "CONFIRMED", "reviewer")
+            n += 1
+        if cursor is None:
+            return n

@@ -140,7 +140,7 @@ class Detector(Protocol):
 
 `RollbackPlanner.evaluate()`(잡의 마지막 단계, 설정에 `rollback`과 `release_reader`가 있을 때만):
 1. I4 `get_active_pointer()`로 현재 릴리스 R. 없으면 아무것도 안 한다.
-2. 창(`window_hours`) 안의 R의 총 턴 수(로그 저장소의 릴리스별 건수, 원본 내용 아님)와 실패 사례 수(`counted_review_statuses`에 든 것)를 센다.
+2. 창(`window_hours`) 안의 R의 총 턴 수(로그 저장소의 릴리스별 건수, 원본 내용 아님)와 실패 사례 수(`counted_review_statuses`에 든 것. CONFIRMED만 허용: 위조 Trace가 사람 검토 없이 롤백 요청을 만들 수 없게, ADR 0029)를 센다.
 3. `min_turns` 미만이면 표본 부족, 실패율이 `max_failure_rate` 이하면 아무것도 안 한다.
 4. 초과하면 I4 `list_releases`(최신부터)에서 R 바로 앞 릴리스를 되돌릴 대상으로 고른다. 없으면 요청하지 않는다.
 5. 지표 스냅샷 `metric-<해시>`를 저장하고 `evidence_refs`에 넣는다(해석 방법은 CR-002). `request_id` = `rb-` + `(from, to, pointer_version)` 해시라서 같은 포인터 상태에서는 같은 요청이다(게이트의 멱등과 맞물림).
@@ -150,7 +150,7 @@ class Detector(Protocol):
 
 ## 10. 잡
 
-`ops-feedback-job --config <파일> [--limit N] [--reprocess] [--retry-deid-failed] [--no-rollback]`는 한 번 실행하고 JSON 보고(처리 수, 게시 수, 기존 수, 정상 수, 비식별 실패 수, 설정 변경으로 건너뜀, 원본 삭제 수, 롤백 평가)를 표준 출력에 낸다. 오류가 있으면 종료 코드 1. 주기는 외부 스케줄러(cron 등)가 정한다(D39). 보관 기간 `retention.raw_days`가 숫자면 그보다 오래된 원본을 삭제하고, `null`(미정)이면 지우지 않는다. 실패 사례·비식별 trace의 보관은 미정이다(사례는 불변 레코드이고 다른 영역이 참조한다. 삭제 정책이 필요하면 헤드와 정한다).
+`ops-feedback-job --config <파일> [--limit N] [--reprocess] [--retry-deid-failed] [--no-rollback]`는 한 번 실행하고 JSON 보고(처리 수, 게시 수, 기존 수, 정상 수, 비식별 실패 수, 설정 변경으로 건너뜀, 원본 삭제 수, 롤백 평가)를 표준 출력에 낸다. 오류가 있으면 종료 코드 1. 주기는 외부 스케줄러(cron 등)가 정한다(D39). 보관 기간 `retention.raw_days`가 숫자면 그보다 오래된 원본을 삭제하고, `"forever"`이면 지우지 않는다(`null`은 거부, 생략하면 기본 30일). 실패 사례·비식별 trace의 보관은 미정이다(사례는 불변 레코드이고 다른 영역이 참조한다. 삭제 정책이 필요하면 헤드와 정한다).
 
 ## 11. 외부 의존과 대역
 

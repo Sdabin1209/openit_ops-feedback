@@ -1,0 +1,37 @@
+{
+  "deid": {
+    "keep_pause_reason": true
+  },
+  "detection": {
+    "detectors": [
+      {
+        "type": "rule",
+        "rules": [
+          {
+            "id": "REASK_STREAK"
+          }
+        ]
+      }
+    ]
+  },
+  "release_reader": {
+    "factory": "a:b",
+    "args": {
+      "token": {
+        "secret": "T"
+      },
+      "base_url_env": "X"
+    }
+  },
+  "rollback": {
+    "window_hours": 24,
+    "min_turns": 100,
+    "max_failure_rate": 0.05,
+    "counted_review_statuses": [
+      "PENDING",
+      "CONFIRMED"
+    ],
+    "requested_by_role": "ops-feedback",
+    "auto_submit": false
+  }
+}
