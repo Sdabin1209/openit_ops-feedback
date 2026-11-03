@@ -46,10 +46,11 @@ class Conn:
             if type(self.fail_with) is psycopg.OperationalError:
                 self.broken = True            # 끊긴 연결은 broken으로 보인다
             raise self.fail_with
+        self.last = a[0] if a else ""
         return self
 
     def fetchone(self):
-        return (1,)
+        return ("off",) if "transaction_read_only" in getattr(self, "last", "") else (1,)
 
     def close(self):
         self.closed = True
