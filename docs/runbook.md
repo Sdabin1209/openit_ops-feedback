@@ -143,3 +143,9 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 ## 잡 선언 라벨 (io.openit.jobs)
 
 이미지 라벨 `io.openit.jobs`는 리포의 `deploy-jobs.json`이 정본이다. `scripts/build-image.sh`가 계약 `JobsDeclaration`으로 검증한 뒤(R7, 어기면 이미지를 만들지 않는다) 한 줄 JSON으로 단다. 선언한 명령·설정 경로·비밀 파일 이름이 코드와 맞는지는 `tests/test_jobs_declaration.py`가 본다. 잡 설정 파일 경로(`/etc/ops-feedback/job.yaml`)와 `needs`(`postgres`)는 이 영역의 제안 값이며 deploy가 아직 이 라벨을 읽지 않는다(deploy가 compose에 직접 적는다).
+
+## TLS와 바깥 호출 (U99)
+
+- 이 서비스는 TLS 서버가 아니다(deploy의 사이드카가 HTTPS를 끝낸다). 바깥 호출(release-gate I4/I5)의 주소는 잡 설정의 `base_url`이며 코드에 고정된 주소는 없다(`tests/test_tls_outbound.py`). https 주소를 쓴다.
+- 사설 루트는 표준 환경 변수 `SSL_CERT_FILE`로 믿는다(클라이언트는 `ssl` 기본 검증을 쓰고 검증을 끄는 코드가 없다). 임시 루트와 서버 인증서로 시험한다.
+- DB는 접속 문자열(비밀 파일)의 `sslmode`, `sslrootcert`를 그대로 libpq에 넘긴다(코드가 덮어쓰지 않는다). 예: `postgresql://user:pw@host/db?sslmode=verify-full&sslrootcert=/run/secrets/root.pem`.
