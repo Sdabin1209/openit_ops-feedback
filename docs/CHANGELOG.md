@@ -1,6 +1,6 @@
 # 변경 이력
 
-## 0.20.0 (제안, 계약 3.4.7 / link v0.4.13)
+## 0.20.0 (제안, 계약 3.4.8 / link v0.4.14)
 
 - 코드 단계 C2: R5.1 `/readyz` 503 본문 not_ready, R10.11 `/metrics`(인증 없음), R3.10 읽기 전용 DB는 준비 안 됨, R8.1 503 로그, R1.8 release-gate 호출에 `egress_proxy_from`, R10.1 백업 잡(ADR 0032), CONVENTIONS 6절 게이트웨이 토큰(ADR 0033), 잡마다 `timeout_seconds`, 노출 선언 `egress`. 이미지에 restic.
 

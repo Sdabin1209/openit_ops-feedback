@@ -153,7 +153,7 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 
 ## 백업과 영역 게이트웨이 출구 (코드 단계 C2, 계약 3.4.6)
 
-- 백업: `python -m ops_feedback.admin backup`(잡 `ops-feedback-backup`, 상한 1800초). 설정은 공통 이름 `OPENIT_BACKUP_URL`(https, restic REST), `OPENIT_BACKUP_CREDENTIALS_FILE`(`<사용자>:<암호>` 한 줄), `OPENIT_BACKUP_REPO_PASSWORD_FILE`. 영역 밖 길은 `OPENIT_EGRESS_PROXY`뿐이다. 근거·감수: docs/adr/0032. 복구: `admin migrate` 뒤 restic 에서 `log.copy`, `failure.copy`를 꺼내 psql 로 되돌린다(복구 시험은 하지 않았다).
+- 백업: `python -m ops_feedback.admin backup`(잡 `ops-feedback-backup`, 상한 1800초). 설정은 공통 이름 `OPENIT_BACKUP_URL`(https, restic REST), `OPENIT_BACKUP_CREDENTIALS_FILE`(`<사용자>:<암호>` 한 줄), `OPENIT_BACKUP_REPO_PASSWORD_FILE`. 영역 밖 길은 `OPENIT_EGRESS_PROXY`뿐이다. 근거·감수: docs/adr/0032. 백업은 스냅숏 하나(`ops-feedback.copy`, 파일 안에 `-- store: log`, `-- store: failure` 구획)이고 직후 `restic forget --keep-within <원본 보존 일 수>d --prune`으로 오래된 스냅숏을 지운다. 복구: 새 DB에 `admin migrate`(소유자 계정) -> `restic restore <snapshot> --target <디렉터리>` -> 구획별로 나눠 해당 DB에 `COPY 표 FROM STDIN` 블록을 실행(psql 또는 psycopg `copy`). 이 순서를 `tests/test_backup_restic.py`가 실제 restic·rest-server 로 시험한다(psql 대신 psycopg COPY 사용).
 - 이웃 호출(release-gate I4·I5): 잡 설정의 클라이언트 생성에 `egress_proxy_from(environ)`을 넘긴다(`wiring/build.py`). `deploy-exposure.json`의 `egress`는 `release-gate`, `external:backup`이다.
 - 지표: `GET /metrics`(인증 없음, 저장소가 멈춰도 200)는 카운터 넷(`ops_feedback_{auth_rejected,ingest_accepted,ingest_duplicate,unavailable}_total`)을 낸다.
 - 사람 신원 헤더는 역할 `reviewer`의 읽기·검토 토큰(게이트웨이 토큰)에서만 쓴다(docs/adr/0033).

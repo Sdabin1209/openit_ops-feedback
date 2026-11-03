@@ -61,7 +61,8 @@
         "OPENIT_BACKUP_REPO_PASSWORD_FILE"
       ],
       "env": [
-        "OPENIT_BACKUP_URL"
+        "OPENIT_BACKUP_URL",
+        "OPS_RAW_RETENTION_DAYS"
       ],
       "needs": [
         "postgres"

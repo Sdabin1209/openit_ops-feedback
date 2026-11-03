@@ -52,7 +52,7 @@ def test_exposure_declares_egress_to_the_neighbours_this_area_calls_only():
 
 def test_backup_job_is_declared_with_the_common_backup_names_and_a_timeout_matching_the_code():
     b = next(j for j in DECL["jobs"] if j["name"] == "ops-feedback-backup")
-    assert b["argv"] == ["python", "-m", "ops_feedback.admin", "backup"] and b["env"] == ["OPENIT_BACKUP_URL"]
+    assert b["argv"] == ["python", "-m", "ops_feedback.admin", "backup"] and b["env"] == ["OPENIT_BACKUP_URL", "OPS_RAW_RETENTION_DAYS"]
     assert {"OPENIT_BACKUP_CREDENTIALS_FILE", "OPENIT_BACKUP_REPO_PASSWORD_FILE"} <= set(b["secret_files"])
     from ops_feedback.wiring import pgbase
     assert b["timeout_seconds"] == pgbase.DUMP_STATEMENT_SECONDS      # 잡 상한과 덤프 문장 상한이 한 값(ADR 0032)

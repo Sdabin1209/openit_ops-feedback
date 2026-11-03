@@ -53,12 +53,14 @@ def test_backup_sends_dump_through_the_egress_proxy_without_leaking_secrets(requ
     out = backup_flow.run(_env(tmp_path, log_url, fail_url), restic=str(exe), clock=lambda: "2026-11-04T00:00:00Z")
     assert out["status"] == "ok" and out["snapshot_id"] == "snap1234" and out["bytes"] > 0 and out["error"] is None and not list(validator("BackupJobResult").iter_errors(out))
     calls = [json.loads(l) for l in log.read_text().splitlines()]
-    assert [c["argv"][0] for c in calls] == ["cat", "init", "backup"]                           # 저장소가 없으면 만든다, 스냅숏 하나
+    assert [c["argv"][0] for c in calls] == ["cat", "init", "backup", "forget"]               # 저장소가 없으면 만든다, 스냅숏 하나, 보존 정리
     for c in calls:
         assert c["env"]["HTTPS_PROXY"] == "http://127.0.0.1:3128"                              # 영역 게이트웨이 출구로만 나간다
         assert c["env"]["RESTIC_REPOSITORY"].startswith("rest:https://") and SECRET_PW not in " ".join(c["argv"])      # 자격은 argv 에 없다
     b = calls[2]
     assert b["argv"][:3] == ["backup", "--stdin", "--stdin-filename"] and b["argv"][3] == "ops-feedback.copy"
+    fg = calls[3]["argv"]
+    assert fg[:3] == ["forget", "--keep-within", "30d"] and "--prune" in fg           # 원본 기본 보존 30일(ADR 0007) 이하: 백업을 원본보다 오래 두지 않는다
     d = b["stdin"]
     assert "-- store: log" in d and "COPY raw_traces FROM STDIN;" in d and "s-bk" in d and "-- store: failure" in d and "COPY cases FROM STDIN;" in d      # 덤프 안에 실제 행이 있다
     assert d.rstrip().endswith("\\.")
@@ -124,3 +126,20 @@ def test_bad_backup_setting_is_exit_1(tmp_path, monkeypatch, capsys):
     assert admin_cli.main(["backup"]) == 1
     res = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert res["status"] == "failed" and res["error"]["code"] == "INVALID_RECORD" and res["error"]["retryable"] is False
+
+
+def test_backup_retention_follows_the_raw_retention_and_refuses_unbounded(request, tmp_path, fake_restic):
+    """백업 보존은 원본 보존 기간(OPS_RAW_RETENTION_DAYS) 이하다. 14일이면 14d, 소수는 내림, 무기한·0·숫자 아님은 거부(백업이 원본보다 오래 남지 않게)."""
+    exe, log = fake_restic
+    log_url = _pg_schema_url(request)
+    LogStore.postgres(log_url)._raw._backend.close()
+    env = _env(tmp_path, log_url, log_url)
+    del env["OPS_FAILURE_DATABASE_URL_FILE"]
+    backup_flow.run(env | {"OPS_RAW_RETENTION_DAYS": "14.9"}, restic=str(exe))
+    forget = [json.loads(l)["argv"] for l in log.read_text().splitlines() if json.loads(l)["argv"][0] == "forget"]
+    assert forget[0][2] == "14d"
+    assert backup_flow.keep_within_days({}) == 30             # 기본은 ADR 0007 의 원본 기본 보존 30일
+    for bad in ("forever", "0", "-3", "abc"):
+        with pytest.raises(BoundaryError) as e:
+            backup_flow.keep_within_days({"OPS_RAW_RETENTION_DAYS": bad})
+        assert e.value.code == "INVALID_RECORD"

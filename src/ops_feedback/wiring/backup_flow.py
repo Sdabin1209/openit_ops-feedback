@@ -22,6 +22,9 @@ from .clock import Clock, utc_now
 from .pgbase import DUMP_STATEMENT_SECONDS
 from .storage import FAILURE_URL, LOG_URL, open_failure_store, open_log_store
 
+# 백업 보존(데이터 최소화): 스냅숏에는 원본 로그가 들어 있으므로 원본의 보존 기간(OPS_RAW_RETENTION_DAYS, 없으면 ADR 0007 의 기본 raw_days)보다 오래 두지 않는다. ADR 0032.
+DEFAULT_RAW_RETENTION_DAYS = 30           # 출처: ADR 0007(원본 기본 30일). job_advisor.DEFAULT_DAYS["raw_days"]와 같은 값
+
 EXIT_OK, EXIT_RETRYABLE, EXIT_FAILED = 0, 75, 1      # BackupJobResult: EX_TEMPFAIL = 75
 
 
@@ -31,15 +34,28 @@ def _repository(url: str, credentials: str) -> str:
     user, sep, pw = credentials.strip().partition(":")
     if not sep or not user:
         raise BoundaryError("INVALID_RECORD", "OPENIT_BACKUP_CREDENTIALS_FILE 내용은 '<사용자>:<암호>' 한 줄이어야 한다")
-    p = urlsplit(url)
-    if p.scheme != "https":
-        raise BoundaryError("INVALID_RECORD", "OPENIT_BACKUP_URL 은 https 여야 한다")
+    p = urlsplit(url)           # 평문 http 는 tls_url 이 loopback 에서만 허용한다(R1.1): 그 밖의 http 는 위에서 ValueError
     return "rest:" + urlunsplit((p.scheme, f"{quote(user, safe='')}:{quote(pw, safe='')}@{p.netloc}", p.path, p.query, ""))
+
+
+def keep_within_days(env: Mapping[str, str]) -> int:
+    """restic forget --keep-within 에 줄 일 수. 원본 보존 기간 이하의 정수(소수는 내림: 더 짧게). 숫자가 아니거나 1 미만이면 거부한다('forever' 같은 무기한은 백업을 무기한 두는 것이라 받지 않는다)."""
+    raw = (env.get("OPS_RAW_RETENTION_DAYS") or "").strip()
+    if not raw:
+        return DEFAULT_RAW_RETENTION_DAYS
+    try:
+        days = int(float(raw))
+    except ValueError:
+        days = 0
+    if days < 1:
+        raise BoundaryError("INVALID_RECORD", "OPS_RAW_RETENTION_DAYS 는 1 이상의 일 수여야 한다(백업 보존 기간의 상한)")
+    return days
 
 
 def run(env: Mapping[str, str], *, restic: str = "restic", runner: Callable = subprocess.run, clock: Clock = utc_now) -> dict:
     """백업 한 번. 성공하면 BackupJobResult(status ok), 실패는 BoundaryError. 실패 메시지에 비밀·접속 문자열이 없다."""
     started = clock()
+    days = keep_within_days(env)
     url = env.get("OPENIT_BACKUP_URL")
     cred = read_secret("OPENIT_BACKUP_CREDENTIALS", environ=env)
     if not url or not cred or not env.get("OPENIT_BACKUP_REPO_PASSWORD_FILE"):
@@ -78,6 +94,9 @@ def run(env: Mapping[str, str], *, restic: str = "restic", runner: Callable = su
         r = call("backup", "--stdin", "--stdin-filename", "ops-feedback.copy", "--tag", "ops-feedback", "--host", "ops-feedback", "--json", stdin=f)
     if r.returncode != 0:
         raise BoundaryError("UNAVAILABLE", "백업 저장소로 보내지 못했다")
+    # 보존: 원본 보존 기간보다 오래된 스냅숏을 지운다(--prune 으로 실제 공간도 비운다). 스냅숏이 이미 만들어졌으므로 실패하면 결과는 failed(재시도 가능)다.
+    if call("forget", "--keep-within", f"{days}d", "--tag", "ops-feedback", "--host", "ops-feedback", "--prune").returncode != 0:
+        raise BoundaryError("UNAVAILABLE", "백업 보존 정리(forget)에 실패했다")
     snapshot_id = None
     for line in (r.stdout or b"").decode("utf-8", "replace").splitlines():
         try:

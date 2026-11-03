@@ -29,7 +29,9 @@ def test_server_refuses_to_start_with_apply(monkeypatch, tmp_path):
     monkeypatch.setenv("OPS_INGEST_TOKEN", "tok")
     monkeypatch.setenv("OPS_LOG_DB", str(tmp_path / "l.db"))
     monkeypatch.setenv("OPS_DB_SCHEMA", "apply")
-    assert api_main.main() == 2          # 저장소를 열기 전에 거부한다(서버를 띄우지 않고 끝난다)
+    started = []
+    monkeypatch.setattr(api_main, "make_server", lambda *a, **k: started.append(1) or (_ for _ in ()).throw(RuntimeError("서버가 시작되면 안 된다")))
+    assert api_main.main() == 2 and not started          # 저장소를 열기 전에 거부한다(서버를 띄우지 않고 끝난다)
 
 
 def test_job_refuses_to_start_with_apply(monkeypatch, capsys, tmp_path):

@@ -61,30 +61,7 @@ scripts/smoke.sh                                                # 이미지 빌�
 
 이 문서를 쓰는 세션에서 실제로 돌린 것: `.venv/bin/python -m pytest --collect-only -q`(195건 수집, 이후 시험이 늘었다), `.venv/bin/python -m ops_feedback.job --help`(옵션 목록 출력). 돌리지 않은 것: pytest 실행 전체, `scripts/smoke.sh`, 이미지 빌드, ingest-api 기동, 잡 실행, `pip install`.
 
-## 4. 현재 상태
-
-타입 생성(손으로 고치지 않는다): `.venv/bin/pip install -r requirements-dev.lock && .venv/bin/python scripts/gen_types.py`(datamodel-code-generator 0.87.0, 출력 TypedDict). 스키마를 바꾸면 다시 생성한다. `--check`는 파일과 같은지만 본다(`tests/test_structure.py`가 부른다).
-구조 검사: `tests/test_structure.py`, 헤드 도구 `head/scripts/structure-check.py ops-feedback`(DESIGN.md 6절).
-
-
-확인된 것 (근거 문서에 적힌 것이며 이 세션에서 다시 돌리지 않았다):
-- docs/STATUS.md 마지막 기록(오래된 값, 현재 실측은 아래): 시험·smoke 결과는 docs/STATUS.md의 해당 날짜 기록을 본다(그 값은 그 시점의 이력이다. 현재 건수는 실행 명령으로 센다).
-- docs/CHANGELOG.md 최신은 0.11.0(PostgreSQL 운영 저장소 추가). 현재 시험 상태는 실행 명령으로 센다.
-- 구현됨: I6/I7 PostgreSQL·SQLite·메모리 구현과 같은 적합성 시험, 비식별, 규칙 탐지, 분류, 검토 게시 API, 롤백 요청 생성, 주기 잡(docs/STATUS.md, docs/boundary.md).
-
-이 세션에서 직접 돌려 확인한 것 (PostgreSQL 대기 상한, FAULT_MATRIX P0-3 D1·D4; 변경 내용은 docs/CHANGELOG.md 0.11.2, 근거와 수치는 docs/boundary.md "DB 대기 상한"):
-- `pytest -q`: 건수는 어느 문서에도 적지 않는다. `.venv/bin/python -m pytest -q`(PostgreSQL까지는 `make test-pg`)를 실행해 센다.
-- 이웃 장애·중복·중단 칸(FAULT_MATRIX D2·D3·D5·D6·A6)의 현재 동작은 docs/boundary.md "장애 칸별 현황"(실제 HTTP 가짜 상류로 시험, 실제 이웃 서비스와는 연결하지 않음).
-- DB를 `docker pause`로 얼렸을 때(기본 상한): `/readyz` 503까지 2.0초 후 복구하면 200, 수집 POST는 7.0초 안에 503 후 복구, 잡은 3.3초에 종료 코드 2.
-- `scripts/smoke.sh`: SMOKE OK(SQLite 구성, WSL 한 환경, 0.11.3 기준).
-
-확인하지 못한 것:
-- 컨테이너 조합(deploy)에서의 재측정: deploy E2E 5p에서 헤드가 한다.
-- 수집 토큰 불일치(A6 F7)는 서버 로그 경고만 추가했다. `/readyz`에 건수 신호는 없다.
-- v2 TurnTrace 전체 키에 대한 규칙 동작(STATUS: 당시 v2 trace 키를 읽을 수 없었다고 기록. 이후 0.9.0에서 따라갔다는 기록은 있으나 이 세션에서 시험을 돌리지 않았다).
-- 두 번째 깨끗한 환경에서의 시험·스모크. I4/I5 실제 SDK와의 연결. CI 이미지 게시와 digest 제출(D24).
-
-## 5. 이 영역의 열린 항목
+## 4. 이 영역의 열린 항목
 
 출처: `head/docs/OPEN_GAPS.md`(읽기 전용으로 읽음). 이 영역 이름이 직접 적힌 것만 골랐다.
 
@@ -98,6 +75,22 @@ scripts/smoke.sh                                                # 이미지 빌�
 시험 건수는 문서에 적지 않고 실행 명령으로 센다(`.venv/bin/python -m pytest -q`, PostgreSQL 포함은 `make test-pg`). 두 번째 머신에서의 실행은 아직 하지 않았다.
 
 GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runbook.md)에는 위 외에 비식별 기준, 분류체계 O11, 허용 중단 시간 O16, 롤백 기준 수치가 사용자 결정 대기로 적혀 있으나, OPEN_GAPS에는 이 ID로 올라 있지 않다(미확인). 영역 문서에서 비식별 기준은 이미 "O 번호 없음"으로 적혀 있고, O11·O16도 대장 번호 없음이다(O11·O16이라는 이름의 출처는 확인하지 못했다).
+
+## 5. 시험 상태 (코드 단계 C2, 2026-11-04)
+
+이 절이 이 영역 시험 상태의 정본이다(건수는 실행 명령으로 센다, 다른 문서에 복사하지 않는다). 고정: 계약 v3.4.8, openit-link v0.4.14, 문진 스키마 survey-schema-v4.1.1(`requirements.txt`). 로컬 태그는 `GIT_CONFIG_GLOBAL=head/shared/gitconfig-local-mirrors`로 받았다.
+
+실제로 돌린 것(이 환경 한 곳, WSL2):
+- `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너 위 전체): rc=0, 894 passed, 1 skipped(통과 수는 실행 시점 값이다).
+- `scripts/smoke.sh`(이미지 빌드, `/healthz`, 수집, 잡 1회, restic 포함 이미지): rc=0 `SMOKE OK`.
+- 실제 restic과 표준 restic rest-server 컨테이너로 백업 -> 스냅숏 -> 복구 -> 복구한 DB의 행 확인: `tests/test_backup_restic.py` 통과(ADR 0032).
+- 이번에 넣거나 바꾼 시험은 시험마다 변이 확인을 했다(일부러 어기면 실패하는지): 변이 41건(시험당 1~2개) 가운데 처음 생존한 5건(읽기 전용 DB, forget 상한, 보존 기본값, 두 저장소 덤프, 앱 계정 verify)은 시험을 고쳐 모두 실패함을 확인했다. 변이 도구는 리포 밖에서 돌렸고 결과 표는 커밋 메시지에 있다.
+
+돌리지 않은 것·알려진 한계:
+- 두 번째 깨끗한 환경에서의 시험·스모크.
+- 컨테이너 조합(deploy)에서의 재측정과 platform 백업 저장소(실제 platform 구성)와의 연결: 헤드·deploy 몫.
+- 타입 생성(손으로 고치지 않는다): `.venv/bin/pip install -r requirements-dev.lock && .venv/bin/python scripts/gen_types.py`. 구조 검사: `tests/test_structure.py`, 헤드 도구 `head/scripts/structure-check.py ops-feedback`.
+- 이웃 장애·중복·중단 칸의 현재 동작: docs/boundary.md "장애 칸별 현황"(실제 HTTP 가짜 상류로 시험, 실제 이웃 서비스와는 연결하지 않음). v2 TurnTrace 전체 키에 대한 규칙 동작은 이 세션에서 다시 확인하지 않았다.
 
 ## 6. 설계 결정 기록 (ADR, D89)
 
