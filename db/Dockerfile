@@ -1,6 +1,8 @@
 # ops-feedback-db: 이 영역의 PostgreSQL(D126: DB 는 데이터 주인 영역의 컴포넌트). 공식 postgres 이미지 위에 계정·권한·접속 규칙·TLS 설정을 얹는다(ADR 0035).
 # 입력은 계약 AreaDatabaseEnv(POSTGRES_PASSWORD_FILE, DB_ACCOUNT_SECRETS_DIR, DB_TLS_DIR)뿐이다. 이미지에 비밀 값이 없다.
-FROM postgres:16
+# 기반 이미지는 digest 로 고정한다(재현 가능한 빌드). 값은 2026-11-05 이 PC 에서 postgres:16 의 RepoDigest, 이 이미지로 DB 이미지 시험이 통과했다. 올릴 때는 이 한 줄만 바꾸고 시험을 다시 돌린다(선언의 major 16 도 함께 본다).
+ARG POSTGRES_IMAGE=postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
+FROM ${POSTGRES_IMAGE}
 ARG COMMIT=n/a
 ARG CONTRACTS_VERSION=n/a
 ARG DATABASE_DECLARATION

@@ -1,5 +1,7 @@
 # ingest-api 이미지. 설정은 환경 변수로만 받고 비밀 값은 넣지 않는다. 로그는 표준 출력. 비root로 실행.
-FROM python:3.12-slim AS build
+# 기반 이미지는 digest 로 고정한다(재현 가능한 빌드: 태그는 날마다 다른 이미지를 가리킬 수 있다). 값은 2026-11-05 이 PC 에서 python:3.12-slim 의 RepoDigest, 이 이미지로 시험·스모크가 통과했다. 올릴 때는 이 한 줄만 바꾸고 시험·스모크를 다시 돌린다.
+# (ARG 로 두지 않는 이유: Dockerfile ARG 이름은 계약 OpsFeedbackServerEnv.build_args 가 정한 넷뿐이다. 두 FROM 줄이 같은 값이어야 하고 시험이 본다.)
+FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159 AS build
 WORKDIR /src
 COPY build/wheels /wheels
 COPY pyproject.toml requirements.lock /src/
@@ -8,7 +10,7 @@ COPY schemas /src/schemas
 RUN pip install --no-cache-dir --prefix=/install -r requirements.lock \
  && pip install --no-cache-dir --prefix=/install --no-deps /wheels/*.whl /src
 
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159
 # 값이 없다는 표기는 n/a 하나다(계약 ImageLabels). COMMIT·CONTRACTS_VERSION·SURVEY_SCHEMA_VERSION은 빌드가 실제 값을 넘기며, 안 넘기면 게시 검사가 거부한다.
 ARG COMMIT=n/a
 ARG CONTRACTS_VERSION=n/a

@@ -282,3 +282,15 @@ def test_healthcheck_is_healthy_with_declared_accounts_and_unhealthy_when_broken
     finally:
         ev.p.kill()
         docker("rm", "-fv", name, check=False)
+
+
+def test_base_images_are_pinned_by_digest_and_the_same_postgres_digest_is_used_everywhere():
+    """재현 가능한 빌드·시험: 기반 이미지는 태그만이 아니라 digest 로 고정한다. DB 이미지·시험용 PostgreSQL 스크립트가 같은 값을 쓴다."""
+    import re
+    dig = re.compile(r"sha256:[0-9a-f]{64}")
+    pg_docker = re.search(r"^ARG POSTGRES_IMAGE=(\S+)", (ROOT / "db" / "Dockerfile").read_text("utf-8"), re.M).group(1)
+    pg_script = re.search(r"^PG_IMAGE=(\S+)", (ROOT / "scripts" / "dev-postgres.sh").read_text("utf-8"), re.M).group(1)
+    assert dig.search(pg_docker) and pg_docker == pg_script
+    app = (ROOT / "Dockerfile").read_text("utf-8")
+    froms = re.findall(r"^FROM (\S+)", app, re.M)
+    assert len(froms) == 2 and froms[0] == froms[1] and froms[0].startswith("python:3.12-slim@") and dig.search(froms[0])      # 두 단계가 같은 digest

@@ -8,10 +8,12 @@ cd "$(dirname "$0")/.."
 DOCKER=${DOCKER:-docker}
 PY=${PYTHON:-.venv/bin/python}
 if ! $DOCKER info >/dev/null 2>&1; then echo "오류: $DOCKER 데몬에 연결할 수 없다" >&2; exit 2; fi
+# 시험용 PostgreSQL 이미지는 digest 로 고정한다(재현 가능한 시험). 값은 2026-11-05 이 PC 의 postgres:16 RepoDigest. db/Dockerfile 의 POSTGRES_IMAGE 와 같은 값이다(시험이 일치를 본다).
+PG_IMAGE=postgres:16@sha256:1beaa3084eee2676f20a9cd9928f0bf2c5bf674f8e49f81017912183d377c61c
 NAME=ops-feedback-devpg-$$
 PW=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')     # 일회용 비밀번호(출력하지 않는다)
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true' EXIT
-$DOCKER run -d --name $NAME -e POSTGRES_USER=opsu -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=opsdb -p 127.0.0.1::5432 postgres:16 >/dev/null
+$DOCKER run -d --name $NAME -e POSTGRES_USER=opsu -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=opsdb -p 127.0.0.1::5432 $PG_IMAGE >/dev/null
 for i in $(seq 1 40); do $DOCKER exec $NAME pg_isready -U opsu -d opsdb >/dev/null 2>&1 && break; sleep 1; done
 $DOCKER exec $NAME pg_isready -U opsu -d opsdb >/dev/null 2>&1 || { echo "오류: PostgreSQL이 뜨지 않았다" >&2; exit 2; }
 sleep 2     # 초기화 재시작이 끝나기를 기다린다
