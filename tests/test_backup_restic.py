@@ -21,6 +21,10 @@ from ops_feedback.wiring.log_store import LogStore
 from waiting import HANG_GUARD_SECONDS, Proc
 
 USER, PW = "backupuser", "pw-restic-canary-5"
+# 시험에 쓰는 이미지는 digest 로 고정한다(재현 가능한 시험: 태그 :latest 는 날마다 다른 이미지를 가리킬 수 있다). 값은 2026-11-04 에 `docker pull restic/rest-server:latest`,
+# `restic/restic:latest` 로 받아 이 시험이 통과한 이미지의 RepoDigest 다. 올릴 때는 새 digest 로 이 두 줄만 바꾸고 시험을 다시 돌린다.
+REST_SERVER_IMAGE = "restic/rest-server@sha256:d2aff06f47eb38637dff580c3e6bce4af98f386c396a25d32eb6727ec96214a5"
+RESTIC_IMAGE = "restic/restic@sha256:9940e6c7421ab3a21ee9fdc4e91596d04c792b600d31b102696c75cbf3ac4481"
 
 
 def _docker(*a, check=True):
@@ -33,7 +37,7 @@ def restic_bin(tmp_path_factory):
         pytest.skip("docker 없음")
     d = tmp_path_factory.mktemp("restic")
     name = f"ops-feedback-restic-extract-{uuid.uuid4().hex[:8]}"
-    _docker("create", "--name", name, "restic/restic:latest")
+    _docker("create", "--name", name, RESTIC_IMAGE)
     try:
         _docker("cp", f"{name}:/usr/bin/restic", str(d / "restic"))
     finally:
@@ -50,7 +54,7 @@ def rest_server(tmp_path):
     (data / ".htpasswd").write_text(f"{USER}:{{SHA}}{base64.b64encode(hashlib.sha1(PW.encode()).digest()).decode()}\n")      # rest-server 의 htpasswd 인증
     (data / ".htpasswd").chmod(0o644)
     name = f"ops-feedback-restsrv-{uuid.uuid4().hex[:8]}"
-    _docker("run", "-d", "--name", name, "-p", "127.0.0.1::8000", "-v", f"{data}:/data", "--user", f"{os.getuid()}:{os.getgid()}", "--entrypoint", "rest-server", "restic/rest-server:latest", "--path", "/data")
+    _docker("run", "-d", "--name", name, "-p", "127.0.0.1::8000", "-v", f"{data}:/data", "--user", f"{os.getuid()}:{os.getgid()}", "--entrypoint", "rest-server", REST_SERVER_IMAGE, "--path", "/data")
     logs = Proc(["docker", "logs", "-f", name], dict(os.environ))
     try:
         logs.wait_for("Authentication enabled")                # 서버가 인증을 켜고 기동했다는 사건
@@ -62,7 +66,7 @@ def rest_server(tmp_path):
     # 컨테이너는 현재 사용자로 돌므로 저장소 아래 모든 파일의 소유자도 현재 사용자다. root 소유 파일이 남으면 pytest 가 임시 폴더를 지우지 못하고 /tmp 에 쌓인다.
     foreign = [str(p) for p in [data, *data.rglob("*")] if p.lstat().st_uid != os.getuid()]
     if foreign:
-        _docker("run", "--rm", "-v", f"{data}:/d", "--entrypoint", "sh", "restic/rest-server:latest", "-c", "chown -R %d:%d /d" % (os.getuid(), os.getgid()), check=False)     # 남기지 않는다(이 시험이 만든 폴더만)
+        _docker("run", "--rm", "-v", f"{data}:/d", "--entrypoint", "sh", REST_SERVER_IMAGE, "-c", "chown -R %d:%d /d" % (os.getuid(), os.getgid()), check=False)     # 남기지 않는다(이 시험이 만든 폴더만)
     assert not foreign, f"root 소유 파일이 남았다: {len(foreign)}개"
 
 
