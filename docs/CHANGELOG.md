@@ -1,6 +1,6 @@
 # 변경 이력
 
-## 0.20.0 (제안, 계약 3.4.13 / link v0.4.19)
+## 0.20.0 (제안, 계약 3.4.14 / link v0.4.20)
 
 - 영역 DB 이미지 ops-feedback-db(variant db, D126, ADR 0035): 계정 4개(소유자·dml 각 2), PUBLIC CONNECT 회수, trust 없음, TLS 필수, 인증서 갱신 재읽기.
 - 코드 단계 C2: R5.1 `/readyz` 503 본문 not_ready, R10.11 `/metrics`(인증 없음), R3.10 읽기 전용 DB는 준비 안 됨, R8.1 503 로그, R1.8 release-gate 호출에 `egress_proxy_from`, R10.1 백업 잡(ADR 0032), CONVENTIONS 6절 게이트웨이 토큰(ADR 0033), 잡마다 `timeout_seconds`, 노출 선언 `egress`. 이미지에 restic.
