@@ -9,6 +9,8 @@
       처리가 끝난 원본의 봉투 내용을 지운다(중복 판별 키·해시·시각·릴리스는 남긴다).
   python -m ops_feedback.admin backup
       PostgreSQL 두 저장소를 논리 덤프 한 파일로 꺼내 restic 으로 platform 백업 저장소에 보낸다. 결과는 BackupJobResult, 종료 코드 0·75·1 (RUNTIME R10.1, ADR 0032). 설정: OPENIT_BACKUP_URL, OPENIT_BACKUP_CREDENTIALS_FILE, OPENIT_BACKUP_REPO_PASSWORD_FILE, 출구 OPENIT_EGRESS_PROXY.
+  python -m ops_feedback.admin restore [--snapshot ID|latest]
+      백업 스냅숏을 새·빈 PostgreSQL(admin migrate 로 스키마만 만든 DB)에 되돌린다. 비어 있지 않으면 거부. 결과·종료 코드는 backup 과 같다(BackupJobResult, 0·75·1).
   python -m ops_feedback.admin migrate
       스키마를 만든다. 서버·잡은 OPS_DB_SCHEMA=verify만 허용하므로 스키마는 이 명령(소유자 계정)으로만 만든다(ADR 0031).
 
@@ -58,6 +60,8 @@ def main(argv=None) -> int:
     m.add_argument("--dry-run", action="store_true")
     sub.add_parser("migrate")
     sub.add_parser("backup")
+    rs = sub.add_parser("restore")
+    rs.add_argument("--snapshot", default="latest", help="스냅숏 ID 또는 latest")
     a = ap.parse_args(argv)
     env = dict(os.environ)
     try:
@@ -73,6 +77,16 @@ def main(argv=None) -> int:
             try:
                 res = backup_flow.run(env)
             except (BoundaryError, SecretError, ValueError) as e:       # 실패도 같은 계약 모양(BackupJobResult)으로 마지막 줄에 낸다
+                res = backup_flow.failed(e, started)
+            print(json.dumps(res, sort_keys=True, ensure_ascii=False))
+            return backup_flow.exit_code(res)
+        if a.cmd == "restore":
+            from ..wiring import backup_flow
+            from ..wiring.clock import utc_now
+            started = utc_now()
+            try:
+                res = backup_flow.restore(env, a.snapshot)
+            except (BoundaryError, SecretError, ValueError) as e:
                 res = backup_flow.failed(e, started)
             print(json.dumps(res, sort_keys=True, ensure_ascii=False))
             return backup_flow.exit_code(res)

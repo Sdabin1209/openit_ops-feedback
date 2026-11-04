@@ -81,9 +81,9 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 이 절이 이 영역 시험 상태의 정본이다(건수는 실행 명령으로 센다, 다른 문서에 복사하지 않는다). 고정: 계약 v3.4.8, openit-link v0.4.14, 문진 스키마 survey-schema-v4.1.1(`requirements.txt`). 로컬 태그는 `GIT_CONFIG_GLOBAL=head/shared/gitconfig-local-mirrors`로 받았다.
 
 실제로 돌린 것(이 환경 한 곳, WSL2):
-- `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너 위 전체): rc=0, 894 passed, 1 skipped(통과 수는 실행 시점 값이다).
+- `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너 위 전체): rc=0, 건너뜀 0(통과 수는 실행 시점 값이다, 건수는 실행 명령으로 센다).
 - `scripts/smoke.sh`(이미지 빌드, `/healthz`, 수집, 잡 1회, restic 포함 이미지): rc=0 `SMOKE OK`.
-- 실제 restic과 표준 restic rest-server 컨테이너로 백업 -> 스냅숏 -> 복구 -> 복구한 DB의 행 확인: `tests/test_backup_restic.py` 통과(ADR 0032).
+- 실제 restic과 표준 restic rest-server 컨테이너로 백업 -> 스냅숏 -> 복구 잡(`admin restore`) -> 복구한 DB의 행 확인: `tests/test_backup_restic.py` 통과(ADR 0032).
 - 이번에 넣거나 바꾼 시험은 시험마다 변이 확인을 했다(일부러 어기면 실패하는지): 변이 41건(시험당 1~2개) 가운데 처음 생존한 5건(읽기 전용 DB, forget 상한, 보존 기본값, 두 저장소 덤프, 앱 계정 verify)은 시험을 고쳐 모두 실패함을 확인했다. 변이 도구는 리포 밖에서 돌렸고 결과 표는 커밋 메시지에 있다.
 
 돌리지 않은 것·알려진 한계:

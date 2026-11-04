@@ -143,3 +143,49 @@ def test_backup_retention_follows_the_raw_retention_and_refuses_unbounded(reques
         with pytest.raises(BoundaryError) as e:
             backup_flow.keep_within_days({"OPS_RAW_RETENTION_DAYS": bad})
         assert e.value.code == "INVALID_RECORD"
+
+
+def test_restore_job_exit_codes_and_refusals(request, tmp_path, monkeypatch, capsys):
+    """복구 잡의 종료 코드(BackupJobResult 규칙): restic 불통 -> 75, 스냅숏 없음 -> 1(FAILED_PRECONDITION), 대상 DB 설정 없음 -> 1. 비밀이 출력에 없다."""
+    log_url = _pg_schema_url(request)
+    LogStore.postgres(log_url)._raw._backend.close()
+    for k in [k for k in os.environ if k.startswith(("OPS_", "OPENIT_"))]:
+        monkeypatch.delenv(k)
+    for k, v in _env(tmp_path, log_url, log_url).items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.delenv("OPS_FAILURE_DATABASE_URL_FILE")
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / "restic").write_text("#!/bin/sh\nexit 3\n")
+    (bad / "restic").chmod(0o755)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    (empty / "restic").write_text("#!/bin/sh\n[ \"$1\" = snapshots ] && echo '[]' && exit 0\nexit 3\n")
+    (empty / "restic").chmod(0o755)
+    def run_cli(path_dir):
+        monkeypatch.setenv("PATH", f"{path_dir}:{os.environ['PATH']}")
+        code = admin_cli.main(["restore"])
+        text = capsys.readouterr().out
+        assert SECRET_PW not in text and log_url not in text and not list(validator("BackupJobResult").iter_errors(json.loads(text.splitlines()[-1])))
+        return code, json.loads(text.splitlines()[-1])
+    code, res = run_cli(bad)
+    assert code == 75 and res["error"]["code"] == "UNAVAILABLE"
+    code, res = run_cli(empty)
+    assert code == 1 and res["error"]["code"] == "FAILED_PRECONDITION" and res["status"] == "failed"
+    monkeypatch.delenv("OPS_LOG_DATABASE_URL_FILE")
+    code, res = run_cli(empty)
+    assert code == 1 and res["error"]["code"] == "INVALID_RECORD"
+
+
+def test_load_refuses_a_non_empty_target_and_a_mismatching_dump(request):
+    """복구 적재(PgBase.load): 대상 표가 비어 있지 않으면 FAILED_PRECONDITION(덮어쓰지 않는다), 구획의 표가 저장소의 표와 다르면 INVALID_RECORD."""
+    store = LogStore.postgres(_pg_schema_url(request))
+    store.load("COPY raw_traces FROM STDIN;\n\\.\n\n")            # 빈 표에는 빈 구획이 들어간다(오류 없음)
+    store.send(envelope(make_trace("s-ld", "t-1")))
+    with pytest.raises(BoundaryError) as e:
+        store.load("COPY raw_traces FROM STDIN;\n\\.\n\n")
+    assert e.value.code == "FAILED_PRECONDITION"
+    other = LogStore.postgres(_pg_schema_url(request))
+    with pytest.raises(BoundaryError) as e:
+        other.load("COPY cases FROM STDIN;\n\\.\n\n")
+    assert e.value.code == "INVALID_RECORD"

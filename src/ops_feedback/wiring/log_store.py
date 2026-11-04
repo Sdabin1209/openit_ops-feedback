@@ -82,6 +82,9 @@ class LogStore:
     def dump(self, out) -> int:
         return self._raw.dump(out)
 
+    def load(self, text: str) -> int:
+        return self._raw.load(text)
+
     def grant_deidentifier_view(self) -> DeidentifierView:
         """비식별 단계(wiring/pipeline.py)에만 건넨다."""
         return self._raw.grant_deidentifier_view()

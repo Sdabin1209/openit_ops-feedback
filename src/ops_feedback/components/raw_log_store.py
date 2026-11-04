@@ -308,6 +308,13 @@ class RawLogStore:
     def postgres(cls, url: str, environ=None) -> "RawLogStore":
         return cls(PostgresRawBackend(url, environ))
 
+    def load(self, text: str) -> int:
+        """백업 구획을 빈 PostgreSQL 저장소에 되돌린다(복구 잡, ADR 0032)."""
+        fn = getattr(self._backend, "load", None)
+        if fn is None:
+            raise BoundaryError("INVALID_RECORD", "복구는 PostgreSQL 저장소만 지원한다")
+        return fn(text)
+
     def dump(self, out) -> int:
         """백업용 논리 덤프(PostgreSQL 구현만, ADR 0032)."""
         fn = getattr(self._backend, "dump", None)

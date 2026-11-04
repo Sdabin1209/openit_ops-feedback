@@ -68,6 +68,29 @@
         "postgres"
       ],
       "timeout_seconds": 1800
+    },
+    {
+      "name": "ops-feedback-restore",
+      "argv": [
+        "python",
+        "-m",
+        "ops_feedback.admin",
+        "restore"
+      ],
+      "idempotent": true,
+      "secret_files": [
+        "OPS_LOG_DATABASE_URL_FILE",
+        "OPS_FAILURE_DATABASE_URL_FILE",
+        "OPENIT_BACKUP_CREDENTIALS_FILE",
+        "OPENIT_BACKUP_REPO_PASSWORD_FILE"
+      ],
+      "env": [
+        "OPENIT_BACKUP_URL"
+      ],
+      "needs": [
+        "postgres"
+      ],
+      "timeout_seconds": 1800
     }
   ]
 }

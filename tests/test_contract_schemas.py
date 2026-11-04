@@ -89,7 +89,9 @@ def test_server_env_rejects_unknown_ops_variable():
 def test_server_env_contract_invalid_examples_rejected(p):
     ex = json.loads(p.read_text())
     if p.name.endswith("unknown-build-arg.json"):
-        pytest.skip("build_args는 아래 Dockerfile 시험이 본다")
+        # 모르는 Dockerfile ARG 는 환경 변수 검증(validate_server_env)이 아니라 계약 전체(env + build_args)가 거부한다
+        assert list(validator("OpsFeedbackServerEnv").iter_errors(ex)), p.name
+        return
     with pytest.raises(ValueError):
         validate_server_env(ex["env"])
 

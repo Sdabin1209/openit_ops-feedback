@@ -204,5 +204,34 @@ class PgBase:
             conn.close()
         return n
 
+    def load(self, text: str) -> int:
+        """`dump` 가 쓴 구획(`COPY 표 FROM STDIN;` 블록들)을 이 저장소의 빈 표들에 되돌린다(복구 잡, ADR 0032). 표가 하나라도 비어 있지 않으면 거부한다(덮어쓰지 않는다).
+        전부 한 트랜잭션이라 중간 실패의 흔적이 남지 않는다. 되돌린 줄 수."""
+        import psycopg
+        blocks, table, buf = {}, None, []
+        for line in text.splitlines(keepends=True):
+            if line.startswith("COPY ") and line.rstrip().endswith("FROM STDIN;"):
+                table, buf = line.split()[1], []
+            elif line == "\\.\n" and table:
+                blocks[table] = "".join(buf)
+                table = None
+            elif table:
+                buf.append(line)
+        if set(blocks) != set(self.TABLES):
+            raise BoundaryError("INVALID_RECORD", f"{self.WHAT}: 백업 구획의 표가 이 저장소의 표와 다르다")
+        n = 0
+        try:
+            with psycopg.connect(autocommit=False, **_params(self._url, self.connect_timeout, DUMP_STATEMENT_SECONDS)) as conn:
+                for t in self.TABLES:
+                    if conn.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone() is not None:
+                        raise BoundaryError("FAILED_PRECONDITION", f"{self.WHAT}: 대상 표가 비어 있지 않다. 새 DB 에서 복구한다")
+                for t in self.TABLES:
+                    with conn.cursor().copy(f"COPY {t} FROM STDIN") as cp:
+                        cp.write(blocks[t])
+                    n += blocks[t].count("\n")
+        except psycopg.Error as e:
+            raise BoundaryError("UNAVAILABLE", f"{self.WHAT} 복구 실패: {type(e).__name__}") from None
+        return n
+
     def close(self) -> None:
         self._db.close()

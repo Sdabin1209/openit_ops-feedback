@@ -11,6 +11,9 @@ import uuid
 
 import pytest
 
+from boundary_contracts import validator
+from boundary_contracts.errors import BoundaryError
+from ops_feedback.admin import __main__ as admin_cli
 from conftest import _pg_schema_url, envelope, make_trace
 from ops_feedback.components.failure_case_store import FailureCaseStore
 from ops_feedback.wiring import backup_flow
@@ -58,7 +61,7 @@ def rest_server(tmp_path):
         logs.p.kill()
 
 
-def test_real_backup_snapshot_restore_and_rows(request, tmp_path, restic_bin, rest_server, monkeypatch):
+def test_real_backup_snapshot_restore_and_rows(request, tmp_path, restic_bin, rest_server, monkeypatch, capsys):
     import psycopg
     log_url, fail_url = _pg_schema_url(request), _pg_schema_url(request)
     store = LogStore.postgres(log_url)
@@ -75,46 +78,42 @@ def test_real_backup_snapshot_restore_and_rows(request, tmp_path, restic_bin, re
     assert res["status"] == "ok" and res["bytes"] > 0 and res["snapshot_id"]
     # 인증은 실제로 켜져 있다: 틀린 자격이면 백업이 UNAVAILABLE(재시도 가능)로 실패하고 암호가 메시지에 없다
     (tmp_path / "cred2").write_text(f"{USER}:wrong\n")
-    from boundary_contracts.errors import BoundaryError
     with pytest.raises(BoundaryError) as e:
         backup_flow.run(env | {"OPENIT_BACKUP_CREDENTIALS_FILE": str(tmp_path / "cred2")}, restic=restic_bin)
     assert e.value.code == "UNAVAILABLE" and PW not in e.value.message
     # 같은 잡을 다시 돌려도 안전하다(멱등: 스냅숏이 하나 더 생길 뿐 실패하지 않는다)
-    assert backup_flow.run(env, restic=restic_bin)["status"] == "ok"
+    second = backup_flow.run(env, restic=restic_bin)
+    assert second["status"] == "ok" and second["snapshot_id"] != res["snapshot_id"]
 
-    # 복구: 표준 restic restore 로 스냅숏에서 덤프 파일을 꺼낸다
-    renv = {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "RESTIC_PASSWORD_FILE": str(tmp_path / "rp"),
-            "RESTIC_REPOSITORY": "rest:" + rest_server.replace("http://", f"http://{USER}:{PW}@")}
-    out = tmp_path / "restored"
-    r = subprocess.run([restic_bin, "restore", res["snapshot_id"], "--target", str(out)], env=renv, capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)
-    assert r.returncode == 0, r.stderr[-300:].replace(PW, "***")
-    dump = (out / "ops-feedback.copy").read_text()
-    assert "-- store: log" in dump and "-- store: failure" in dump
-    assert "COPY raw_traces FROM STDIN;" in dump and all(f"COPY {t} FROM STDIN;" in dump for t in ("cases", "traces", "aux"))      # 두 저장소의 표가 모두 들어 있다
+    # 복구 잡(admin restore): 스냅숏 ID 로 새 빈 DB 에 되돌린다. 대상은 migrate 로 스키마만 만든 DB
+    def fresh():
+        a, b = _pg_schema_url(request), _pg_schema_url(request)
+        LogStore.postgres(a)._raw._backend.close()
+        FailureCaseStore.postgres(b)._b.close()
+        return a, b
 
-    # 복구한 데이터를 새 빈 DB(스키마만 migrate 된)에 되돌리고 행을 확인한다
-    new_log, new_fail = _pg_schema_url(request), _pg_schema_url(request)
-    LogStore.postgres(new_log)._raw._backend.close()
-    FailureCaseStore.postgres(new_fail)._b.close()
-    sections, cur = {}, None
-    for line in dump.splitlines(keepends=True):
-        if line.startswith("-- store: "):
-            cur = line.split(": ")[1].strip()
-            sections[cur] = []
-        elif cur:
-            sections[cur].append(line)
-    for name, url in (("log", new_log), ("failure", new_fail)):
-        with psycopg.connect(url, autocommit=True) as c:
-            block, table = [], None
-            for line in sections[name] + ["\\.\n"]:
-                if line.startswith("COPY "):
-                    table, block = line.split()[1], []
-                elif line == "\\.\n" and table:
-                    with c.cursor().copy(f"COPY {table} FROM STDIN") as cp:
-                        cp.write("".join(block))
-                    table = None
-                elif table:
-                    block.append(line)
+    def renv(a, b):
+        (tmp_path / "ru").write_text(a)
+        (tmp_path / "rf").write_text(b)
+        return env | {"OPS_LOG_DATABASE_URL_FILE": str(tmp_path / "ru"), "OPS_FAILURE_DATABASE_URL_FILE": str(tmp_path / "rf")}
+
+    new_log, new_fail = fresh()
+    back = backup_flow.restore(renv(new_log, new_fail), res["snapshot_id"], restic=restic_bin)
+    assert back["status"] == "ok" and back["snapshot_id"] == res["snapshot_id"] and not list(validator("BackupJobResult").iter_errors(back))
     with psycopg.connect(new_log) as c:
         assert c.execute("SELECT count(*) FROM raw_traces").fetchone()[0] == 3
         assert {r[0] for r in c.execute("SELECT turn_id FROM raw_traces").fetchall()} == {"t-0", "t-1", "t-2"}
+    # 복구한 DB 는 비어 있지 않으므로 같은 대상에 다시 복구하면 거부한다(덮어쓰지 않는다): FAILED_PRECONDITION, 종료 코드 1
+    with pytest.raises(BoundaryError) as e:
+        backup_flow.restore(renv(new_log, new_fail), "latest", restic=restic_bin)
+    assert e.value.code == "FAILED_PRECONDITION"
+    # latest 는 또 다른 빈 DB 에 되돌리고, CLI 의 마지막 줄 JSON 과 종료 코드 0 을 낸다
+    l2, f2 = fresh()
+    for k, v in renv(l2, f2).items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("PATH", f"{os.path.dirname(restic_bin)}:{os.environ['PATH']}")
+    assert admin_cli.main(["restore"]) == 0
+    last = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert last["status"] == "ok" and last["snapshot_id"] == second["snapshot_id"]            # latest = 가장 최근 스냅숏
+    with psycopg.connect(l2) as c:
+        assert c.execute("SELECT count(*) FROM raw_traces").fetchone()[0] == 3

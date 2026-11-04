@@ -64,3 +64,10 @@ def test_exposure_body_limits_equal_the_servers_limits():
     ex = json.loads((ROOT / "deploy-exposure.json").read_text("utf-8"))
     limit = {tuple(r["paths"]): r.get("max_body_bytes") for r in ex["routes"]}
     assert limit[("/v1/traces",)] == api.MAX_BODY and limit[("/v1/cases/*/review",)] == api.MAX_REVIEW_BODY
+
+
+def test_restore_job_is_declared_manual_run_with_the_backup_names():
+    """DATA_OWNERSHIP 백업 행: 복구는 데이터 주인의 복구 잡만. 선언은 주기를 갖지 않는다(JobsDeclaration 에 주기 필드가 없다: deploy 가 수동으로 띄운다)."""
+    r = next(j for j in DECL["jobs"] if j["name"] == "ops-feedback-restore")
+    assert r["argv"] == ["python", "-m", "ops_feedback.admin", "restore"] and r["env"] == ["OPENIT_BACKUP_URL"] and r["timeout_seconds"] == 1800
+    assert {"OPENIT_BACKUP_CREDENTIALS_FILE", "OPENIT_BACKUP_REPO_PASSWORD_FILE", "OPS_LOG_DATABASE_URL_FILE"} <= set(r["secret_files"])

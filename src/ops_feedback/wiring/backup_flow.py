@@ -52,10 +52,8 @@ def keep_within_days(env: Mapping[str, str]) -> int:
     return days
 
 
-def run(env: Mapping[str, str], *, restic: str = "restic", runner: Callable = subprocess.run, clock: Clock = utc_now) -> dict:
-    """백업 한 번. 성공하면 BackupJobResult(status ok), 실패는 BoundaryError. 실패 메시지에 비밀·접속 문자열이 없다."""
-    started = clock()
-    days = keep_within_days(env)
+def _restic(env: Mapping[str, str], restic: str, runner: Callable):
+    """restic 호출기: 설정을 검사하고 하위 프로세스 환경을 필요한 변수만으로 새로 만든다(R9.1)."""
     url = env.get("OPENIT_BACKUP_URL")
     cred = read_secret("OPENIT_BACKUP_CREDENTIALS", environ=env)
     if not url or not cred or not env.get("OPENIT_BACKUP_REPO_PASSWORD_FILE"):
@@ -74,6 +72,14 @@ def run(env: Mapping[str, str], *, restic: str = "restic", runner: Callable = su
         except (OSError, subprocess.TimeoutExpired) as e:          # restic 이 없거나 시간 초과: 종류만 낸다
             raise BoundaryError("UNAVAILABLE", f"restic 실행 실패({type(e).__name__})") from None
 
+    return call
+
+
+def run(env: Mapping[str, str], *, restic: str = "restic", runner: Callable = subprocess.run, clock: Clock = utc_now) -> dict:
+    """백업 한 번. 성공하면 BackupJobResult(status ok), 실패는 BoundaryError. 실패 메시지에 비밀·접속 문자열이 없다."""
+    started = clock()
+    days = keep_within_days(env)
+    call = _restic(env, restic, runner)
     # 저장소는 서버·잡과 같은 앱 계정·verify 로 연다(스키마를 만들지 않는다, ADR 0031)
     venv = {**env, "OPS_DB_SCHEMA": "verify"}
     stores = []
@@ -106,6 +112,54 @@ def run(env: Mapping[str, str], *, restic: str = "restic", runner: Callable = su
         if isinstance(m, dict) and m.get("message_type") == "summary":
             snapshot_id = m.get("snapshot_id")
     out = {"status": "ok", "snapshot_id": snapshot_id, "bytes": total, "started_at": started, "finished_at": clock(), "error": None}
+    _check(out)
+    return out
+
+
+def restore(env: Mapping[str, str], snapshot: str = "latest", *, restic: str = "restic", runner: Callable = subprocess.run, clock: Clock = utc_now) -> dict:
+    """복구 잡(DATA_OWNERSHIP 백업 행: 복구는 데이터 주인의 복구 잡만): 스냅숏(ID 또는 latest)을 꺼내 OPS_*_DATABASE_URL_FILE 가 가리키는 새·빈 PostgreSQL 에 되돌린다.
+    대상 DB 는 `admin migrate` 로 스키마만 만든 빈 DB 여야 한다(비어 있지 않으면 거부: 덮어쓰지 않는다). 결과는 BackupJobResult(snapshot_id = 되돌린 스냅숏, bytes = 덤프 크기)."""
+    started = clock()
+    call = _restic(env, restic, runner)
+    venv = {**env, "OPS_DB_SCHEMA": "verify"}
+    targets = {}
+    if read_secret(LOG_URL, environ=env):
+        targets["log"] = open_log_store(venv, "")
+    if read_secret(FAILURE_URL, environ=env):
+        targets["failure"] = open_failure_store(venv, None)
+    if not targets:
+        raise BoundaryError("INVALID_RECORD", "복구할 PostgreSQL 저장소가 없다(OPS_LOG_DATABASE_URL_FILE, OPS_FAILURE_DATABASE_URL_FILE)")
+    if snapshot == "latest":
+        r = call("snapshots", "--json", "--latest", "1", "--tag", "ops-feedback", "--host", "ops-feedback")
+        try:
+            snaps = json.loads(r.stdout or b"[]") if r.returncode == 0 else None
+        except ValueError:
+            snaps = None
+        if snaps is None:
+            raise BoundaryError("UNAVAILABLE", "백업 저장소에서 스냅숏 목록을 읽지 못했다")
+        if not snaps:
+            raise BoundaryError("FAILED_PRECONDITION", "복구할 스냅숏이 없다")
+        snapshot = snaps[-1]["id"]
+    with tempfile.TemporaryDirectory() as d:
+        if call("restore", snapshot, "--target", d).returncode != 0:
+            raise BoundaryError("UNAVAILABLE", "백업 저장소에서 스냅숏을 꺼내지 못했다")
+        path = os.path.join(d, "ops-feedback.copy")
+        if not os.path.exists(path):
+            raise BoundaryError("INVALID_RECORD", "스냅숏에 ops-feedback.copy 가 없다")
+        text = open(path, encoding="utf-8").read()
+    sections, cur = {}, None
+    for line in text.splitlines(keepends=True):
+        if line.startswith("-- store: "):
+            cur = line.split(": ", 1)[1].strip()
+            sections[cur] = []
+        elif cur:
+            sections[cur].append(line)
+    if not set(targets) <= set(sections):
+        raise BoundaryError("INVALID_RECORD", "스냅숏에 대상 저장소 구획이 없다")
+    # 모든 대상이 비어 있고 구획이 맞는지 먼저 본 뒤 되돌린다(앞 저장소만 복구되고 뒤가 거부되는 일을 줄인다: 각 load 가 자기 표를 확인한다)
+    for name, store in targets.items():
+        store.load("".join(sections[name]))
+    out = {"status": "ok", "snapshot_id": snapshot, "bytes": len(text.encode("utf-8")), "started_at": started, "finished_at": clock(), "error": None}
     _check(out)
     return out
 
