@@ -50,7 +50,7 @@ def rest_server(tmp_path):
     (data / ".htpasswd").write_text(f"{USER}:{{SHA}}{base64.b64encode(hashlib.sha1(PW.encode()).digest()).decode()}\n")      # rest-server 의 htpasswd 인증
     (data / ".htpasswd").chmod(0o644)
     name = f"ops-feedback-restsrv-{uuid.uuid4().hex[:8]}"
-    _docker("run", "-d", "--name", name, "-p", "127.0.0.1::8000", "-v", f"{data}:/data", "--user", "0", "--entrypoint", "rest-server", "restic/rest-server:latest", "--path", "/data")
+    _docker("run", "-d", "--name", name, "-p", "127.0.0.1::8000", "-v", f"{data}:/data", "--user", f"{os.getuid()}:{os.getgid()}", "--entrypoint", "rest-server", "restic/rest-server:latest", "--path", "/data")
     logs = Proc(["docker", "logs", "-f", name], dict(os.environ))
     try:
         logs.wait_for("Authentication enabled")                # 서버가 인증을 켜고 기동했다는 사건
@@ -59,6 +59,11 @@ def rest_server(tmp_path):
     finally:
         _docker("rm", "-f", name, check=False)
         logs.p.kill()
+    # 컨테이너는 현재 사용자로 돌므로 저장소 아래 모든 파일의 소유자도 현재 사용자다. root 소유 파일이 남으면 pytest 가 임시 폴더를 지우지 못하고 /tmp 에 쌓인다.
+    foreign = [str(p) for p in [data, *data.rglob("*")] if p.lstat().st_uid != os.getuid()]
+    if foreign:
+        _docker("run", "--rm", "-v", f"{data}:/d", "--entrypoint", "sh", "restic/rest-server:latest", "-c", "chown -R %d:%d /d" % (os.getuid(), os.getgid()), check=False)     # 남기지 않는다(이 시험이 만든 폴더만)
+    assert not foreign, f"root 소유 파일이 남았다: {len(foreign)}개"
 
 
 def test_real_backup_snapshot_restore_and_rows(request, tmp_path, restic_bin, rest_server, monkeypatch, capsys):
