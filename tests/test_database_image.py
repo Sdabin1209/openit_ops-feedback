@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from boundary_contracts import validator
 
+import deps
 from waiting import HANG_GUARD_SECONDS, Proc
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +27,7 @@ def image():
     if shutil.which("docker") is None or shutil.which("openssl") is None or docker("info", check=False).returncode != 0:
         pytest.skip("docker 또는 openssl 없음")
     tag = f"ops-feedback-db-test:{uuid.uuid4().hex[:8]}"
-    docker("build", "-q", "-t", tag, "--build-arg", "COMMIT=abcdef1", "--build-arg", "CONTRACTS_VERSION=v3.4.10",
+    docker("build", "-q", "-t", tag, "--build-arg", "COMMIT=abcdef1", "--build-arg", f"CONTRACTS_VERSION={deps.pinned_boundary_tag()}",
            "--build-arg", "DATABASE_DECLARATION=" + json.dumps(DECL, separators=(",", ":"), sort_keys=True), str(ROOT / "db"))
     yield tag
     docker("rmi", "-f", tag, check=False)

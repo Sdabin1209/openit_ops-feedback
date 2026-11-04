@@ -78,7 +78,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 
 ## 5. 시험 상태 (코드 단계 C2, 2026-11-04)
 
-이 절이 이 영역 시험 상태의 정본이다(건수는 실행 명령으로 센다, 다른 문서에 복사하지 않는다). 고정: 계약 v3.4.14, openit-link v0.4.20, 문진 스키마 survey-schema-v4.1.1(`requirements.txt`). 로컬 태그는 `GIT_CONFIG_GLOBAL=head/shared/gitconfig-local-mirrors`로 받았다.
+이 절이 이 영역 시험 상태의 정본이다(건수는 실행 명령으로 센다, 다른 문서에 복사하지 않는다). 고정: 계약 v3.4.17, openit-link v0.4.22, 문진 스키마 survey-schema-v4.1.1(`requirements.txt`). 로컬 태그는 `GIT_CONFIG_GLOBAL=head/shared/gitconfig-local-mirrors`로 받았다.
 
 실제로 돌린 것(이 환경 한 곳, WSL2):
 - `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너 위 전체): rc=0, 건너뜀 0(통과 수는 실행 시점 값이다, 건수는 실행 명령으로 센다).
