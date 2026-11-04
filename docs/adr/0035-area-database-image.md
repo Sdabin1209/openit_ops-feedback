@@ -9,7 +9,8 @@
   4. 접속 규칙 `db/pg_hba.conf`(서버는 `hba_file`로 직접 읽고 데이터 폴더 사본도 같은 파일로 바꾼다): trust 줄이 없다(루프백 포함). OS 사용자 postgres 의 소켓만 peer(초기화·상태 확인), 그 밖의 소켓은 reject, 네트워크는 `hostssl` + `scram-sha-256`뿐이며 TLS 없는 접속은 reject.
   5. TLS 필수: `ssl=on`, 최소 TLS 1.2, 인증서는 `DB_TLS_DIR`의 `tls.crt`·`tls.key`. 없으면 컨테이너가 시작하지 않는다. 키는 서버가 요구하는 소유·권한(0600)으로 복사해 쓴다. 클라이언트는 `sslmode=verify-full`(deploy 가 URI 를 만든다).
   6. 인증서 갱신: 진입점이 백그라운드 감시(`db/tls-watch.sh`)를 띄운다. 5초마다 인증서·키의 해시를 보고, 두 번 연속 같은 새 값이면 사본을 원자적으로 바꾸고 postmaster 에 SIGHUP 을 보낸다(PostgreSQL 은 SIGHUP 에 `ssl_cert_file`도 다시 읽는다, 공식 문서). 재시작 없이 새 인증서를 쓴다.
-  7. 접속 수: 앱 계정 20, 소유자 계정 4, 서버 `max_connections=50`. 서버·잡은 저장소마다 연결 하나와 `/readyz` 확인용 짧은 연결을 쓰고 migrate 는 연결 하나다. 측정하지 않은 시작값이다.
+  7. 건강 확인(Dockerfile HEALTHCHECK, Docker 표준, `db/healthcheck.sh`): 서버 인증서·키 파일이 읽히고, 선언한 모든 계정이 자기 데이터베이스에 암호로 접속되며 그 접속이 TLS 인지(`pg_stat_ssl`) 본다. deploy 가 pg_isready 로 DB 내부를 대신 알 필요가 없다(구조 규칙 1). 주기 10초, 제한 5초, 시작 유예 60초, 연속 3회 실패면 unhealthy: 측정하지 않은 시작값. 컨테이너 안에는 서버 인증서의 루트가 없어 `sslmode=require`로 보고 이름 검증은 호출자(verify-full) 몫이다.
+  8. 접속 수: 앱 계정 20, 소유자 계정 4, 서버 `max_connections=50`. 서버·잡은 저장소마다 연결 하나와 `/readyz` 확인용 짧은 연결을 쓰고 migrate 는 연결 하나다. 측정하지 않은 시작값이다.
 - 왜: 계정·권한 최소화(ADR 0031, NIST SP 800-53 AC-6), 접속 규칙·scram·TLS 는 PostgreSQL 문서의 표준 구성(pg_hba.conf, `hostssl`, `scram-sha-256`), 초기화는 공식 postgres 이미지의 initdb 후크 표준이다. 선언을 이미지 안(`database.json`)에 두고 라벨로 deploy 에 알려, deploy 가 계정 이름·url_env 를 짐작하지 않는다.
 - 검토한 대안: deploy 가 SQL 을 직접 실행(구조 규칙 1·6 위반: 영역 DB 의 내부를 deploy 가 안다), Alembic/별도 설정 관리(과함), 인증서를 시작 때 한 번만 읽기(갱신 때 재시작 필요, 연결이 끊긴다), inotify 감시(이미지에 도구 추가).
 - 결과: 얻는 것은 영역 소유의 DB(계정·권한·TLS 가 이미지와 시험에 있음). 감수하는 것: (1) 계정 암호는 초기화 때 한 번만 적용된다 — 암호 회전은 이 이미지가 하지 않는다(deploy 가 회전하려면 새 볼륨 또는 별도 절차). (2) 선언을 바꾸면 기존 데이터 폴더에는 반영되지 않는다(initdb 후크는 한 번). (3) 이미지에 jq 가 들어간다(Debian 패키지, 버전 고정 안 함). (4) 베이스 `postgres:16`은 태그 고정이고 digest 고정이 아니다. (5) 값(접속 수, 5초 주기)은 측정하지 않았다.

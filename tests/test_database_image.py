@@ -73,7 +73,7 @@ def start(tmp_path, image, with_certs=True, passwords_override=None):
     (su / "pw").write_text(uuid.uuid4().hex + "\n")
     (su / "pw").chmod(0o644)
     name = f"ops-feedback-db-test-{uuid.uuid4().hex[:8]}"
-    args = ["run", "-d", "--name", name, "-p", "127.0.0.1::5432", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw"]
+    args = ["run", "-d", "--name", name, "--health-interval=2s", "--health-retries=2", "--health-start-period=0s", "-p", "127.0.0.1::5432", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw"]
     if with_certs:
         args += ["-v", f"{certs}:/certs:ro"]
     docker(*args, image)
@@ -261,4 +261,23 @@ def test_renewed_server_certificate_is_read_again_without_restart(image, tmp_pat
         with pytest.raises(psycopg.OperationalError):
             psycopg.connect(d.url("ops_log_app"))                  # 옛 루트로는 더 이상 통과하지 않는다
     finally:
+        docker("rm", "-fv", name, check=False)
+
+
+@pytest.mark.parametrize("breakage", ["tls_crt", "account_secret"])
+def test_healthcheck_is_healthy_with_declared_accounts_and_unhealthy_when_broken(image, tmp_path, breakage):
+    """HEALTHCHECK(Docker): 선언한 모든 계정이 TLS 로 접속되면 healthy. 서버 인증서 파일이나 계정 암호 파일이 사라지면 unhealthy(변이). 판정은 docker events 의 health_status 사건으로 받는다(시간 대기 없음).
+    시험은 확인 주기를 docker run 옵션(--health-*)으로 줄인다(이미지의 기본은 주기 10초)."""
+    decl = json.loads(docker("image", "inspect", image, "--format", "{{json .Config.Healthcheck}}").stdout)
+    assert decl["Test"][-1] == "ops-feedback-db-healthcheck.sh" and decl["Retries"] == 3
+    name, certs, pw = start(tmp_path, image)
+    ev = Proc(["docker", "events", "--filter", f"container={name}", "--filter", "event=health_status"], dict(os.environ))
+    try:
+        ev.wait_for("health_status: healthy")
+        assert docker("inspect", name, "--format", "{{.State.Health.Status}}").stdout.strip() == "healthy"
+        (certs / "tls.crt" if breakage == "tls_crt" else tmp_path / "secrets" / "ops_failure_app").unlink()
+        ev.wait_for("health_status: unhealthy")
+        assert docker("inspect", name, "--format", "{{.State.Health.Status}}").stdout.strip() == "unhealthy"
+    finally:
+        ev.p.kill()
         docker("rm", "-fv", name, check=False)

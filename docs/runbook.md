@@ -163,4 +163,5 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - 빌드: `bash scripts/build-image.sh <요청 JSON>`에 `"variant": "db"`(소스 `db/`). 라벨 `io.openit.database`가 선언(`db/database.json`)이다.
 - 입력(계약 AreaDatabaseEnv): `POSTGRES_PASSWORD_FILE`(슈퍼유저), `DB_ACCOUNT_SECRETS_DIR`(기본 /run/secrets/db, 계정마다 파일 하나: `ops_log_owner`, `ops_log_app`, `ops_failure_owner`, `ops_failure_app`), `DB_TLS_DIR`(기본 /certs, `tls.crt`·`tls.key`). 서버·잡 컨테이너는 `OPS_LOG_DATABASE_URL_FILE`, `OPS_FAILURE_DATABASE_URL_FILE`에 앱 계정 접속 URI(`sslmode=verify-full`)를, `admin migrate` 컨테이너는 같은 이름에 소유자 계정 URI 를 받는다.
 - 인증서를 갱신하면 `DB_TLS_DIR` 파일을 원자적으로 바꾼다. 컨테이너는 5초 안팎(두 번 연속 확인)에 새 인증서를 읽는다. 재시작이 필요 없다.
+- 건강 확인: 이미지의 HEALTHCHECK 가 선언 계정의 TLS 접속과 서버 인증서 파일을 본다(`docker inspect` 의 State.Health). deploy 는 이것을 쓰고 pg_isready 로 대신 확인하지 않는다.
 - 한계: 계정 암호는 처음 초기화할 때만 적용된다(회전 없음). 시험: `tests/test_database_image.py`(이미지를 실제로 띄워 선언 계정으로 verify-full 접속, dml 계정 DDL 거부, 접속 규칙, 인증서 재읽기).
