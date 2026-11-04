@@ -7,7 +7,7 @@ if ! $DOCKER info >/dev/null 2>&1; then
   echo "오류: $DOCKER 데몬에 연결할 수 없다. 데몬이 실행 중이고 이 사용자가 접근할 수 있는지 확인하라." >&2
   exit 2
 fi
-IMG=ops-feedback-ingest:smoke-$$
+IMG=ops-feedback:smoke-$$
 NAME=ops-feedback-smoke-$$
 # 이미지는 영역 빌드 진입점(scripts/build-image.sh)으로 만든다. 요청의 버전은 requirements.txt 핀에서, 소스 트리는 이웃 리포의 그 태그에서 꺼낸다(deploy가 하는 일의 개발용 대역).
 WS=${WORKSPACE_DIR:-..}

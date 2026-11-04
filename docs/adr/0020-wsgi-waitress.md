@@ -10,7 +10,7 @@
   - `channel_timeout` = `REQUEST_TIMEOUT` 30초(임의 보수값, ADR 0008), `cleanup_interval` = min(5초, channel_timeout)(기본 30초면 timeout이 최대 두 배 늦다. 시험으로 확인).
   - `max_request_body_size` = 8 MiB(= 기존 `MAX_BODY`). 검토 면의 1 MiB 상한은 앱이 그대로 검사한다.
   - 종료: SIGTERM에 듣는 소켓을 닫고 일꾼이 하던 요청을 끝낼 때까지 최대 8초(docker stop 기본 10초보다 짧게, 제약값), 응답이 나가길 최대 1초(임의) 기다린 뒤 연결을 닫는다. waitress `close()`는 일꾼을 5초만 기다리고 응답 전송을 기다리지 않아 얇은 `Server.shutdown`으로 순서를 잡았다.
-- 동작 변화(이유): (1) 연결 상한을 넘으면 이전에는 즉시 503이었고 이제는 waitress가 받지 않고 대기열(backlog)에 둔다(waitress에 즉시 거절 설정이 없다). 상한이 찬 동안 새 연결은 응답 없이 기다리다 자리가 나면 처리된다. (2) 8 MiB를 넘는 수집 본문은 앱의 400 대신 waitress가 413으로 거부한다(HTTP 의미상 더 정확). (3) `Server` 헤더가 `ops-feedback-ingest`(ident)이다. 나머지(401/403, 오류 본문, 본문 상한, `/readyz`)는 기존 시험이 그대로 통과한다.
+- 동작 변화(이유): (1) 연결 상한을 넘으면 이전에는 즉시 503이었고 이제는 waitress가 받지 않고 대기열(backlog)에 둔다(waitress에 즉시 거절 설정이 없다). 상한이 찬 동안 새 연결은 응답 없이 기다리다 자리가 나면 처리된다. (2) 8 MiB를 넘는 수집 본문은 앱의 400 대신 waitress가 413으로 거부한다(HTTP 의미상 더 정확). (3) `Server` 헤더가 `ops-feedback`(ident)이다. 나머지(401/403, 오류 본문, 본문 상한, `/readyz`)는 기존 시험이 그대로 통과한다.
 - 검토한 대안: gunicorn(prefork라 연결 하나 직렬화 설계와 맞지 않음), uvicorn/ASGI(앱을 async로 다시 써야 함), Flask 등 프레임워크(라우트 5개에 과함).
 - 결과: 얻는 것은 직접 만든 서버 코드 제거와 표준 서버의 연결 관리. 감수하는 것은 의존 하나(waitress 3.0.2, `requirements.lock`에 고정)와 위 동작 변화.
 - 되돌리는 조건: 대기열 동작이 호출자(survey-service의 전송 timeout)에 문제가 되거나 처리량이 측정되어 부족하면 앞단 프록시로 상한을 두거나 서버를 바꾼다.

@@ -88,7 +88,7 @@ OPS_INGEST_TOKEN_FILE=/run/secrets/ingest OPS_LOG_DB=/data/log.db python -m ops_
 # 컨테이너
 bash scripts/build-image.sh <BuildImageRequest JSON>   # 영역 빌드 진입점(ADR 0022): wheel을 만들고 이미지를 빌드해 BuildImageResult 한 줄을 낸다
 # 로컬 스모크는 scripts/smoke.sh가 같은 진입점으로 빌드한다. scripts/build_wheels.sh는 폐기 예정이라 쓰지 않는다
-docker run -p 8080:8080 -v ops-log:/data -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest ops-feedback-ingest
+docker run -p 8080:8080 -v ops-log:/data -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest ops-feedback
 ```
 
 확인: `curl localhost:8080/healthz`, `/readyz`. 스모크 시험(호스트 포트는 Docker가 배정, 이미지 빌드, 기동, 수집, 중복, 인증): `scripts/smoke.sh` (표준 `docker`만 쓴다. 실행 파일 이름은 `DOCKER` 환경 변수로만 바꾼다. 데몬에 닿지 않으면 오류로 중단한다).

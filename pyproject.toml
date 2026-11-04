@@ -14,7 +14,7 @@ dev = ["pytest", "datamodel-code-generator"]
 
 [project.scripts]
 ops-feedback-job = "ops_feedback.job.__main__:main"
-ops-feedback-ingest-api = "ops_feedback.api.__main__:main"
+ops-feedback-api = "ops_feedback.api.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

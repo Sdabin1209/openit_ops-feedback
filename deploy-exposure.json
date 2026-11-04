@@ -1,5 +1,5 @@
 {
-  "service": "ops-feedback-ingest",
+  "service": "ops-feedback",
   "egress": [
     "release-gate",
     "external:backup"

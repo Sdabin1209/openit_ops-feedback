@@ -62,7 +62,7 @@ class Server:
         # cleanup_interval: 멈춘 연결을 channel_timeout 안팎에 닫으려고 점검 주기를 줄인다(기본 30초면 timeout이 최대 두 배 늦다).
         # 왜 이 값들: ADR 0020. threads=connection_limit은 연결마다 일꾼이 있던 이전 동작(DB가 막혀도 /healthz가 대답)을 유지하려는 것이다.
         self._srv = waitress.create_server(app, host=host, port=port, threads=connection_limit, connection_limit=connection_limit + 2,
-                                           channel_timeout=channel_timeout, cleanup_interval=min(5.0, channel_timeout), max_request_body_size=MAX_BODY, ident="ops-feedback-ingest",
+                                           channel_timeout=channel_timeout, cleanup_interval=min(5.0, channel_timeout), max_request_body_size=MAX_BODY, ident="ops-feedback",
                                            clear_untrusted_proxy_headers=False)
         self.server_address = (self._srv.effective_host, self._srv.effective_port)
         self._closing = False

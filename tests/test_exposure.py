@@ -18,7 +18,7 @@ SERVED = {("GET", "/v1/cases"), ("GET", "/v1/cases/*"), ("GET", "/v1/deidentifie
 
 def test_exposure_file_follows_the_contract():
     assert not list(validator("Exposure").iter_errors(EXPOSURE))
-    assert EXPOSURE["service"] == "ops-feedback-ingest"
+    assert EXPOSURE["service"] == "ops-feedback"
 
 
 def _declared():
@@ -78,3 +78,11 @@ def test_server_side_request_deadline_is_shorter_than_the_gateway_response_heade
     from ops_feedback.wiring.ingest_service import REQUEST_DEADLINE_SECONDS
     assert REQUEST_DEADLINE_SECONDS * 1000 < min(t["response_header"] for t in _timeouts())
     assert REQUEST_DEADLINE_SECONDS == 55.0
+
+
+def test_service_name_is_the_published_image_name():
+    """CONVENTIONS 13절·RUNTIME R1.2: 서비스 이름 = 게시 이미지 이름(Dockerfile 라벨 io.openit.service). 노출 선언의 service 가 다르면 게이트웨이가 다른 이름으로 인증서·경로를 만든다."""
+    import re
+    from pathlib import Path
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text("utf-8")
+    assert re.search(r'io\.openit\.service="([^"]+)"', dockerfile).group(1) == EXPOSURE["service"] == "ops-feedback"
