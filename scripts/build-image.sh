@@ -31,6 +31,26 @@ errs = sorted(validator("BuildImageRequest").iter_errors(req), key=lambda e: lis
 if errs:
     die("BuildImageRequest 위반: " + "; ".join(f"{'.'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in errs[:5]))
 v, ssrc = req["versions"], ds.get("survey_schema")
+if req.get("variant") == "db":
+    # ops-feedback-db(D126): 영역 DB 이미지. 문진 스키마·잡·노출이 없다. 계약 DatabaseDeclaration 으로 검증한 선언을 라벨 io.openit.database 로 단다(생산자 검증).
+    if os.path.realpath(req["source_dir"]) != os.path.realpath(here):
+        die("source_dir가 이 리포 루트가 아니다")
+    got = re.search(r'^version\s*=\s*"([^"]+)"', open(os.path.join(bsrc, "pyproject.toml"), encoding="utf-8").read(), re.M)
+    if not got or got.group(1) != v["boundary"].lstrip("v"):
+        die("dependency_sources.boundary의 패키지 버전이 versions.boundary와 다르다")
+    pin = re.search(r"openit_boundary-contracts\.git@(v[0-9.]+)", open(os.path.join(here, "requirements.txt"), encoding="utf-8").read())
+    if not pin or pin.group(1) != v["boundary"]:
+        die("요청 versions.boundary가 이 리포의 고정 버전(requirements.txt)과 다르다")
+    try:
+        decl = json.load(open(os.path.join(here, "db", "database.json"), encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        die(f"db/database.json을 읽지 못했다({type(e).__name__})")
+    derrs = list(validator("DatabaseDeclaration").iter_errors(decl))
+    if derrs:
+        die("db/database.json이 DatabaseDeclaration을 어긴다: " + "; ".join(f"{'.'.join(map(str, e.absolute_path)) or '<root>'}: {e.validator}" for e in derrs[:3]))
+    for k, val in dict(VARIANT="db", DBDECL=json.dumps(decl, ensure_ascii=False, separators=(",", ":"), sort_keys=True), SRC_B=bsrc, REV=req["revision"], BC=v["boundary"], TAG=req["image_tag"]).items():
+        print(f"{k}={shlex.quote(val)}")
+    sys.exit(0)
 # 이 영역이 쓰는 키: versions.boundary, versions.survey_schema, dependency_sources.boundary, dependency_sources.survey_schema. 없으면 기본값을 두지 않고 실패한다.
 if "survey_schema" not in v or not ssrc or not os.path.isdir(ssrc):
     die("versions.survey_schema와 dependency_sources.survey_schema(문진 스키마 패키지 디렉터리)가 필요하다")
@@ -75,6 +95,26 @@ for k, val in dict(EXPOSURE=json.dumps(exposure, ensure_ascii=False, separators=
     print(f"{k}={shlex.quote(val)}")
 PYEOF
 )"
+
+if [ "${VARIANT:-}" = db ]; then
+  # 변형 db: 공식 postgres 이미지 위에 계정·권한·접속 규칙·TLS 설정(db/). 파이썬 wheel 이 필요 없다.
+  log "docker build $TAG (db)"
+  "$DOCKER" build -q -t "$TAG" --build-arg COMMIT="$REV" --build-arg CONTRACTS_VERSION="$BC" --build-arg DATABASE_DECLARATION="$DBDECL" "$HERE/db" >&2
+  IID=$("$DOCKER" image inspect "$TAG" --format '{{.Id}}')
+  LABELS=$("$DOCKER" image inspect "$TAG" --format '{{json .Config.Labels}}')
+  "$PY" - "$SRC_B" "$TAG" "$IID" "$LABELS" <<'PYEOF'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from boundary_contracts import validator
+tag, iid, labels = sys.argv[2], sys.argv[3], {k: v for k, v in json.loads(sys.argv[4]).items() if k.startswith("io.openit.")}
+res = {"image": tag, "image_id": iid, "labels": labels}
+errs = [e.message[:120] for e in validator("BuildImageResult").iter_errors(res)] + [e.message[:120] for e in validator("ImageLabels").iter_errors(labels)]
+if errs:
+    sys.exit("build-image: 결과가 BuildImageResult/ImageLabels를 어긴다: " + "; ".join(errs[:3]))
+print(json.dumps(res, ensure_ascii=False, sort_keys=True))
+PYEOF
+  exit 0
+fi
 
 # 2) wheel: 소스 트리를 복사해(요청이 준 트리에 빌드 부산물을 남기지 않는다) 만든다. 같은 요청이 같은 wheel이 되도록 시각을 고정한다.
 cd "$HERE"

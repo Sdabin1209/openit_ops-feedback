@@ -78,12 +78,13 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 
 ## 5. 시험 상태 (코드 단계 C2, 2026-11-04)
 
-이 절이 이 영역 시험 상태의 정본이다(건수는 실행 명령으로 센다, 다른 문서에 복사하지 않는다). 고정: 계약 v3.4.9, openit-link v0.4.15, 문진 스키마 survey-schema-v4.1.1(`requirements.txt`). 로컬 태그는 `GIT_CONFIG_GLOBAL=head/shared/gitconfig-local-mirrors`로 받았다.
+이 절이 이 영역 시험 상태의 정본이다(건수는 실행 명령으로 센다, 다른 문서에 복사하지 않는다). 고정: 계약 v3.4.12, openit-link v0.4.18, 문진 스키마 survey-schema-v4.1.1(`requirements.txt`). 로컬 태그는 `GIT_CONFIG_GLOBAL=head/shared/gitconfig-local-mirrors`로 받았다.
 
 실제로 돌린 것(이 환경 한 곳, WSL2):
 - `scripts/dev-postgres.sh`(PostgreSQL 16 컨테이너 위 전체): rc=0, 건너뜀 0(통과 수는 실행 시점 값이다, 건수는 실행 명령으로 센다).
 - `scripts/smoke.sh`(이미지 빌드, `/healthz`, 수집, 잡 1회, restic 포함 이미지): rc=0 `SMOKE OK`.
 - 실제 restic과 표준 restic rest-server 컨테이너로 백업 -> 스냅숏 -> 복구 잡(`admin restore`) -> 복구한 DB의 행 확인: `tests/test_backup_restic.py` 통과(ADR 0032).
+- `tests/test_database_image.py`(ops-feedback-db 이미지를 실제로 띄워 선언 계정 verify-full 접속, dml 계정 DDL 거부, 접속 규칙·권한, 인증서 갱신 재읽기)와 `tests/test_build_image.py`의 db 변형: 변이 16건(접속 규칙 trust, PUBLIC CONNECT, 슈퍼유저, 시퀀스 권한, CREATE 권한, ssl off, 접속 수, 인증서 검사, 빈 암호, 데이터 폴더 hba, 라벨, 감시 끔/HUP 없음, build-image 라벨·고정 버전) 모두 시험이 실패함을 확인했다(처음 생존 2건은 시험을 고쳐 재확인). 결과는 build/logs/(커밋하지 않는다).
 - 이번에 넣거나 바꾼 시험은 시험마다 변이 확인을 했다(일부러 어기면 실패하는지): 변이 41건(시험당 1~2개) 가운데 처음 생존한 5건(읽기 전용 DB, forget 상한, 보존 기본값, 두 저장소 덤프, 앱 계정 verify)은 시험을 고쳐 모두 실패함을 확인했다. 변이 도구는 리포 밖에서 돌렸고 결과 표는 커밋 메시지에 있다.
 
 돌리지 않은 것·알려진 한계:
@@ -131,6 +132,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0031](docs/adr/0031-db-owner-and-app-roles.md) | DB 계정 분리: 소유자(DDL, migrate만)와 앱(DML), 서버·잡은 verify만(L08) |
 | [0032](docs/adr/0032-backup-logical-dump-restic.md) | 백업: COPY 논리 덤프를 restic 으로 platform 백업 저장소에(R10.1) |
 | [0033](docs/adr/0033-gateway-token-identity-header.md) | 사람 신원 헤더는 게이트웨이 토큰에서만 쓴다(CONVENTIONS 6절) |
+| [0035](docs/adr/0035-area-database-image.md) | 영역 DB 이미지 ops-feedback-db: 공식 postgres 위에 계정·권한·접속 규칙·TLS, 인증서 갱신 재읽기(D126) |
 | [0034](docs/adr/0034-request-body-limits.md) | 경로별 요청 본문 상한을 노출 선언에 적고 서버 상한과 같게 둔다(3.4.7) |
 
 ## 7. 더 자세한 문서

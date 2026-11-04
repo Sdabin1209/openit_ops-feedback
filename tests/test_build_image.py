@@ -142,3 +142,40 @@ def test_survey_schema_label_is_the_package_major_not_the_integer_contract_versi
         assert label == SS_TAG.removeprefix("survey-schema-v").split(".")[0] and label != "7"
     finally:
         subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t43-{UNIQ}"], capture_output=True)
+
+
+def db_request(trees, **over):
+    req = {"source_dir": str(ROOT), "revision": "abcdef1", "versions": {"boundary": BC_TAG}, "dependency_sources": {"boundary": str(trees["boundary"])},
+           "variant": "db", "image_tag": f"ops-feedback-db-buildtest:t1-{UNIQ}"}
+    req.update(over)
+    return req
+
+
+@pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
+def test_db_variant_builds_the_database_image_and_labels_it_with_the_declaration(trees, tmp_path):
+    """variant db(D126): 영역 DB 이미지. 결과는 BuildImageResult·ImageLabels 를 지키고, 라벨 io.openit.database 는 리포의 db/database.json(DatabaseDeclaration) 그대로다."""
+    req = db_request(trees)
+    try:
+        r = run(tmp_path, req, docker="docker")
+        assert r.returncode == 0, r.stderr[-800:]
+        res = json.loads(r.stdout.strip().splitlines()[-1])
+        assert not list(validator("BuildImageResult").iter_errors(res))
+        lb = res["labels"]
+        assert lb["io.openit.service"] == "ops-feedback-db" and lb["io.openit.contracts.boundary"] == BC_TAG and lb["io.openit.revision"] == "abcdef1"
+        decl = json.loads(lb["io.openit.database"])
+        assert not list(validator("DatabaseDeclaration").iter_errors(decl)) and decl == json.loads((ROOT / "db" / "database.json").read_text("utf-8"))
+        assert "io.openit.exposure" not in lb and "io.openit.jobs" not in lb           # DB 이미지에는 노출·잡 선언이 없다
+    finally:
+        subprocess.run(["docker", "rmi", "-f", req["image_tag"]], capture_output=True)
+
+
+def test_db_variant_rejects_a_bad_request_without_docker(trees, tmp_path):
+    other = deps.boundary("v2.8.0")
+    cases = [(lambda r: r["versions"].update(boundary="v0.0.1"), "다르다"),                       # 트리 버전과 요청이 다르다
+             (lambda r: r["dependency_sources"].pop("boundary"), "dependency_sources.boundary"),
+             (lambda r: (r["versions"].update(boundary="v2.8.0"), r["dependency_sources"].update(boundary=str(other))), "고정 버전")]      # 트리·요청은 같지만 이 리포의 고정(requirements.txt)과 다르다
+    for fn, needle in cases:
+        req = db_request(trees)
+        fn(req)
+        r = run(tmp_path, req)
+        assert r.returncode == 2 and needle in r.stderr and r.stdout == "", r.stderr[-300:]
