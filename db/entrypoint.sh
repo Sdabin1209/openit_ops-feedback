@@ -9,6 +9,19 @@ TLS=${DB_TLS_DIR:-/certs}
 install -d -o postgres -g postgres -m 0700 /run/ops-feedback-db-tls
 install -o postgres -g postgres -m 0644 "$TLS/tls.crt" /run/ops-feedback-db-tls/server.crt
 install -o postgres -g postgres -m 0600 "$TLS/tls.key" /run/ops-feedback-db-tls/server.key
+# 공식 진입점은 gosu postgres 로 내려가며 보조 그룹을 다시 설정한다.
+# 배치의 0640 비밀을 완화하지 않고, root 단계에서 postgres 전용 tmpfs 사본을 만든다.
+SECRETS=${DB_ACCOUNT_SECRETS_DIR:-/run/secrets/db}
+PRIVATE_SECRETS=/run/ops-feedback-db-secrets
+install -d -o postgres -g postgres -m 0700 "$PRIVATE_SECRETS"
+while IFS= read -r name; do
+  secret="$SECRETS/$name"
+  [ -r "$secret" ] && [ -s "$secret" ] || { echo "계정 $name 의 암호 파일이 없거나 비어 있다(또는 읽을 수 없다)" >&2; exit 1; }
+  first_line=$(head -n1 "$secret") || { echo "계정 $name 의 암호 파일을 읽을 수 없다" >&2; exit 1; }
+  [ -n "$first_line" ] || { echo "계정 $name 의 암호 첫 줄이 비어 있다" >&2; exit 1; }
+  unset first_line
+  install -o postgres -g postgres -m 0600 "$secret" "$PRIVATE_SECRETS/$name"
+done < <(jq -r '.accounts[].name' /etc/ops-feedback-db/database.json)
 # 인증서 갱신 감시(tls-watch.sh)는 서버와 같은 컨테이너 안의 백그라운드 프로세스다. 서버가 PID 1 이 되면 이 프로세스는 그 자식으로 남는다.
 /usr/local/bin/ops-feedback-db-tls-watch.sh &
 exec docker-entrypoint.sh "$@"

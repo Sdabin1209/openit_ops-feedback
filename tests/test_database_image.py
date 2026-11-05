@@ -65,16 +65,23 @@ def start(tmp_path, image, with_certs=True, passwords_override=None):
     certs = make_certs(tmp_path)
     sec = tmp_path / "secrets"
     sec.mkdir()
+    sec.chmod(0o750)
     pw = {a: uuid.uuid4().hex for a in ACCOUNTS}
+    pw.update(passwords_override or {})
     for a, v in pw.items():
         (sec / a).write_text(v + "\n")
-        (sec / a).chmod(0o644)
+        (sec / a).chmod(0o640)
     su = tmp_path / "su"
     su.mkdir()
     (su / "pw").write_text(uuid.uuid4().hex + "\n")
-    (su / "pw").chmod(0o644)
+    su.chmod(0o750)
+    (su / "pw").chmod(0o640)
     name = f"ops-feedback-db-test-{uuid.uuid4().hex[:8]}"
-    args = ["run", "-d", "--name", name, "--health-interval=2s", "--health-retries=2", "--health-start-period=0s", "-p", "127.0.0.1::5432", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw"]
+    args = ["run", "-d", "--name", name,
+            "--read-only", "--tmpfs", "/tmp", "--tmpfs", "/run",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+            "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER",
+            "--cap-add", "SETUID", "--cap-add", "SETGID", "--group-add", str(os.getgid()), "--health-interval=2s", "--health-retries=2", "--health-start-period=0s", "-p", "127.0.0.1::5432", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw"]
     if with_certs:
         args += ["-v", f"{certs}:/certs:ro"]
     docker(*args, image)
@@ -294,3 +301,15 @@ def test_base_images_are_pinned_by_digest_and_the_same_postgres_digest_is_used_e
     app = (ROOT / "Dockerfile").read_text("utf-8")
     froms = re.findall(r"^FROM (\S+)", app, re.M)
     assert len(froms) == 2 and froms[0] == froms[1] and froms[0].startswith("python:3.12-slim@") and dig.search(froms[0])      # 두 단계가 같은 digest
+
+
+@pytest.mark.parametrize("password", ["", "\nnot-the-first-line"])
+def test_empty_first_password_line_stops_before_database_initialisation(image, tmp_path, password):
+    name, _, _ = start(tmp_path, image, passwords_override={"ops_log_owner": password})
+    try:
+        assert docker("wait", name).stdout.strip() != "0"
+        logs = docker("logs", name, check=False)
+        assert "암호 첫 줄이 비어 있다" in logs.stdout + logs.stderr
+        assert "CREATE ROLE" not in logs.stdout + logs.stderr
+    finally:
+        docker("rm", "-fv", name, check=False)

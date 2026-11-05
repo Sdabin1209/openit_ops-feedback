@@ -3,7 +3,7 @@
 # 암호는 DB_ACCOUNT_SECRETS_DIR/<계정 이름> 파일에서 읽고 어떤 출력에도 쓰지 않는다(D84). 오류는 즉시 중단한다.
 set -euo pipefail
 DECL=/etc/ops-feedback-db/database.json
-SECRETS=${DB_ACCOUNT_SECRETS_DIR:-/run/secrets/db}
+SECRETS=/run/ops-feedback-db-secrets   # 진입점이 배치 비밀을 postgres 전용 0600 사본으로 준비한다
 # 접속 수 상한: 앱 계정 20, 소유자 계정 4. 서버·잡은 저장소마다 연결 하나 + /readyz 확인용 짧은 연결이고 migrate 는 한 연결이다. 측정하지 않은 시작값(ADR 0035).
 LIMIT_DML=20
 LIMIT_OWNER=4
@@ -17,6 +17,15 @@ while IFS=$'\t' read -r name priv; do
   # 암호는 명령줄 인자가 아니라 psql 의 백틱으로 파일에서 읽는다(프로세스 목록에 보이지 않게)
   PW_FILE="$SECRETS/$name" su_psql --dbname postgres -v name="$name" -v lim="$limit" <<'SQL'
 \set pw `head -n1 "$PW_FILE"`
+-- psql 의 외부 명령 실패는 ON_ERROR_STOP 대상이 아니므로 명시적으로 SQL 오류로 바꾼다.
+\if :SHELL_ERROR
+DO $$ BEGIN RAISE EXCEPTION 'account secret could not be read'; END $$;
+\endif
+SELECT length(:'pw') > 0 AS password_present \gset
+\if :password_present
+\else
+DO $$ BEGIN RAISE EXCEPTION 'account secret must not be empty'; END $$;
+\endif
 CREATE ROLE :"name" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT :lim PASSWORD :'pw';
 SQL
 done < <(jq -r '.accounts[] | [.name, .privilege] | @tsv' "$DECL")

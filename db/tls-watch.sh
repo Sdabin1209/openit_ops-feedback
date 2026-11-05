@@ -12,7 +12,7 @@ while true; do
   if [ "$cur" = "$prev" ] && [ "$cur" != "$applied" ] && [ -r "$TLS/tls.crt" ] && [ -r "$TLS/tls.key" ]; then
     install -o postgres -g postgres -m 0644 "$TLS/tls.crt" "$OUT/server.crt.new" && install -o postgres -g postgres -m 0600 "$TLS/tls.key" "$OUT/server.key.new" \
       && mv "$OUT/server.key.new" "$OUT/server.key" && mv "$OUT/server.crt.new" "$OUT/server.crt" || continue
-    pid=$(head -n1 "${PGDATA:-/var/lib/postgresql/data}/postmaster.pid" 2>/dev/null) && [ -n "$pid" ] && kill -HUP "$pid" && { applied=$cur; echo "ops-feedback-db: TLS 인증서를 다시 읽었다"; }
+    pid=$(head -n1 "${PGDATA:-/var/lib/postgresql/data}/postmaster.pid" 2>/dev/null) && [ -n "$pid" ] && gosu postgres kill -HUP "$pid" && { applied=$cur; echo "ops-feedback-db: TLS 인증서를 다시 읽었다"; }
   fi
   prev=$cur
 done
