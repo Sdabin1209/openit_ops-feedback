@@ -15,9 +15,10 @@ NAME=ops-feedback-devpg-$$
 PW=$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')     # 일회용 비밀번호(출력하지 않는다)
 trap '$DOCKER rm -f $NAME >/dev/null 2>&1 || true' EXIT
 $DOCKER run -d --name $NAME -e POSTGRES_USER=opsu -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=opsdb -p 127.0.0.1::5432 $PG_IMAGE >/dev/null
-# 준비 확인은 TCP(-h 127.0.0.1)로 한다: 공식 이미지는 초기화 동안 소켓만 여는 임시 서버를 먼저 띄우고 끝나면 재시작한다. 소켓 확인은 임시 서버에서도 통과해 고정 대기(sleep)가 필요했다.
-# TCP 확인은 최종 서버가 떴을 때만 통과한다. 상한 120초: 한가한 PC 에서 잰 준비 시간은 1.3~2.5초(3회)이고, 다른 시험이 도는 부하에서 40초 안에 안 뜬 적이 1번 있었다(원인 미판정, 측정한 최악이 40초보다 크다).
-# 그래서 관측한 최악(>40초)의 3배를 상한으로 둔다(D125 의 측정 최악 + 여유 원칙, 정확한 최악은 모른다). 컨테이너가 이미 끝났으면 기다리지 않고 로그 끝을 낸다.
+# 준비 확인은 TCP(-h 127.0.0.1)로 한다. 이전 결함(고쳤다): 공식 이미지는 초기화 동안 소켓만 여는 임시 서버를 먼저 띄우고 끝나면 재시작하는데, 소켓 pg_isready 는 임시 서버에서도 통과했고
+# 그 뒤 고정 `sleep 2` 가 부하 때 재시작보다 짧을 수 있었다(시험이 재시작 중에 접속하는 경쟁). TCP 확인은 최종 서버가 떴을 때만 통과하므로 고정 대기가 필요 없다.
+# 상한 120초: 한가한 PC 에서 잰 준비 시간은 1.3~2.5초(3회)다. 별개로, 이전 40초 상한 안에 준비되지 않아 종료 코드 2가 난 적이 1번 있었다. 그 원인은 판정하지 못했다(같은 이미지는 수동으로 정상 기동했고 당시 다른 작업이 도는 부하였다).
+# 그래서 관측한 최악(40초 초과, 정확한 값은 모름)의 3배를 상한으로 둔다(D125 의 측정 최악 + 여유 원칙의 근사). 컨테이너가 이미 끝났으면 기다리지 않고 로그 끝을 낸다.
 READY_LIMIT_SECONDS=120
 until $DOCKER exec $NAME pg_isready -h 127.0.0.1 -U opsu -d opsdb >/dev/null 2>&1; do
   if [ "$($DOCKER inspect -f '{{.State.Running}}' $NAME 2>/dev/null)" != true ]; then echo "오류: PostgreSQL 컨테이너가 끝났다" >&2; $DOCKER logs --tail 20 $NAME >&2 || true; exit 2; fi

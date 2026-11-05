@@ -1,5 +1,10 @@
 # 변경 이력
 
+## 0.20.1 (제안)
+
+- `scripts/dev-postgres.sh` 준비 대기: 소켓 `pg_isready` + 고정 `sleep 2`(초기화용 임시 서버가 통과시키고 재시작 전에 시험이 접속할 수 있는 경쟁)를 TCP 확인으로 바꾸고 상한 120초(근거는 스크립트 주석). 이전 40초 상한 초과 1건의 원인은 판정하지 못했다.
+- docker 호출이 사용자 `~/.docker` 에 기대지 않는다(`scripts/docker-env.sh`, `tests/conftest.py`).
+
 ## 0.20.0 (제안, 계약 3.4.17 / link v0.4.22)
 
 - 영역 DB 이미지 ops-feedback-db(variant db, D126, ADR 0035): 계정 4개(소유자·dml 각 2), PUBLIC CONNECT 회수, trust 없음, TLS 필수, 인증서 갱신 재읽기.
