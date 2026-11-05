@@ -35,7 +35,7 @@ def env(pipeline):
 
 def post(base, cid, body, token="review-tok"):
     req = urllib.request.Request(f"{base}/v1/cases/{cid}/review", method="POST", data=json.dumps(body).encode(),
-                                 headers={"Authorization": f"Bearer {token}"})
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read())
@@ -139,6 +139,7 @@ def post_h(base, cid, body, user=None, token="review-tok"):
     h = {"Authorization": f"Bearer {token}"}
     if user is not None:
         h["X-Openit-User"] = user
+    h["Content-Type"] = "application/json"
     req = urllib.request.Request(f"{base}/v1/cases/{cid}/review", method="POST", data=json.dumps(body).encode(), headers=h)
     try:
         with urllib.request.urlopen(req) as r:

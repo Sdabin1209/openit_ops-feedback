@@ -247,7 +247,7 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
         Route("POST", "/v1/cases/{case_id}/review", review, roles=roles(REVIEW), request_schema="CaseReviewRequest", response_schema="FailureCase",
               require_user=require_reviewer_identity, max_body=MAX_REVIEW_BODY),
     ]
-    inner = App(routes, tokens, ready=ready)
+    inner = App(routes, tokens, ready=ready, contract_service="ops-feedback", contract_bindings={"read_roles": sorted(roles(READ)), "review_roles": sorted(roles(REVIEW)), "gateway_roles": sorted(GATEWAY_ROLES), "review_identity": require_reviewer_identity})
 
     def metrics_text() -> bytes:
         """R10.11: Prometheus 텍스트 형식(exposition format 0.0.4). 프로세스 안의 누적값만 낸다: DB를 부르지 않으므로 저장소가 멈춘 동안에도 200이다."""

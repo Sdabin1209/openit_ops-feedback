@@ -43,7 +43,7 @@ def srv(failure_store, stored_trace):
 
 
 def call(base, path, token="r1", method="GET", body=None):
-    req = urllib.request.Request(base + path, method=method, data=body, headers={"Authorization": f"Bearer {token}"} if token else {})
+    req = urllib.request.Request(base + path, method=method, data=body, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"} if token else {})
     try:
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read())
