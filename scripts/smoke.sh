@@ -2,6 +2,7 @@
 # 이미지를 빌드하고 컨테이너를 띄워 /healthz, /readyz, 수집(ACCEPTED/DUPLICATE)을 확인한다. 실패하면 0이 아닌 값으로 끝난다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/docker-env.sh                      # DOCKER_CONFIG·DOCKER_HOST 규칙(사용자 ~/.docker 에 기대지 않는다)
 DOCKER=${DOCKER:-docker}     # 실행 파일 이름만 바꿀 수 있다(예: DOCKER=podman). 다른 분기는 없다.
 if ! $DOCKER info >/dev/null 2>&1; then
   echo "오류: $DOCKER 데몬에 연결할 수 없다. 데몬이 실행 중이고 이 사용자가 접근할 수 있는지 확인하라." >&2

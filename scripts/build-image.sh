@@ -6,6 +6,7 @@ set -euo pipefail
 REQ=${1:?사용법: bash scripts/build-image.sh <요청 JSON 파일>}
 DOCKER=${DOCKER:-docker}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+. "$HERE/scripts/docker-env.sh"      # DOCKER_CONFIG·DOCKER_HOST 규칙(사용자 ~/.docker 에 기대지 않는다)
 # 왜 이 파이썬: 요청 검증에 계약 패키지가 필요하다. 영역 가상환경이 있으면 그것을, 없으면 PYTHON(또는 python3)을 쓴다.
 PY=${PYTHON:-$([ -x "$HERE/.venv/bin/python" ] && echo "$HERE/.venv/bin/python" || echo python3)}
 log() { echo "build-image: $*" >&2; }
