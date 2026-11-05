@@ -242,7 +242,7 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
         Route("POST", "/v1/traces", post_trace, roles=frozenset({INGEST}), request_schema="TraceEnvelope", response_schema="IngestResult", max_body=MAX_BODY),
         Route("GET", "/v1/cases", list_cases, roles=roles(READ), response_schema="ListEnvelope"),      # 봉투는 Route가, 원소(FailureCase)는 핸들러가 계약으로 검증한다(ListEnvelope는 원소 모양을 정하지 않는다): R7
         Route("GET", "/v1/cases/{case_id}", get_case, roles=roles(READ), response_schema="FailureCase"),
-        Route("GET", "/v1/deidentified-traces/{ref}", get_trace, roles=roles(READ)),
+        Route("GET", "/v1/deidentified-traces/{ref}", get_trace, roles=roles(READ), response_schema="OpsFeedbackDeidentifiedTrace"),   # R7: 내보내기 전에 계약으로 검증(HTTP.md get_trace)
         Route("GET", "/v1/review-traces/{ref}", get_review_trace, roles=roles(REVIEW), response_schema="OpsFeedbackReviewTrace", require_user=require_reviewer_identity),
         Route("POST", "/v1/cases/{case_id}/review", review, roles=roles(REVIEW), request_schema="CaseReviewRequest", response_schema="FailureCase",
               require_user=require_reviewer_identity, max_body=MAX_REVIEW_BODY),

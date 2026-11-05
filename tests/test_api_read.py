@@ -7,7 +7,9 @@ import urllib.request
 
 import pytest
 
-from conftest import envelope, make_trace
+from conftest import SALT, envelope, make_trace
+from ops_feedback.components.deidentifier import DeidPolicy
+from tdeid import Deidentifier   # conftest 와 같은 시험용 연결(비식별기 + 보기 권한)
 from ops_feedback.wiring.ingest_service import make_ingest_server as make_server
 from ops_feedback.config import parse_read_tokens
 from ops_feedback.components.failure_case_store import FailureCaseStore as FailureStoreImpl
@@ -15,9 +17,21 @@ from ops_feedback.wiring.log_store import LogStore
 from test_conformance_failurestore import case
 
 
+def _deidentified_trace(cfg):
+    """저장소에 들어가는 비식별 trace 는 제품과 같이 비식별기를 거친 것이다(계약 OpsFeedbackDeidentifiedTrace). 계약 밖 dict 를 직접 넣지 않는다."""
+    log = LogStore.memory()
+    deid = Deidentifier(DeidPolicy.from_config(cfg["deid"]), SALT, log.grant_deidentifier_view())
+    return deid.deidentify({"envelope": envelope(make_trace())})["trace"]
+
+
 @pytest.fixture
-def srv(failure_store):
-    failure_store.put_trace("tr-1", {"session_id": "p-x", "turn_id": "p-y"})
+def stored_trace(cfg):
+    return _deidentified_trace(cfg)
+
+
+@pytest.fixture
+def srv(failure_store, stored_trace):
+    failure_store.put_trace("tr-1", stored_trace)
     for i in range(3):
         failure_store.publish_case(case(f"fc-{i}", failure_type="A" if i < 2 else "B"))
     failure_store.publish_case(case("fc-0", version=2, review_status="CONFIRMED", created_at="2026-10-16T00:00:00Z"))
@@ -66,8 +80,8 @@ def test_list_filters_and_paging(srv):
     assert call(srv, "/v1/cases?updated_since=garbage")[0] == 400
 
 
-def test_get_trace(srv):
-    assert call(srv, "/v1/deidentified-traces/tr-1") == (200, {"session_id": "p-x", "turn_id": "p-y"})
+def test_get_trace(srv, stored_trace):
+    assert call(srv, "/v1/deidentified-traces/tr-1") == (200, stored_trace)
     assert call(srv, "/v1/deidentified-traces/zzz")[0] == 404
 
 
