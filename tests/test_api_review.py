@@ -141,6 +141,7 @@ def post_h(base, cid, body, user=None, token="review-tok"):
         h["X-Openit-User"] = user
     h["Content-Type"] = "application/json"
     req = urllib.request.Request(f"{base}/v1/cases/{cid}/review", method="POST", data=json.dumps(body).encode(), headers=h)
+    req.add_header("Content-Type", "application/json")   # 계약은 JSON 본문의 매체를 application/json 으로 정한다(link 가 강제, 3.4.19)
     try:
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read())

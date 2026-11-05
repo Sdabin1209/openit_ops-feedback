@@ -122,6 +122,7 @@ def call(base, path, token, user=None, method="GET", body=None):
     if user:
         h["X-Openit-User"] = user
     rq = urllib.request.Request(base + path, method=method, headers=h, data=json.dumps(body).encode() if body is not None else None)
+    rq.add_header("Content-Type", "application/json")   # 계약은 JSON 본문의 매체를 application/json 으로 정한다(link 가 강제, 3.4.19)
     try:
         with urllib.request.urlopen(rq) as r:
             return r.status, json.loads(r.read())

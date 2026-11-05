@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# deploy 와 같은 실행 조건으로 띄운다(읽기 전용 루트, /tmp tmpfs, cap_drop ALL, no-new-privileges, 쓸 수 있는 경로는 deploy compose 와 같게): 2026-11-06 E2E 기동에서야 드러난 쓰기 경로 결함을 스모크에서 잡는다
 # 이미지를 빌드하고 컨테이너를 띄워 /healthz, /readyz, 수집(ACCEPTED/DUPLICATE)을 확인한다. 실패하면 0이 아닌 값으로 끝난다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -38,14 +39,17 @@ cleanup() {
       echo "--- 진단 끝 ---"
     } >&2
   fi
-  $DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf ${SECDIR:-} ${DEPS:-}
+  $DOCKER rm -f $NAME >/dev/null 2>&1 || true; $DOCKER rmi -f $IMG >/dev/null 2>&1 || true; rm -rf ${SECDIR:-} ${DEPS:-} ${JOBDIR:-}
 }
 trap cleanup EXIT
 # 비밀은 환경 변수가 아니라 파일로 준다(NAME_FILE, D84). docker inspect/exec env에 값이 보이지 않아야 한다.
 SECDIR=$(mktemp -d); chmod 750 $SECDIR
 printf 'smoke-token' > $SECDIR/ingest; printf 'synthetic-data=read-token' > $SECDIR/read; printf 'reviewer=review-token' > $SECDIR/review; printf 'smoke-salt-0123456789abcdef-0123456789abcdef' > $SECDIR/salt
 chmod 640 $SECDIR/*
-$DOCKER run -d --name $NAME --group-add "$(id -g)" -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro \
+# 잡 설정은 시작할 때 마운트한다(deploy 와 같다): 읽기 전용 루트에서는 실행 중 컨테이너로 docker cp 를 할 수 없다
+JOBDIR=$(mktemp -d); chmod 755 $JOBDIR
+sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/job.example.yaml > $JOBDIR/job.yaml; chmod 644 $JOBDIR/job.yaml
+$DOCKER run -d --name $NAME --group-add "$(id -g)" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro -v $JOBDIR/job.yaml:/etc/openit/job.yaml:ro \
   -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read -e OPS_REVIEW_TOKENS_FILE=/run/secrets/review \
   -e OPS_DEID_SALT_FILE=/run/secrets/salt $IMG >/dev/null
 if $DOCKER inspect $NAME | grep -qE 'smoke-token|read-token|review-token|smoke-salt-0123456789abcdef-0123456789abcdef'; then echo "inspect에 비밀 값이 보인다"; exit 1; fi
@@ -73,14 +77,14 @@ post() { curl -sS -X POST -H "Authorization: Bearer smoke-token" -H "Content-Typ
 R1=$(post); R2=$(post)
 echo "send1: $R1"; echo "send2: $R2"
 echo "$R1" | grep -q '"ACCEPTED"' && echo "$R2" | grep -q '"DUPLICATE"' && echo "$R1" | grep -q "\"pipeline_schema_version\": \"$PSV\""  || { echo "수집 확인 실패"; exit 1; }
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces)
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -d '{}' http://127.0.0.1:$PORT/v1/traces)
 [ "$code" = "401" ] || { echo "토큰 없는 요청이 401이 아님(D106): $code"; exit 1; }
-curl -s -D - -o /dev/null -X POST -d '{}' http://127.0.0.1:$PORT/v1/traces | grep -qi '^www-authenticate: Bearer' || { echo "401에 WWW-Authenticate: Bearer가 없음"; exit 1; }
+curl -s -D - -o /dev/null -X POST -H "Content-Type: application/json" -d '{}' http://127.0.0.1:$PORT/v1/traces | grep -qi '^www-authenticate: Bearer' || { echo "401에 WWW-Authenticate: Bearer가 없음"; exit 1; }
 rd() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -H "Authorization: Bearer $1" "http://127.0.0.1:$PORT$2"; }
 [ "$(rd read-token '/v1/cases?latest_only=true&limit=5')" = "200" ] && grep -q '"items": \[\]' /tmp/smoke-$$.out || { echo "읽기 호출 실패"; exit 1; }
 [ "$(rd read-token /v1/cases/nope)" = "404" ] || { echo "없는 사례가 404가 아님"; exit 1; }
 [ "$(rd smoke-token /v1/cases)" = "403" ] || { echo "수집 토큰으로 읽기가 거부되지 않음"; exit 1; }
-c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer read-token" -d "$BODY" http://127.0.0.1:$PORT/v1/traces)
+c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Content-Type: application/json" -H "Authorization: Bearer read-token" -d "$BODY" http://127.0.0.1:$PORT/v1/traces)
 [ "$c" = "403" ] || { echo "읽기 토큰으로 수집이 거부되지 않음: $c"; exit 1; }
 rm -f /tmp/smoke-$$.out
 # 라벨은 계약 ImageLabels로 검사한다(값 없음은 n/a, revision은 hex, boundary는 v 접두사)
@@ -92,12 +96,10 @@ rm -f /tmp/smoke-labels-$$.json
 # 검토 게시: 실패 턴을 보내고 컨테이너 안에서 잡을 한 번 돌려 사례를 만든 뒤 HTTP로 검토한다
 FAIL=$(echo "$BODY" | python3 -c 'import json,sys
 b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"]["response_output"]="x"; b["trace"]["response_outcome"]="fallback"; print(json.dumps(b))')
-curl -fsS -X POST -H "Authorization: Bearer smoke-token" -d "$FAIL" http://127.0.0.1:$PORT/v1/traces >/dev/null
-sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/job.example.yaml > /tmp/smoke-job-$$.yaml
-$DOCKER cp /tmp/smoke-job-$$.yaml $NAME:/tmp/job.yaml; rm -f /tmp/smoke-job-$$.yaml
-$DOCKER exec $NAME python -m ops_feedback.job --config /tmp/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
+curl -fsS -X POST -H "Content-Type: application/json" -H "Authorization: Bearer smoke-token" -d "$FAIL" http://127.0.0.1:$PORT/v1/traces >/dev/null
+$DOCKER exec $NAME python -m ops_feedback.job --config /etc/openit/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
 CID=$(curl -fsS -H "Authorization: Bearer read-token" "http://127.0.0.1:$PORT/v1/cases?review_status=PENDING" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["case_id"])')
-rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Authorization: Bearer $1" ${3:+-H "X-Openit-User: $3"} -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
+rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $1" ${3:+-H "X-Openit-User: $3"} -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
 [ "$(rv read-token '{"review_status":"DISMISSED"}')" = "403" ] || { echo "읽기 토큰으로 검토가 거부되지 않음"; exit 1; }
 [ "$(rv review-token '{"review_status":"DISMISSED"}')" = "401" ] || { echo "신원 없는 검토 게시가 401이 아님(D88/U7, D106)"; exit 1; }
 [ "$(rv review-token '{"review_status":"DISMISSED"}' smoke.reviewer)" = "201" ] || { echo "검토 게시 실패"; exit 1; }
