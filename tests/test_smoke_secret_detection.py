@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 
 import pytest
+from waiting import HANG_GUARD_SECONDS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,7 +34,7 @@ TOKEN=$MARKER; READTOKEN=$MARKER; REVTOKEN=$MARKER
 INGEST_TOKEN=$MARKER; READ_TOKEN=$MARKER; REVIEW_TOKEN=$MARKER; DEID_SALT=$MARKER
 ''' + actual_checks
         result = subprocess.run(
-            ['bash', '-c', shell], capture_output=True, text=True, timeout=10,
+            ['bash', '-c', shell], capture_output=True, text=True, timeout=HANG_GUARD_SECONDS,
             env={**os.environ, 'FIXTURE': str(fixture), 'MARKER': token,
                  'ENV_FIXTURE': token if leak == 'env' else 'TOKEN_FILE=/run/secrets/qa-read-tokens'},
         )
