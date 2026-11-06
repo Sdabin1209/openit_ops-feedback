@@ -9,6 +9,36 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$HERE/scripts/docker-env.sh"      # DOCKER_CONFIG·DOCKER_HOST 규칙(사용자 ~/.docker 에 기대지 않는다)
 # 왜 이 파이썬: 요청 검증에 계약 패키지가 필요하다. 영역 가상환경이 있으면 그것을, 없으면 PYTHON(또는 python3)을 쓴다.
 PY=${PYTHON:-$([ -x "$HERE/.venv/bin/python" ] && echo "$HERE/.venv/bin/python" || echo python3)}
+# 주입 선언(계약 ContainerInputs 3.5.0, 라벨 io.openit.inputs): 정본은 리포 안 JSON. 라벨로 달기 전에 계약으로 검증하고(R7), 빌드한 이미지의 실행 사용자와 대조한다.
+# 왜 대조하는가: 배치 영역은 선언의 숫자 uid:gid 로 파일·쓰기 권한을 준다. 이미지와 다르면 기동에서야 권한 오류가 난다(2026-11-06 DB 비밀 읽기 실패).
+inputs_label() {   # inputs_label <선언 파일> <이미지 이름> -> 한 줄 JSON(표준 출력)
+  "${PYTHON:-${PY:-python3}}" -c '
+import json, sys
+from boundary_contracts import validator
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+if d.get("image") != sys.argv[2]:
+    sys.exit("%s 의 image(%s)가 이미지 이름 %s 와 다르다" % (sys.argv[1], d.get("image"), sys.argv[2]))
+errs = list(validator("ContainerInputs").iter_errors(d))
+if errs:
+    sys.exit("%s 가 ContainerInputs 를 어긴다: " % sys.argv[1] + ", ".join("/" + "/".join(map(str, e.absolute_path)) + ":" + e.validator for e in errs[:5]))
+print(json.dumps(d, ensure_ascii=False, separators=(",", ":"), sort_keys=True))' "$1" "$2"
+}
+inputs_check() {   # inputs_check <이미지 태그> <inputs_label 출력>: 다르면 이미지를 지우고 실패
+  local u g cu
+  # 실행 사용자: 이미지 안 id 로 읽는다. id 가 없는 이미지(distroless)는 이미지 설정 User 가 숫자 uid:gid 일 때만 그 값을 쓴다(이름이면 판정하지 못해 실패)
+  if u=$("${DOCKER:-docker}" run --rm --network none --entrypoint id "$1" -u 2>/dev/null) && g=$("${DOCKER:-docker}" run --rm --network none --entrypoint id "$1" -g 2>/dev/null); then :
+  else
+    cu=$("${DOCKER:-docker}" image inspect "$1" --format '{{.Config.User}}' 2>/dev/null)
+    if [[ "$cu" =~ ^([0-9]+):([0-9]+)$ ]]; then u=${BASH_REMATCH[1]}; g=${BASH_REMATCH[2]}
+    else "${DOCKER:-docker}" rmi -f "$1" >/dev/null 2>&1; echo "build-image: 이미지 실행 사용자를 읽지 못했다(id 없음, User=$cu): $1" >&2; return 1; fi
+  fi
+  "${PYTHON:-${PY:-python3}}" -c '
+import json, sys
+d = json.loads(sys.argv[1]); u, g = int(sys.argv[2]), int(sys.argv[3])
+bad = sorted(k for s in ("roles", "jobs") for k, st in d[s].items() if (st["process"]["uid"], st["process"]["gid"]) != (u, g))
+sys.exit("주입 선언의 process 가 이미지 실행 사용자 %d:%d 와 다르다: %s" % (u, g, bad) if bad else 0)' "$2" "$u" "$g" \
+    || { "${DOCKER:-docker}" rmi -f "$1" >/dev/null 2>&1; echo "build-image: 주입 선언이 이미지와 다르다. 이미지를 지웠다: $1" >&2; return 1; }
+}
 log() { echo "build-image: $*" >&2; }
 
 # 1) 요청 검증과 값 꺼내기. 계약 패키지는 요청이 가리키는 boundary 소스 트리에서 읽는다(설치본에 기대지 않는다).
@@ -100,7 +130,9 @@ PYEOF
 if [ "${VARIANT:-}" = db ]; then
   # 변형 db: 공식 postgres 이미지 위에 계정·권한·접속 규칙·TLS 설정(db/). 파이썬 wheel 이 필요 없다.
   log "docker build $TAG (db)"
-  "$DOCKER" build -q -t "$TAG" --build-arg COMMIT="$REV" --build-arg CONTRACTS_VERSION="$BC" --build-arg DATABASE_DECLARATION="$DBDECL" "$HERE/db" >&2
+  INPUTS=$(PYTHONPATH="$SRC_B" inputs_label "$HERE/db/inputs.json" ops-feedback-db) || exit 2
+  "$DOCKER" build -q -t "$TAG" --build-arg COMMIT="$REV" --build-arg CONTRACTS_VERSION="$BC" --build-arg DATABASE_DECLARATION="$DBDECL" --label "io.openit.inputs=$INPUTS" "$HERE/db" >&2
+  inputs_check "$TAG" "$INPUTS" || exit 1
   IID=$("$DOCKER" image inspect "$TAG" --format '{{.Id}}')
   LABELS=$("$DOCKER" image inspect "$TAG" --format '{{json .Config.Labels}}')
   "$PY" - "$SRC_B" "$TAG" "$IID" "$LABELS" <<'PYEOF'
@@ -151,9 +183,11 @@ sys.exit("build-image: 문진 스키마 wheel의 버전을 읽지 못했다") if
 PYEOF
 )
 # 3) 이미지. 인자 이름은 이 영역의 Dockerfile이 정한다(여기에만 있다). model-runtime은 이 이미지에 들어 있지 않아 n/a다(turn-engine 라벨은 3.0.0에서 없어졌다).
+INPUTS=$(PYTHONPATH="$SRC_B" inputs_label "$HERE/deploy-inputs.json" ops-feedback) || exit 2
 log "docker build $TAG"
 "$DOCKER" build -q -t "$TAG" --build-arg COMMIT="$REV" --build-arg CONTRACTS_VERSION="$BC" --build-arg SURVEY_SCHEMA_VERSION="$SS_INT" \
-  --build-arg MODEL_RUNTIME_VERSION=n/a --label "io.openit.exposure=$EXPOSURE" --label "io.openit.jobs=$JOBS" "$HERE" >&2
+  --build-arg MODEL_RUNTIME_VERSION=n/a --label "io.openit.exposure=$EXPOSURE" --label "io.openit.jobs=$JOBS" --label "io.openit.inputs=$INPUTS" "$HERE" >&2
+inputs_check "$TAG" "$INPUTS" || exit 1
 
 # 4) 결과: 이미지에 실제로 붙은 라벨을 docker inspect로 읽고 BuildImageResult로 검증한 한 줄을 마지막에 낸다.
 IID=$("$DOCKER" image inspect "$TAG" --format '{{.Id}}')

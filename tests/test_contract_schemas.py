@@ -121,6 +121,8 @@ def test_dockerfile_build_args_and_labels_follow_contract():
     filled = {"io.openit.service": "ops-feedback"}
     for key, var in labels.items():
         filled[key] = given.get(var, args.get(var))
+    # 진입점(build-image)이 --label 로 다는 주입 선언(계약 ContainerInputs 3.5.0 필수): Dockerfile 만으로는 계약 이미지가 아니다
+    filled["io.openit.inputs"] = json.dumps(json.loads((ROOT / "deploy-inputs.json").read_text(encoding="utf-8")))
     assert validator("ImageLabels").is_valid(filled), filled
 
 

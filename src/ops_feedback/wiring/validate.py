@@ -17,6 +17,7 @@ from boundary_contracts.errors import BoundaryError
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
+from boundary_contracts import format_checker as _bc_format_checker  # 형식(format) 검증기가 없으면 조용히 넘기지 않고 실패한다(계약 3.5.0)
 
 _OPS = "file:///ops/"
 _BOUNDARY = "file:///boundary/"
@@ -45,7 +46,7 @@ def validator(name: str, *, contract: bool = False) -> Draft202012Validator:
     base, d = (_BOUNDARY, _contract_dir()) if contract else (_OPS, area_schema_dir())
     if not (d / f"{name}.schema.json").exists():
         raise ValueError(f"알 수 없는 스키마: {name}")
-    return Draft202012Validator({"$ref": base + f"{name}.schema.json"}, registry=_registry(), format_checker=Draft202012Validator.FORMAT_CHECKER)
+    return Draft202012Validator({"$ref": base + f"{name}.schema.json"}, registry=_registry(), format_checker=_bc_format_checker({"$ref": base + f"{name}.schema.json"}))
 
 
 def brief(e) -> str:
@@ -64,7 +65,7 @@ def check(name: str, value: Any, *, contract: bool = False, code: str = "INVALID
 @lru_cache(maxsize=None)
 def contract_part(contract: str, pointer: str) -> Draft202012Validator:
     """계약 스키마의 한 부분(JSON Pointer, 예: `/properties/rollback`)을 검증하는 검증기. 영역이 같은 조건을 복사하지 않고 계약을 가리키게 한다."""
-    return Draft202012Validator({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"}, registry=_registry(), format_checker=Draft202012Validator.FORMAT_CHECKER)
+    return Draft202012Validator({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"}, registry=_registry(), format_checker=_bc_format_checker({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"}))
 
 
 def check_part(contract: str, pointer: str, value: Any, what: str, *, exc=ValueError) -> None:

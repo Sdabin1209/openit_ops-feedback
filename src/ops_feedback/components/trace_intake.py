@@ -15,13 +15,14 @@ from jsonschema import Draft202012Validator
 from ..types.RawTraceRecord import RawTraceRecord
 from ..types.TraceIntakeRequest import TraceIntakeRequest
 from ..wiring.validate import brief, check
+from boundary_contracts import format_checker as _bc_format_checker  # 형식(format) 검증기가 없으면 조용히 넘기지 않고 실패한다(계약 3.5.0)
 
 
 @lru_cache(maxsize=None)
 def _trace_validator(version: int) -> Draft202012Validator:
     # 왜 설치된 문진 스키마 패키지에서 읽나: 사본을 두면 문진 스키마가 바뀔 때 어긋난다(D110). 버전은 envelope가 정한다.
     try:
-        return Draft202012Validator(survey_schema.load_schema("TurnTrace", version))
+        return Draft202012Validator(survey_schema.load_schema("TurnTrace", version), format_checker=_bc_format_checker(survey_schema.load_schema("TurnTrace", version)))
     except KeyError:
         raise BoundaryError("UNSUPPORTED_VERSION", f"지원하지 않는 문진 스키마 버전: {version}") from None
 

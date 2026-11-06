@@ -4,7 +4,10 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 PyYAML==6.0.3
 referencing==0.37.0
+rfc3339-validator==0.1.4
+rfc3986-validator==0.1.1
 rpds-py==2026.9.1
+six==1.17.0
 typing_extensions==4.16.0
 psycopg==3.3.6
 psycopg-binary==3.3.6

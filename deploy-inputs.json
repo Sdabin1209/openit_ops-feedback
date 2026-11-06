@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "image": "ops-feedback",
+  "read_only_root": true,
+  "exec_absolute_argv": true,
+  "role_env": null,
+  "roles": {
+    "default": {
+      "env_schema": "OpsFeedbackServerEnv",
+      "process": {
+        "uid": 10001,
+        "gid": 999
+      },
+      "files": [
+        {
+          "path_env": "SSL_CERT_FILE",
+          "path": "/etc/openit/pki/root_ca.crt",
+          "directory": false,
+          "kind": "ca-bundle",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-failure-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-log-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/ops-ingest-survey-service",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/ops-read-tokens",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/ops-review-tokens",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        }
+      ],
+      "writable": [
+        {
+          "path": "/data",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        },
+        {
+          "path": "/tmp",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        }
+      ],
+      "capabilities": [],
+      "sysctls": {}
+    }
+  },
+  "jobs": {
+    "ops-feedback-backup": {
+      "env_schema": "OpsFeedbackBackupEnv",
+      "process": {
+        "uid": 10001,
+        "gid": 999
+      },
+      "files": [
+        {
+          "path_env": "SSL_CERT_FILE",
+          "path": "/etc/openit/pki/root_ca.crt",
+          "directory": false,
+          "kind": "ca-bundle",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": "OPENIT_BACKUP_CREDENTIALS_FILE",
+          "path": "/run/secrets/backup-ops-credentials",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": "OPENIT_BACKUP_REPO_PASSWORD_FILE",
+          "path": "/run/secrets/backup-ops-repo-password",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-failure-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-log-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        }
+      ],
+      "writable": [
+        {
+          "path": "/data",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        },
+        {
+          "path": "/tmp",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        }
+      ],
+      "capabilities": [],
+      "sysctls": {}
+    },
+    "ops-feedback-job": {
+      "env_schema": "OpsFeedbackServerEnv",
+      "process": {
+        "uid": 10001,
+        "gid": 999
+      },
+      "files": [
+        {
+          "path_env": "SSL_CERT_FILE",
+          "path": "/etc/openit/pki/root_ca.crt",
+          "directory": false,
+          "kind": "ca-bundle",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-failure-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-log-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/deid-salt",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/gate-read-ops-feedback",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/gate-write-ops-feedback",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        }
+      ],
+      "writable": [
+        {
+          "path": "/data",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        },
+        {
+          "path": "/tmp",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        }
+      ],
+      "capabilities": [],
+      "sysctls": {}
+    },
+    "ops-feedback-migrate": {
+      "env_schema": "OpsFeedbackServerEnv",
+      "process": {
+        "uid": 10001,
+        "gid": 999
+      },
+      "files": [
+        {
+          "path_env": null,
+          "path": "/etc/openit/pki",
+          "directory": true,
+          "kind": "certificate",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-failure-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-log-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        }
+      ],
+      "writable": [
+        {
+          "path": "/tmp",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        }
+      ],
+      "capabilities": [],
+      "sysctls": {}
+    },
+    "ops-feedback-restore": {
+      "env_schema": "OpsFeedbackBackupEnv",
+      "process": {
+        "uid": 10001,
+        "gid": 999
+      },
+      "files": [
+        {
+          "path_env": "SSL_CERT_FILE",
+          "path": "/etc/openit/pki/root_ca.crt",
+          "directory": false,
+          "kind": "ca-bundle",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": "OPENIT_BACKUP_CREDENTIALS_FILE",
+          "path": "/run/secrets/backup-ops-credentials",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": "OPENIT_BACKUP_REPO_PASSWORD_FILE",
+          "path": "/run/secrets/backup-ops-repo-password",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-failure-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        },
+        {
+          "path_env": null,
+          "path": "/run/secrets/db-ops-log-app-dsn",
+          "directory": false,
+          "kind": "secret",
+          "schema": null,
+          "required": true,
+          "opened_by": "start-process"
+        }
+      ],
+      "writable": [
+        {
+          "path": "/data",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        },
+        {
+          "path": "/tmp",
+          "persist": false,
+          "written_by": {
+            "uid": 10001,
+            "gid": 999
+          }
+        }
+      ],
+      "capabilities": [],
+      "sysctls": {}
+    }
+  }
+}
