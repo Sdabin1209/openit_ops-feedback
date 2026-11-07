@@ -154,7 +154,7 @@ class Detector(Protocol):
 
 ## 11. 외부 의존과 대역
 
-- I4 ReleaseReader, I5 GateService는 `boundary_contracts.sdk`의 Protocol로만 받는다(생성자 인자). 시험용 대역은 `tests/fakes.py`에 직접 만들었다. 실제 SDK는 설정의 `release_reader.factory`, `gate_service.factory`("모듈:함수")로 연결한다.
+- I4 ReleaseReader, I5 GateService는 `boundary_contracts.sdk`의 Protocol로만 받는다(생성자 인자). 시험용 대역은 `tests/fakes.py`에 직접 만들었다. 운영 연결은 설정의 `release_reader`·`gate_service` 가 `HttpClientSettings`(kind http, base_url, token_secret)이고 wiring 이 계약 HTTP 클라이언트를 만든다(계약 4.0.0 D135, 설정에 '모듈:함수' 공장 없음).
 - 모든 경계 호출의 실패는 `BoundaryError`다. 저장소 오류는 `UNAVAILABLE`로 감싼다.
 - 해시는 `boundary_contracts.canonical`만 쓴다. 레코드는 쓰기 전에 `schemas.validate_record`로 검증한다.
 
