@@ -8,7 +8,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 AREA=ops-feedback
 VENV=.venv
-TEST_COMMAND='[".venv/bin/python", "-m", "pytest", "-q"]'     # 리포 루트에서 영역 시험 전체를 돌리는 argv
+TEST_COMMAND='["bash", "scripts/dev-postgres.sh"]'     # 리포 루트에서 영역 시험 전체를 돌리는 argv: 일회용 PostgreSQL 위의 pytest 전체(PostgreSQL 시험을 건너뛰지 않는다, 2026-11-07)
 
 report() {   # report <status> <exit_code>
   python3 - "$AREA" "$1" "$2" "$SECONDS" "$VENV" "$TEST_COMMAND" <<'PYEOF'

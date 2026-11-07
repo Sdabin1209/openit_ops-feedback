@@ -36,7 +36,7 @@ def test_last_stdout_line_is_a_valid_setup_env_report(tmp_path):
     rep = json.loads(last)
     assert not list(validator("SetupEnvReport").iter_errors(rep)), rep
     assert rep["area"] == "ops-feedback" and rep["status"] == "ok" and rep["exit_code"] == 0
-    assert rep["environment"] == {"kind": "python-venv", "path": ".venv", "test_command": [".venv/bin/python", "-m", "pytest", "-q"]}
+    assert rep["environment"] == {"kind": "python-venv", "path": ".venv", "test_command": ["bash", "scripts/dev-postgres.sh"]}
     assert "pip noise" not in r.stdout          # 진행 기록(pip 출력)은 표준 오류로
 
 
