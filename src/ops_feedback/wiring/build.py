@@ -14,23 +14,6 @@ from .rollback_flow import RollbackPlanner
 from .storage import open_failure_store, open_log_store
 
 
-def _resolve_args(args, env: dict, path: str = "args"):
-    """설정의 {secret: 이름} 또는 {env: 이름}을 read_secret(이름)으로 푼다(중첩 포함). 비밀 값을 설정 파일에 두지 않는다."""
-    if isinstance(args, dict):
-        if set(args) in ({"secret"}, {"env"}):
-            name = args.get("secret", args.get("env"))
-            if not isinstance(name, str) or not name:
-                raise ValueError(f"설정 {path}: 비밀 이름은 비어 있지 않은 문자열이어야 한다")
-            val = read_secret(name, environ=env)      # NAME_FILE 우선, 없으면 NAME
-            if not val:      # 없거나 빈 파일/값: 빈 비밀은 없는 것과 같다
-                raise ValueError(f"비밀 {name}가 없다(NAME_FILE 또는 NAME)")
-            return val
-        return {k: _resolve_args(v, env, f"{path}.{k}") for k, v in args.items()}
-    if isinstance(args, list):
-        return [_resolve_args(v, env, f"{path}[{i}]") for i, v in enumerate(args)]
-    return args
-
-
 def _http_client(name: str, settings: dict, env: dict, egress):
     """계약 HttpClientSettings(4.0.0, D135)로 역할에 정해진 계약 클라이언트를 만든다. 구현 모듈 경로(factory)는 받지 않는다.
     토큰은 token_secret 이름으로 read_secret(NAME_FILE 우선)이 읽고, 출구는 환경의 OPENIT_EGRESS_PROXY 만 쓴다(R1.8). timeout 이 없으면 클라이언트 기본(R10.3)."""

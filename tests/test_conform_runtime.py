@@ -17,37 +17,40 @@ from ops_feedback.wiring.log_store import LogStore
 CAPTURED: dict = {}
 
 
-def capture_client(**kw):
-    """release_reader 팩토리 대역: build 가 클라이언트 생성에 넘기는 인자를 그대로 기록한다."""
-    CAPTURED.clear()
-    CAPTURED.update(kw)
-    return object()
+class CaptureClient:
+    """HttpReleaseReader 대역: build 가 클라이언트 생성에 넘기는 인자를 그대로 기록한다(설정이 아니라 클라이언트 모듈의 이름을 바꿔 끼운다, D135)."""
+
+    def __init__(self, *a, **kw):
+        CAPTURED.clear()
+        CAPTURED.update(kw, base_url=a[0], token=a[1])
 
 
-def _build(tmp_path, args, env_extra):
+def _build(tmp_path, settings, env_extra, monkeypatch):
     import yaml
+    from boundary_contracts import clients
     from conftest import base_config
     from ops_feedback.config import load_config
     from ops_feedback.wiring.build import build_from_config
+    monkeypatch.setattr(clients, "HttpReleaseReader", CaptureClient)
     cfg = base_config()
     cfg["storage"] = {"log_db": str(tmp_path / "l.db"), "failure_db": str(tmp_path / "f.db")}
-    cfg["release_reader"] = {"factory": "test_conform_runtime:capture_client", "args": args}
+    cfg["release_reader"] = {"kind": "http", "token_secret": "OPS_GATE_READ_TOKEN", **settings}
     p = tmp_path / "job.yaml"
     p.write_text(yaml.safe_dump(cfg))
-    build_from_config(load_config(p), {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef", **env_extra})
+    build_from_config(load_config(p), {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef", "OPS_GATE_READ_TOKEN": "t", **env_extra})
     return dict(CAPTURED)
 
 
-def test_r10_3_build_does_not_override_the_client_timeout(tmp_path):
-    """R10.3: 호출자 설정에 값이 없으면 계약 클라이언트 기본(10초)이다: 우리 배선은 timeout 을 만들어 넣지 않는다. 설정(args.timeout)이 있으면 그 값이 간다."""
-    assert "timeout" not in _build(tmp_path, {"base_url": "https://release-gate"}, {})
-    assert _build(tmp_path, {"base_url": "https://release-gate", "timeout": 5}, {})["timeout"] == 5
+def test_r10_3_build_does_not_override_the_client_timeout(tmp_path, monkeypatch):
+    """R10.3: 호출자 설정에 값이 없으면 계약 클라이언트 기본(10초)이다: 우리 배선은 timeout 을 만들어 넣지 않는다. 설정(timeout_seconds)이 있으면 그 값이 간다."""
+    assert "timeout" not in _build(tmp_path, {"base_url": "https://release-gate"}, {}, monkeypatch)
+    assert _build(tmp_path, {"base_url": "https://release-gate", "timeout_seconds": 5}, {}, monkeypatch)["timeout"] == 5
 
 
-def test_r1_8_release_gate_client_gets_the_egress_proxy_from_the_environment(tmp_path):
+def test_r1_8_release_gate_client_gets_the_egress_proxy_from_the_environment(tmp_path, monkeypatch):
     """R1.8·CONVENTIONS 13절: 영역 밖(release-gate) 클라이언트 생성에 OPENIT_EGRESS_PROXY 하나만 꺼내 egress_proxy 로 넘긴다. 없으면 None."""
-    assert _build(tmp_path, {"base_url": "https://release-gate"}, {"OPENIT_EGRESS_PROXY": "http://127.0.0.1:3128"})["egress_proxy"] == "http://127.0.0.1:3128"
-    assert _build(tmp_path, {"base_url": "https://release-gate"}, {})["egress_proxy"] is None
+    assert _build(tmp_path, {"base_url": "https://release-gate"}, {"OPENIT_EGRESS_PROXY": "http://127.0.0.1:3128"}, monkeypatch)["egress_proxy"] == "http://127.0.0.1:3128"
+    assert _build(tmp_path, {"base_url": "https://release-gate"}, {}, monkeypatch)["egress_proxy"] is None
 
 
 def test_r8_1_unavailable_logs_exception_kind_and_location_not_message(caplog):

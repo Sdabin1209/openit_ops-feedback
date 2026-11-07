@@ -62,8 +62,6 @@ retention:                              # D88/U4 최소 보존 잠정 기본값(
 #   requested_by_role: ops-feedback
 #   auto_submit: false
 # release_reader:                       # I4 읽기. 주소는 배치 설정이므로 https만 쓴다(사설 루트는 SSL_CERT_FILE 표준 환경 변수로 믿는다).
-#   factory: "boundary_contracts.clients:HttpReleaseReader"
-#   args: {base_url: "https://<release-gate 주소>", token: {secret: OPS_GATE_READ_TOKEN}}   # {secret: 이름}(또는 {env: 이름})은 이름_FILE의 파일 내용(없으면 환경 변수 이름)으로 바뀐다
+#   {kind: http, base_url: "https://<release-gate 주소>", token_secret: OPS_GATE_READ_TOKEN}   # 계약 HttpClientSettings. token_secret 은 비밀의 이름이고 값은 이름_FILE 의 파일 내용(없으면 환경 변수 이름)이다. timeout_seconds 는 선택
 # gate_service:                         # I5 request_rollback (auto_submit일 때)
-#   factory: "모듈:함수"
-#   args: {base_url: "...", token: {secret: OPS_GATE_WRITE_TOKEN}}
+#   {kind: http, base_url: "https://<release-gate 주소>", token_secret: OPS_GATE_WRITE_TOKEN}

@@ -79,10 +79,6 @@ class DeidPolicy:
     review_utterance_keep: bool = False                   # 검토 사본에 환자 발화 두 칸만 원문으로 보존한다. docs/adr/0030
     review_utterance_max_chars: int = 1000                # 계약 OpsFeedbackReviewTrace의 발화 상한(1000자)과 같다. 넘으면 앞부분만 남긴다
 
-    def unvalidated_keep_keys(self) -> list:
-        """값 검증 패턴이 없는 keep 키. 값이 그대로 통과하므로 시작 때 경고한다."""
-        return sorted(k for k in self.keep_string_keys if k not in self.keep_patterns)
-
     @classmethod
     def from_config(cls, cfg: dict) -> "DeidPolicy":
         # 키·형식·열거(unlisted_string_action은 mask만)·불리언·정규식 문법은 계약 OpsFeedbackJobConfig의 Deid 정의가 정한다(모르는 키는 거부).

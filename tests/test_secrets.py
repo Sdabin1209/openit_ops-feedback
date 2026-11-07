@@ -78,12 +78,13 @@ def test_missing_or_bad_salt_error_hides_values(tmp_path):
     assert SALT not in str(e.value)
 
 
-def test_factory_arg_token_from_file(tmp_path):
-    from ops_feedback.wiring.build import _resolve_args
+def test_client_token_from_file(tmp_path):
+    from ops_feedback.wiring.build import _http_client
     f = _secret_file(tmp_path, "gt", "gate-canary")
-    assert _resolve_args({"token": {"env": "OPS_GATE_READ_TOKEN"}, "u": "x"}, {"OPS_GATE_READ_TOKEN_FILE": f}) == {"token": "gate-canary", "u": "x"}
+    st = {"kind": "http", "base_url": "http://127.0.0.1:1", "token_secret": "OPS_GATE_READ_TOKEN"}
+    assert _http_client("HttpReleaseReader", st, {"OPS_GATE_READ_TOKEN_FILE": f}, None) is not None
     with pytest.raises(ValueError) as e:
-        _resolve_args({"token": {"env": "OPS_GATE_READ_TOKEN"}}, {})
+        _http_client("HttpReleaseReader", st, {}, None)
     assert "gate-canary" not in str(e.value)
 
 
@@ -163,17 +164,11 @@ def test_inline_secret_in_config_is_rejected_without_value(tmp_path, patch, key)
 def test_config_accepts_secret_references_and_env_name_keys(tmp_path):
     from ops_feedback.config import load_config
     cfg = base_config()
-    cfg["release_reader"] = {"factory": "x:y", "args": {"token": {"secret": "A"}, "t2": {"env": "B"}, "token_env": "C"}}
+    cfg["release_reader"] = {"kind": "http", "base_url": "http://127.0.0.1:1", "token_secret": "A"}      # 값이 아니라 비밀의 이름만 적는다(HttpClientSettings)
+    cfg["gate_service"] = {"kind": "http", "base_url": "http://127.0.0.1:2", "token_secret": "B", "timeout_seconds": 5}
     p = tmp_path / "job.yaml"
     p.write_text(yaml.safe_dump(cfg))
     load_config(p)                              # 거부하지 않는다 (deid.salt_env도 이름만)
-
-
-def test_resolve_args_secret_form_and_nesting(tmp_path):
-    from ops_feedback.wiring.build import _resolve_args
-    f = _secret_file(tmp_path, "s", "v-canary")
-    out = _resolve_args({"a": {"secret": "S"}, "n": {"h": [{"secret": "S"}]}, "k": 1}, {"S_FILE": f})
-    assert out == {"a": "v-canary", "n": {"h": ["v-canary"]}, "k": 1}
 
 
 def test_cli_rejects_inline_secret_without_printing_it(tmp_path):

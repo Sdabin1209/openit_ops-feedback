@@ -26,14 +26,21 @@ FAKE_MODEL_RUNTIME_VERSION = "0.0.0+fake-test"
 QS = {"id": "qs-main", "version": "3", "content_hash": "sha256:" + "1" * 64}
 
 
+# 계약 ServingConfig(4.0.0)의 모양. 값은 시험용 임의 값이다.
+SERVING_CONFIG = {"prompt_template_version": "prompt-4", "decoding": {"constraint_mode": "constrained", "temperature": 0, "seed": 1000, "max_tokens": 512},
+                  "max_attempts": 3, "constraint": {"backend": "fake", "backend_version": "1", "supported_features": ["$defs", "$ref", "additionalProperties", "anyOf", "enum", "items", "properties", "required", "type"],
+                                                    "relax_policy_version": "relax-3"},
+                  "output_contract": 1, "protection_policy_version": "protect-2"}
+
+
 def _manifest(rid):
     m = {"pipeline_schema_version": PIPELINE_SCHEMA_VERSION, "release_id": rid, "created_at": "2026-10-14T00:00:00Z", "gate_decision_id": "gd-1",
          "question_sets": [dict(QS, title="시험 문진표")],   # 계약 3.3.0: 문진표 목록(QuestionSetRef)
          "lora_a": {"id": "lora-a", "version": "1", "content_hash": "sha256:" + "2" * 64},
          "lora_b": {"id": "lora-b", "version": "1", "content_hash": "sha256:" + "3" * 64},
          "runtime_contract_version": 1, "action_rules_version": load_rules()["rules_version"], "model_runtime_version": FAKE_MODEL_RUNTIME_VERSION,
-         "adapters": {r: {"adapter_hash": "sha256:" + "4" * 64, "serving_config": {"k": 1},
-                          "serving_config_hash": sha256_hash({"k": 1}),
+         "adapters": {r: {"adapter_hash": "sha256:" + "4" * 64, "serving_config": SERVING_CONFIG,
+                          "serving_config_hash": sha256_hash(SERVING_CONFIG),
                           "system_prompt": {"path": "system_prompt.txt", "sha256": "sha256:" + "5" * 64}} for r in ("LORA_A", "LORA_B")}}
     m["content_hash"] = content_hash(m)
     return m
@@ -86,11 +93,10 @@ def gate():
     s.stop()
 
 
-def test_release_reader_factory_from_config(tmp_path, gate, monkeypatch, cfg):
+def test_release_reader_from_config_settings(tmp_path, gate, monkeypatch, cfg):
     import yaml
     cfg["storage"] = {"log_db": str(tmp_path / "l.db"), "failure_db": str(tmp_path / "f.db")}
-    cfg["release_reader"] = {"factory": "boundary_contracts.clients:HttpReleaseReader",
-                             "args": {"base_url": gate.url, "token": {"env": "GATE_READ"}}}
+    cfg["release_reader"] = {"kind": "http", "base_url": gate.url, "token_secret": "GATE_READ"}      # 계약 HttpClientSettings(4.0.0)
     p = tmp_path / "job.yaml"
     p.write_text(yaml.safe_dump(cfg))
     env = {"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef", "GATE_READ": "gate-read"}

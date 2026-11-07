@@ -74,14 +74,17 @@ def test_violation_path_and_code_are_validated():
     assert v[0]["path"] == "[MASKED]" and v[1]["path"] == "values[0].key" and v[0]["code"] == "RANGE"
 
 
-def test_pattern_is_configurable_and_unvalidated_keys_are_reported():
+def test_configured_pattern_only_narrows_the_contract_default_and_keys_outside_the_contract_are_rejected():
     cfg = base_config()
-    cfg["deid"]["keep_string_keys"] = cfg["deid"]["keep_string_keys"] + ["extra_key"]
     cfg["deid"]["keep_string_patterns"] = {"next_item": r"Q\d+"}
     pol = DeidPolicy.from_config(cfg["deid"])
-    assert pol.unvalidated_keep_keys() == ["extra_key"]
     out = Deidentifier(pol, "s", None).deidentify(envelope(_trace_with(next_item="END")))
-    assert out.trace["extract_output"]["next_item"] == "[MASKED]"          # 설정 패턴이 기본을 대체한다
+    assert out.trace["extract_output"]["next_item"] == "[MASKED]"          # 설정 패턴은 계약 기본과 AND 로 거는 거르개다(4.0.0): 기본에 맞아도 거르개에 안 맞으면 가린다
+    out = Deidentifier(pol, "s", None).deidentify(envelope(_trace_with(next_item="Q2")))
+    assert out.trace["extract_output"]["next_item"] == "Q2"
+    cfg["deid"]["keep_string_keys"] = cfg["deid"]["keep_string_keys"] + ["extra_key"]
+    with pytest.raises(ValueError, match="keep_string_keys"):              # 계약 열거(deid_rules.json keep_patterns 의 키) 밖의 키는 고를 수 없다
+        DeidPolicy.from_config(cfg["deid"])
 
 
 # ---------- C4/M-4: 검토자 입력의 개인정보 패턴 ----------
@@ -253,7 +256,7 @@ def test_purge_cases_orphans_and_confirmed_rule(failure_store):
     failure_store.put_trace("tr-2", TRACE)
     failure_store.publish_case(case("fc-old", created_at="2026-01-01T00:00:00Z"))
     failure_store.publish_case(case("fc-conf", created_at="2026-01-01T00:00:00Z", deidentified_trace_ref="tr-2"))
-    failure_store.publish_case(case("fc-conf", version=2, review_status="CONFIRMED", expected={"items": []}, created_at="2026-10-01T00:00:00Z", deidentified_trace_ref="tr-2"))
+    failure_store.publish_case(case("fc-conf", version=2, review_status="CONFIRMED", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A", created_at="2026-10-01T00:00:00Z", deidentified_trace_ref="tr-2"))
     assert failure_store.purge_cases_created_before("2026-06-01T00:00:00Z", include_confirmed=False) == {"cases": 1, "traces": 1}
     assert [c["case_id"] for c in failure_store.list_cases(latest_only=False)[0]] == ["fc-conf", "fc-conf"]       # 확정 사례는 기본 보호
     assert failure_store.purge_cases_created_before("2026-06-01T00:00:00Z", include_confirmed=True) == {"cases": 2, "traces": 1}
@@ -471,19 +474,18 @@ def test_all_other_regexes_run_on_the_same_inputs_without_error():
             _timed(lambda v: rx.fullmatch(v) if is_keep else rx.search(v), mk(MAX_FIELD))      # 오류 없이 끝나면 된다(시간은 재지 않는다)
 
 
-def test_deid_scans_long_strings_in_windows_instead_of_rejecting_them():
-    """문진 스키마에는 maxLength가 없어 정상 trace에도 긴 문자열이 남을 수 있다(scrub 키). 거부하지 않고 창으로 검사하며, 긴 문자열 속 개인정보는 잡는다."""
-    from ops_feedback.components.deidentifier import DeidError
+def test_deid_masks_long_strings_instead_of_rejecting_them_and_personal_data_in_them_never_survives():
+    """문진 스키마에는 maxLength가 없어 정상 trace에도 긴 문자열이 남을 수 있다. 4.0.0: keep 값은 계약 기본 패턴(식별자 모양)에 맞아야 남으므로
+    긴 값은 거부(DeidError)되지 않고 가려지며, 그 안의 개인정보도 출력에 남지 않는다. 설정 거르개를 느슨하게 해도 기본을 넓힐 수 없다."""
     cfg = base_config()
-    cfg["deid"]["keep_string_patterns"] = {"next_item": r".*"}                 # 값 검증을 느슨하게 둔 정책
+    cfg["deid"]["keep_string_patterns"] = {"next_item": r".*"}                 # 거르개를 느슨하게 둔 정책
     long_ok = "가" * 100_000
-    # 긴 keep 값은 잔존 패턴 창 검사는 통과하지만, 비식별 뷰 계약(Ident: 64자 이하)을 어겨 자기 검사에서 닫힌다. 닫히는 이유가 창 검사가 아님을 아래 이메일 사례와 구분한다.
-    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
-        _deid(cfg).deidentify(envelope(_trace_with(next_item=long_ok)))
-    for pos in (0, 4000, 50_000, 99_000):                                     # 창 경계 근처를 포함해 어디에 있어도 잡는다
+    out = _deid(cfg).deidentify(envelope(_trace_with(next_item=long_ok)))
+    assert out.trace["extract_output"]["next_item"] == "[MASKED]"
+    for pos in (0, 4000, 50_000, 99_000):                                     # 창 경계 근처를 포함해 어디에 있어도 남지 않는다
         s_ = long_ok[:pos] + "a@example.com" + long_ok[pos:]
-        with pytest.raises(DeidError, match="잔존 패턴"):
-            _deid(cfg).deidentify(envelope(_trace_with(next_item=s_)))
+        out = _deid(cfg).deidentify(envelope(_trace_with(next_item=s_)))
+        assert out.trace["extract_output"]["next_item"] == "[MASKED]" and "example.com" not in json.dumps(out.trace)
 
 
 def test_ingest_of_a_huge_free_text_field_finishes(log_store):
@@ -522,7 +524,7 @@ def test_job_default_deletes_confirmed_but_admin_purge_keeps_them_without_flag(t
     fail = FailureStoreImpl.sqlite(fdb)
     fail.put_trace("tr-1", TRACE)
     fail.publish_case(case("fc-c", created_at="2026-01-01T00:00:00Z"))
-    fail.publish_case(case("fc-c", version=2, review_status="CONFIRMED", expected={"items": []}, created_at="2026-10-01T00:00:00Z"))
+    fail.publish_case(case("fc-c", version=2, review_status="CONFIRMED", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A", created_at="2026-10-01T00:00:00Z"))
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb]
     r = subprocess.run(base + ["purge", "--cases-days", "30"], capture_output=True, text=True, env=os.environ)
     assert r.returncode == 0 and json.loads(r.stdout)["cases"]["cases"] == 0               # 확정 사례는 플래그 없이는 보존
@@ -691,13 +693,14 @@ def test_nonexistent_calendar_time_in_updated_since_is_a_client_error():
 
 def test_an_empty_secret_value_is_refused_without_printing_it(tmp_path):
     from boundary_contracts.secrets import SecretError
-    from ops_feedback.wiring.build import _resolve_args
+    from ops_feedback.wiring.build import _http_client
+    st = {"kind": "http", "base_url": "http://127.0.0.1:1", "token_secret": "X_TOKEN"}
     f = tmp_path / "empty"
     f.write_text("")
-    with pytest.raises((SecretError, ValueError)):      # 빈 파일은 읽는 단계(read_secret)에서, 이름이 비면 여기서 거부한다
-        _resolve_args({"secret": "X_TOKEN"}, {"X_TOKEN_FILE": str(f)})
+    with pytest.raises((SecretError, ValueError)):      # 빈 파일은 읽는 단계(read_secret)에서 거부한다
+        _http_client("HttpReleaseReader", st, {"X_TOKEN_FILE": str(f)}, None)
     with pytest.raises(ValueError, match="없다"):
-        _resolve_args({"secret": "X_TOKEN"}, {})
+        _http_client("HttpReleaseReader", st, {}, None)
 
 
 def test_job_main_turns_secret_and_config_value_errors_into_exit_2(tmp_path, monkeypatch, capsys):

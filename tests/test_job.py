@@ -63,11 +63,10 @@ def test_duplicate_delivery_makes_one_case(pipeline):
 
 
 def test_deid_failure_creates_no_case(pipeline):
-    pipeline["deid"].policy.keep_string_keys  # frozenset; 정책을 바꿔 발화를 남기게 한다
     from ops_feedback.components.deidentifier import DeidPolicy
     from tdeid import Deidentifier
     cfg = pipeline["cfg"]
-    cfg["deid"]["keep_string_keys"] = cfg["deid"]["keep_string_keys"] + ["utterance"]
+    cfg["deid"]["residual_patterns"] = dict(cfg["deid"]["residual_patterns"], question_like=r"Q\d")      # 남긴 식별자(next_item Q2)에 잔존 패턴이 걸리는 정책: 4.0.0 은 keep 키를 계약 열거로 묶어 발화를 남기게 할 수 없다
     pipeline["deid"] = Deidentifier(DeidPolicy.from_config(cfg["deid"]), "s", pipeline["log"].grant_deidentifier_view())
     pipeline["log"].send(envelope(pii_trace()))
     rep = run(pipeline)
@@ -194,9 +193,13 @@ def test_expected_requires_kind(pipeline):
     assert r["expected_kind"] == "LORA_A" and r.get("question_set") == c.get("question_set")
 
 
-def test_factory_args_resolve_env():
-    from ops_feedback.wiring.build import _resolve_args
-    assert _resolve_args({"base_url": "http://x", "token": {"env": "T"}}, {"T": "s"}) == {"base_url": "http://x", "token": "s"}
+def test_http_client_token_comes_from_the_named_secret():
     import pytest
+    from ops_feedback.wiring.build import _http_client
+    st = {"kind": "http", "base_url": "http://127.0.0.1:1", "token_secret": "T"}
+    c = _http_client("HttpReleaseReader", st, {"T": "s"}, None)
+    assert type(c).__name__ == "HttpReleaseReader"
     with pytest.raises(ValueError):
-        _resolve_args({"token": {"env": "MISSING"}}, {})
+        _http_client("HttpReleaseReader", dict(st, token_secret="MISSING"), {}, None)
+
+

@@ -67,7 +67,7 @@ def test_invalid_expected_cases(env):
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_PARSER})
     assert st == 400 and "CaseReviewRequest" in e["message"]        # expected_kind 없음: 계약 스키마가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": {"items": "x"}, "expected_kind": "LORA_A"})
-    assert st == 400 and "expected" in e["message"]
+    assert st == 400 and "CaseReviewRequest" in e["message"]       # 계약 스키마(ActionExtraction)가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_PARSER, "expected_kind": "LORA_B"})
     assert st == 400 and "CaseReviewRequest" in e["message"]       # 객체는 LORA_B의 정답(문자열)이 아니다: 계약 스키마가 거부한다
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected": GOOD_TEXT, "expected_kind": "LORA_A"})
@@ -125,7 +125,7 @@ def test_reviewed_input_without_expected(env):
 def test_reviewed_input_rejections(env):
     base, cid = env
     st, e = post(base, cid, {"review_status": "CONFIRMED", "expected_kind": "LORA_A", "reviewed_input": {"user_utterance": 1}})
-    assert st == 400 and "reviewed_input" in e["message"]
+    assert st == 400 and "CaseReviewRequest" in e["message"]
     st, e = post(base, cid, {"review_status": "CONFIRMED", "reviewed_input": GOOD_INPUT})
     assert st == 400 and "CaseReviewRequest" in e["message"]
     # LORA_B용 입력(ResponseRequest)이 아니다

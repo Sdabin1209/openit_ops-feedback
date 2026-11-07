@@ -30,11 +30,11 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | `deid.policy_id`, `deid.keep_string_keys`, `deid.unlisted_string_action`(mask만) | 예 | 비식별 정책의 필수 부분. 기본값 없음 |
 | `deid.salt_env` | 아니오(기본 `OPS_DEID_SALT`) | salt를 담은 환경 변수 이름 |
 | `deid.pseudonymize_keys`, `mask_defs`, `drop_defs`, `mask_number_keys`, `mask_value_keys`, `residual_patterns` | 아니오 | 4절 처리 방식의 정책 값 |
-| `detection.detectors[]` | 예 | `{type: rule, rules: [{id, enabled, params}]}` 또는 `{factory: "모듈:함수", args}` |
+| `detection.detectors[]` | 예 | `{type: rule, rules: [{id, enabled, params}]}` (4.0.0 D135: 설정에 factory 탐지기는 없다) |
 | `classification.default_failure_type` | 예 | 나머지(`rule_to_type`, `priority`)는 선택 |
 | `retention.raw_days` 등 | 아니오(생략하면 기본 30/180/365일, ADR 0007) | 일 수(0 초과) 또는 `"forever"`(무기한, 경고). `null`은 거부 |
 | `rollback.*` | 선택(있으면 모두 필수) | `window_hours, min_turns, max_failure_rate, counted_review_statuses, requested_by_role, auto_submit`. `counted_review_statuses`는 `[CONFIRMED]`만 허용한다: 롤백 요청의 근거는 사람이 확정한 사례뿐이다(ADR 0029) |
-| `release_reader`, `gate_service` | 선택 | `{factory: "모듈:함수", args: {...}}`. args 값 `{env: 이름}`은 환경 변수 값으로 바뀐다. `release_reader`가 있으면 사례에 `question_set`도 채운다 |
+| `release_reader`, `gate_service` | 선택 | `{kind: http, base_url, token_secret, timeout_seconds?}`(계약 HttpClientSettings, 4.0.0 D135: 구현 모듈 경로는 없다). 토큰은 `token_secret` 이름의 `이름_FILE`로 읽는다. `release_reader`가 있으면 사례에 `question_set`도 채운다 |
 
 ## 설정 (사용자 결정 사항 포함)
 
@@ -69,7 +69,7 @@ scripts/setup-env.sh   # .venv 생성·재사용, requirements.lock·requirement
 | 읽기 토큰(`역할=토큰,...`) | `OPS_READ_TOKENS_FILE` |
 | 검토 토큰(`역할=토큰,...`) | `OPS_REVIEW_TOKENS_FILE` |
 | 의사 식별자 salt | `OPS_DEID_SALT_FILE` (이름은 `deid.salt_env` + `_FILE`) |
-| 설정 `{env: 이름}`이 가리키는 토큰(예: `OPS_GATE_READ_TOKEN`, `OPS_GATE_WRITE_TOKEN`) | `이름_FILE` |
+| 설정 `token_secret`이 가리키는 토큰(예: `OPS_GATE_READ_TOKEN`, `OPS_GATE_WRITE_TOKEN`) | `이름_FILE` |
 
 ```
 docker run ... -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read ...
@@ -79,7 +79,7 @@ docker run ... -v /srv/secrets/ops:/run/secrets:ro -e OPS_INGEST_TOKEN_FILE=/run
 
 ### 설정 파일에 비밀을 적지 않는다
 
-잡 설정(`config/job.*.yaml`)에서 키 이름에 `token`, `secret`, `password`, `credential`, `api_key`, `authorization`, `private_key`가 들어간 곳에 문자열 값을 직접 적으면 잡이 시작을 거부한다(중첩 dict·list 포함). 오류에는 키 경로(예: `release_reader.args.token`)와 "비밀은 NAME_FILE로" 안내만 나오고 값은 나오지 않는다. 비밀은 `{secret: NAME}` 또는 `{env: NAME}`으로 적으면 `read_secret(NAME)`이 푼다(`NAME_FILE` 우선). 이름만 받는 `*_env` 키(`deid.salt_env` 등)는 그대로 쓴다. ingest-api는 설정 파일 없이 환경 변수만 받으므로 위의 `NAME_FILE` 규칙이 전부다.
+잡 설정(`config/job.*.yaml`)에서 키 이름에 `token`, `secret`, `password`, `credential`, `api_key`, `authorization`, `private_key`가 들어간 곳에 문자열 값을 직접 적으면 잡이 시작을 거부한다(중첩 dict·list 포함). 오류에는 키 경로(예: `release_reader.token`)와 "비밀은 NAME_FILE로" 안내만 나오고 값은 나오지 않는다. 비밀의 이름만 받는 `*_secret`(예: `token_secret`)·`*_env` 키(`deid.salt_env` 등)는 값이 아니라 이름이라 그대로 쓰고 `read_secret(NAME)`이 읽는다(`NAME_FILE` 우선). 이름만 받는 `*_env` 키(`deid.salt_env` 등)는 그대로 쓴다. ingest-api는 설정 파일 없이 환경 변수만 받으므로 위의 `NAME_FILE` 규칙이 전부다.
 
 ## ingest-api 실행
 

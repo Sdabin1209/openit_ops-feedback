@@ -1,7 +1,7 @@
 """실패 탐지(교체 가능한 Detector 인터페이스)와 사례 분류.
 
 탐지기는 비식별을 마친 trace만 본다(원본에 접근하지 않는다). 규칙 기반으로 시작한다.
-Detector 구현을 바꾸려면 설정의 detection.detectors에 `factory: "모듈:함수"`를 적는다.
+Detector 구현을 더하려면 FailureDetector 생성자의 extra_detectors 로 넘긴다(4.0.0 D135: 설정에는 factory가 없다).
 분류체계(failure_type의 값)는 미정(O11)이다. 코드는 규칙 ID만 알고, 규칙 ID -> failure_type 대응은 설정이 정한다.
 """
 from __future__ import annotations

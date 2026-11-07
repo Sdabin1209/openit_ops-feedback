@@ -34,16 +34,20 @@ def trace_with(reason, where="orchestrator_output"):
     return make_trace(orchestrator_output=orch(sig))
 
 
-@pytest.mark.parametrize("raw,want", [("RISK", "RISK"), ("REASK_LIMIT", "REASK_LIMIT"), ("OTHER", "OTHER"), ("NEW_VALUE", "OTHER")])
-def test_deid_keeps_enum_and_unknown_becomes_other(raw, want):
+@pytest.mark.parametrize("raw,want", [("RISK", "RISK"), ("REASK_LIMIT", "REASK_LIMIT"), ("OTHER", "OTHER")])
+def test_deid_keeps_enum(raw, want):
     out = deid().deidentify(envelope(trace_with(raw))).trace
     assert out["orchestrator_output"]["turn_failure_signal"]["pause_reason"] == want
     assert pause_reason_of(out) == want
 
 
-def test_unknown_value_text_never_survives():
-    out = deid().deidentify(envelope(trace_with("홍길동 010-1234-5678 외"))).trace
-    assert out["orchestrator_output"]["turn_failure_signal"]["pause_reason"] == "OTHER"
+@pytest.mark.parametrize("raw", ["NEW_VALUE", "홍길동 010-1234-5678 외"])
+def test_unknown_pause_reason_is_refused_at_the_entrance_without_echoing_the_text(raw):
+    """계약 4.0.0: 입구 검증(DeidRequest, 문진 스키마 TurnTrace)이 PauseReason 열거 밖의 값을 거부한다. 모르는 값이 비식별 단계까지 오지 않고, 오류에도 원문이 실리지 않는다."""
+    from boundary_contracts.errors import BoundaryError
+    with pytest.raises(BoundaryError) as e:
+        deid().deidentify(envelope(trace_with(raw)))
+    assert e.value.code == "INVALID_RECORD" and "010-1234" not in str(e.value) and "홍길동" not in str(e.value)
 
 
 def test_old_trace_without_field_is_compatible():

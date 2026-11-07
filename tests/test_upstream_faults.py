@@ -293,7 +293,7 @@ def test_stale_check_cannot_report_success_for_a_lost_write(backend, tmp_path, r
     a.put_trace("tr-1", TRACE)
     a.publish_case(mk_case())
     stale = b._b.versions("fc-1")                                   # b가 확인한 시점의 상태(a의 v2 이전)
-    a.publish_case(mk_case(version=2, review_status="CONFIRMED", expected={"items": []}))
+    a.publish_case(mk_case(version=2, review_status="CONFIRMED", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A"))
     real = b._b.versions
     seen = {"n": 0}
 
@@ -308,7 +308,7 @@ def test_stale_check_cannot_report_success_for_a_lost_write(backend, tmp_path, r
     assert a.get_case("fc-1")["review_status"] == "CONFIRMED"
     seen["n"] = 0
     b._b.versions = versions
-    assert b.publish_case(mk_case(version=2, review_status="CONFIRMED", expected={"items": []}))["review_status"] == "CONFIRMED"   # 같은 내용의 재시도는 성공
+    assert b.publish_case(mk_case(version=2, review_status="CONFIRMED", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A"))["review_status"] == "CONFIRMED"   # 같은 내용의 재시도는 성공
 
 
 def test_rollback_deadline_is_passed_to_the_injected_wait_and_expiry_is_reported(pipeline):

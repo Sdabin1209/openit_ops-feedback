@@ -84,7 +84,7 @@ def run_once(*, cfg: dict, log: LogStore, store: FailureCaseStore, deid: Deident
     elif retry_deid_failed:
         log.reset_processing("DEID_FAILED")
 
-    rep.warnings.extend(job_advisor.advise({"retention": cfg.get("retention") or {}, "unvalidated_keep_keys": deid.policy.unvalidated_keep_keys()})["warnings"])
+    rep.warnings.extend(job_advisor.advise({"retention": cfg.get("retention") or {}})["warnings"])
     for row in _pending_rows(view, limit, int((cfg.get("job") or {}).get("batch_size", DEFAULT_BATCH_SIZE))):    # 원본을 읽는 유일한 경로
         env = row["envelope"]
         sid, tid = env["session_id"], env["turn_id"]

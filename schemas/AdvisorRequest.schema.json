@@ -8,12 +8,6 @@
     "retention": {
       "$ref": "../boundary/OpsFeedbackJobConfig.schema.json#/properties/retention"
     },
-    "unvalidated_keep_keys": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "oldest_unprocessed_received_at": {
       "anyOf": [
         {

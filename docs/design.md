@@ -115,7 +115,7 @@ class Detector(Protocol):
   - `EXTRACT_FAILED`(v1 `PARSER_EMPTY` 대체): (1) `extract_status`가 있고 `OK`가 아니다(OUTPUT_INVALID, VIOLATION, ERROR). (2) `OK`인데 `extract_output.values`가 비고 `action`이 `params.empty_values_ok_actions`(기본 `["REDIRECT"]`)에 없다. 근거: survey-service design.md 18절 "첫 값의 문항, 값이 없으면(REDIRECT)"(학습 데이터 5,077행 전수 일치) 즉 REDIRECT만 값이 비는 것이 정상이다 **[확인: 그 문서. 데이터는 직접 보지 않았다]**. HOLD·SKIP은 계약상 targets가 필수이고 targets는 같은 행 values의 key라 값이 비면 계약 위반이다 **[확인: ActionExtraction 스키마, V2_DRAFT 2.2]**: 허용 목록에 더하지 않는다(ADR 0012). `action`은 비식별에서 남겨야 하므로 `keep_string_keys`에 있어야 한다.
   - `REASK_STREAK`(v1 `UNRECOGNIZED_STREAK` 대체): 연속 횟수를 세지 않고, 서비스가 trace에 남긴 `pause_reason == REASK_LIMIT`인 턴에서 걸린다(서비스가 정지한 그 턴). `params`는 무시한다(폐기 예정). 이유와 대안은 ADR 0019(0012 결정 1을 대체).
   - 옛 이름 `PARSER_EMPTY`·`UNRECOGNIZED_STREAK`·`GENERATOR_FALLBACK`은 뜻이 달라져 받지 않는다(설정에 있으면 대체 이름을 알리는 오류, `enabled:false`여도). `TURN_FAILED_STEPS`는 `phase:step` 문자열을 그대로 남기므로 새 `step` 값(`LoRA-A`, `VALIDATE`, `COMMIT`, `DELIVER_STAFF`, `LoRA-B`, `DELIVER_FRONT`)에서도 그대로 동작한다(시험으로 확인).
-- 교체: 설정의 `detection.detectors`에 `{factory: "모듈:함수", args: {...}}`로 다른 `Detector`(예: 모델 기반, 사람 신고)를 더한다. 반환한 `Detection.method`가 `FailureCase.detection_method`(RULE, MODEL, HUMAN, FEEDBACK)가 된다.
+- 교체: `FailureDetector(..., extra_detectors=[...])` 생성자 인자로 다른 `Detector`(예: 모델 기반, 사람 신고)를 더한다(4.0.0 D135: 설정에는 factory가 없다). 반환한 `Detection.method`가 `FailureCase.detection_method`(RULE, MODEL, HUMAN, FEEDBACK)가 된다.
 - 규칙이 놓치는 것(**미정**): 의미적 오류(잘못 이해했지만 구조는 정상인 턴)는 규칙으로 못 잡는다. 사람 신고(FEEDBACK/HUMAN) 경로와 모델 탐지기는 후속 구간이다.
 
 ## 6. 사례 분류

@@ -23,7 +23,7 @@ def _check(v, cfg, what: str) -> None:
     # 왜 값을 싣지 않나: 위반 값이 비밀일 수 있어 경로와 규칙 종류만 낸다.
     errs = sorted(v.iter_errors(cfg), key=lambda e: list(map(str, e.absolute_path)))
     if errs:
-        hint = " (비밀은 NAME_FILE로 주고 설정에는 {secret: NAME}만 쓴다)" if what == "JobConfigChecks" else ""
+        hint = " (비밀은 NAME_FILE로 주고 설정에는 비밀의 이름(token_secret 등)만 쓴다)" if what == "JobConfigChecks" else ""
         raise ValueError(f"설정이 {what} 스키마를 어긴다: " + "; ".join(_path(e) + ": " + e.validator for e in errs[:5]) + hint)
 
 

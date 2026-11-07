@@ -10,7 +10,6 @@ from typing_extensions import NotRequired, TypedDict
 
 class AdvisorRequest(TypedDict, closed=True):
     retention: dict[str, Any]
-    unvalidated_keep_keys: NotRequired[list[str]]
     oldest_unprocessed_received_at: NotRequired[str | None]
     raw_cutoff: NotRequired[str | None]
     purge_unprocessed: NotRequired[bool]

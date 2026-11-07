@@ -44,7 +44,7 @@ def test_conflict_on_different_content(store):
 
 def test_versions_latest_default_and_explicit(store):
     store.publish_case(case())
-    store.publish_case(case(version=2, review_status="CONFIRMED", expected={"items": []}))
+    store.publish_case(case(version=2, review_status="CONFIRMED", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A"))
     assert store.get_case("fc-1")["version"] == 2
     assert store.get_case("fc-1", version=1)["review_status"] == "PENDING"
     with pytest.raises(BoundaryError) as x:

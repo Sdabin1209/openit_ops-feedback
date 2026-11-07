@@ -125,10 +125,17 @@ def test_unknown_rule():
         RuleDetector([{"id": "NOPE"}])
 
 
-def test_pluggable_detector():
+def test_extra_detector_is_injected_by_constructor_and_factory_config_is_rejected():
     from tests_plugin import make
-    ds = build_detectors([{"factory": "tests_plugin:make"}])
-    assert isinstance(ds[0], Detector) and ds[0].detect({})[0]["rule_id"] == "CUSTOM"
+    from ops_feedback.components.failure_detector import FailureDetector
+    from conftest import envelope
+    from test_pause_reason import deid
+    fd = FailureDetector([{"type": "rule", "rules": []}], extra_detectors=[make()])      # 시험 대역은 생성자 인자로 넘긴다(D135: 설정에 factory 없음)
+    assert isinstance(fd._detectors[-1], Detector)
+    trace = deid().deidentify(envelope(make_trace())).trace
+    assert [d["rule_id"] for d in fd.detect({"deid_trace": trace})["detections"]] == ["CUSTOM"]
+    with pytest.raises(ValueError):                                                       # 계약 4.0.0 Detector 는 type rule 뿐이다
+        build_detectors([{"factory": "tests_plugin:make"}])
 
 
 def test_classifier_config_driven():
