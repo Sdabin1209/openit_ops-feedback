@@ -31,9 +31,15 @@ def area_schema_dir() -> Path:
     raise FileNotFoundError("영역 스키마 폴더(schemas/)를 찾지 못했다")
 
 
+def _retrieve(uri: str) -> Resource:
+    """계약이 참조하는 외부 소유 스키마(문진 스키마, https://openit.example/survey/v1/…)를 설치된 소유자 패키지에서 오프라인으로 읽는다(계약 4.0.0: TraceEnvelope.trace 가 TurnTrace 를 참조). 네트워크는 쓰지 않는다."""
+    from boundary_contracts.schema_sources import external_schema
+    return Resource.from_contents(external_schema(uri), DRAFT202012)
+
+
 @lru_cache(maxsize=1)
 def _registry() -> Registry:
-    reg = Registry()
+    reg = Registry(retrieve=_retrieve)
     for base, d in ((_BOUNDARY, _contract_dir()), (_OPS, area_schema_dir())):
         for p in sorted(d.glob("*.schema.json")):
             reg = reg.with_resource(base + p.name, Resource.from_contents(json.loads(p.read_text("utf-8")), DRAFT202012))

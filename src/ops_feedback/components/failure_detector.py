@@ -171,22 +171,16 @@ def build_detectors(cfg: list[dict]) -> list[Detector]:
     out: list[Detector] = []
     for d in cfg:
         check_part("OpsFeedbackJobConfig", "/$defs/Detector", d, "탐지기 설정")
-        if d.get("type") == "rule":
-            out.append(RuleDetector(d.get("rules", [])))
-        else:
-            mod, _, fn = d["factory"].partition(":")
-            det = getattr(importlib.import_module(mod), fn)(**(d.get("args") or {}))
-            if not isinstance(det, Detector):      # 모듈:함수가 돌려주는 객체의 모양은 스키마로 볼 수 없다(schemas/README.md 표)
-                raise ValueError(f"Detector 인터페이스를 지키지 않는다: {d['factory']}")
-            out.append(det)
+        out.append(RuleDetector(d.get("rules", [])))      # 4.0.0(D135): 계약은 내장 규칙 탐지기(type rule)만 허용한다. 임의 factory 탐지기는 운영 사용처가 없어 없앴다
     return out
 
 
 class FailureDetector:
     """실패 탐지. 입력 DetectRequest(비식별 trace) -> 출력 DetectionReport. 탐지기 목록은 설정(OpsFeedbackJobConfig.detection.detectors)이 정한다."""
 
-    def __init__(self, detectors_cfg: list[dict]) -> None:
-        self._detectors = build_detectors(detectors_cfg)
+    def __init__(self, detectors_cfg: list[dict], extra_detectors: list | None = None) -> None:
+        # extra_detectors: 시험 대역 주입 지점(설정이 아니라 배선 인자, D135)
+        self._detectors = build_detectors(detectors_cfg) + list(extra_detectors or [])
 
     def detect(self, request: DetectRequest) -> DetectionReport:
         check("DetectRequest", request)

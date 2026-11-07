@@ -1,7 +1,6 @@
 """설정에서 조각들을 만들어 잇는 조립(build_from_config). 비밀은 파일로 받는다(D84): 이름은 설정이, 값은 read_secret이 읽는다."""
 from __future__ import annotations
 
-import importlib
 
 from boundary_contracts import read_secret
 
@@ -32,9 +31,15 @@ def _resolve_args(args, env: dict, path: str = "args"):
     return args
 
 
-def _import(path: str):
-    mod, _, fn = path.partition(":")
-    return getattr(importlib.import_module(mod), fn)
+def _http_client(name: str, settings: dict, env: dict, egress):
+    """계약 HttpClientSettings(4.0.0, D135)로 역할에 정해진 계약 클라이언트를 만든다. 구현 모듈 경로(factory)는 받지 않는다.
+    토큰은 token_secret 이름으로 read_secret(NAME_FILE 우선)이 읽고, 출구는 환경의 OPENIT_EGRESS_PROXY 만 쓴다(R1.8). timeout 이 없으면 클라이언트 기본(R10.3)."""
+    from boundary_contracts import clients
+    tok = read_secret(settings["token_secret"], environ=env)
+    if not tok:
+        raise ValueError(f"비밀 {settings['token_secret']}가 없다(NAME_FILE 또는 NAME)")
+    kw = {"timeout": settings["timeout_seconds"]} if "timeout_seconds" in settings else {}
+    return getattr(clients, name)(settings["base_url"], tok, egress_proxy=egress, **kw)
 
 
 def make_pseudonymizer(salt: str):
@@ -61,8 +66,8 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     rr = cfg.get("release_reader")
     # 영역 밖(release-gate) 호출은 자기 영역 게이트웨이 출구로만 나간다: OPENIT_EGRESS_PROXY 하나만 꺼내 넘긴다(RUNTIME R1.8, CONVENTIONS 13절). 없으면 None(출구 없는 개발·시험 구성).
     egress = egress_proxy(env)
-    reader = _import(rr["factory"])(**_resolve_args(rr.get("args") or {}, env, "release_reader.args"), egress_proxy=egress) if rr else None
+    reader = _http_client("HttpReleaseReader", rr, env, egress) if rr else None
     if rb and rr:
-        gate = _import(cfg["gate_service"]["factory"])(**_resolve_args(cfg["gate_service"].get("args") or {}, env, "gate_service.args"), egress_proxy=egress) if cfg.get("gate_service") else None
+        gate = _http_client("HttpGateService", cfg["gate_service"], env, egress) if cfg.get("gate_service") else None
         planner = RollbackPlanner(store=store, log=log, release_reader=reader, gate=gate, policy=rb, clock=clock)
     return log, store, deid, pseudonymize, detector, classifier, planner, reader

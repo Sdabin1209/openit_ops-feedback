@@ -30,10 +30,19 @@ from ..wiring.validate import check, check_part
 # 겹침(1,024)은 예시 설정의 잔존 패턴이 낼 수 있는 가장 긴 일치(이메일 약 64+1+255+1+TLD)보다 크다. 이보다 긴 일치를 내는 패턴은 창 경계에서 놓칠 수 있다.
 SCAN_WINDOW = 4096
 SCAN_OVERLAP = 1024
-MASK = "[MASKED]"
-DROPPED = "[DROPPED]"
+# 비식별 공개 규칙(계약 4.0.0 data/deid_rules.json, D136·교차검증): 토큰·가명 패턴·keep 패턴·건수 맵 키·pause/검토 경로의 정본은 계약 데이터다.
+# 이 영역은 값을 따로 박지 않고 읽는다(계약 OpsFeedbackDeidentifiedTrace 생성기와 같은 데이터).
+def _load_rules() -> dict:
+    import json as _json
+    from importlib.resources import files
+    return _json.loads(files("boundary_contracts").joinpath("data/deid_rules.json").read_text(encoding="utf-8"))
+
+
+RULES = _load_rules()
+MASK = RULES["tokens"]["masked"]
+DROPPED = RULES["tokens"]["dropped"]
 _DROP = object()
-_PSEUDONYM = re.compile(r"p-[0-9a-f]{32}")
+_PSEUDONYM = re.compile(RULES["pseudonym"]["pattern"])
 
 
 # 출처: docs/adr/0004-deid-allowlist.md. 패턴의 길이 한도는 근거 기록 없는 보수적 임의값이다.
@@ -41,21 +50,12 @@ _PSEUDONYM = re.compile(r"p-[0-9a-f]{32}")
 # 이 키들은 문항 ID·슬롯 키·코드·action처럼 식별자 모양이어야 하는 값인데, 위반 턴에서는 모델이 임의 문자열(예: 사람 이름이 든 문장)을
 # 낼 수 있어서 키 이름만으로 통과시키면 개인정보가 남는다. 설정의 `keep_string_patterns`로 키별로 바꿀 수 있다.
 # 한계: 식별자 모양의 영문 이름("John")은 구별할 수 없다. 한국어·공백·기호가 든 값은 모두 걸러진다.
-DEFAULT_KEEP_PATTERNS = {
-    "question_id": r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}",
-    "next_item": r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}",
-    "current_question_id": r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}",
-    "slot_id": r"[A-Za-z][A-Za-z0-9_\-]{0,63}",
-    "repeat_key": r"[A-Za-z0-9_\-]{0,64}",
-    "code": r"[A-Z][A-Z0-9_]{0,63}",
-    "action": r"[A-Z][A-Z0-9_]{0,31}",
-    "path": r"[A-Za-z0-9_\[\]\.\-]{0,160}",
-}
+DEFAULT_KEEP_PATTERNS = dict(RULES["keep_patterns"])   # 계약 공개 규칙. 설정의 keep_string_patterns 는 이것과 AND 로 거는 거르개다(넓힐 수 없다, 계약 4.0.0)
 
 
 # 출처: docs/adr/0013-extract-protections-counts.md. 건수 맵(규칙 코드 -> 건수)의 키 모양. 코드는 model-runtime이 정하며(boundary-contracts HTTP.md의 예: G5, G2) 계약 밖이라
 # 대문자로 시작하는 짧은 식별자 모양만 남긴다. 길이 한도 32는 근거 기록 없는 보수적 임의값이다. 계약 OpsFeedbackDeidentifiedTrace의 CountMap 키 패턴과 같다(3.0.0에서 설정으로 바꾸는 길을 없앴다: 계약 밖 출력을 내던 선택지, U25).
-COUNT_MAP_KEY_PATTERN = r"[A-Z][A-Z0-9_]{0,31}"
+COUNT_MAP_KEY_PATTERN = RULES["count_map"]["key_pattern"]
 
 
 class DeidError(Exception):
@@ -72,7 +72,8 @@ class DeidPolicy:
     mask_number_keys: frozenset
     mask_value_keys: frozenset           # 타입과 상관없이(숫자·불리언·객체·배열 포함) 값을 통째로 마스킹할 키
     residual_patterns: dict
-    keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(기본 + 설정)
+    keep_patterns: dict = field(default_factory=dict)     # 키 -> 전체 일치 정규식(계약 공개 규칙의 기본)
+    keep_filters: dict = field(default_factory=dict)      # 키 -> 설정이 더한 거르개(기본과 둘 다 맞아야 남는다, 계약 4.0.0)
     count_map_keys: frozenset = frozenset()               # 건수 맵(키 -> 정수)으로 남길 필드 이름(예: extract_protections). 기본은 비어 있어 자유 객체로 비운다
     keep_pause_reason: bool = False                       # 정지 사유 열거(RISK|REASK_LIMIT|OTHER)를 남긴다. docs/adr/0014
     review_utterance_keep: bool = False                   # 검토 사본에 환자 발화 두 칸만 원문으로 보존한다. docs/adr/0030
@@ -87,7 +88,7 @@ class DeidPolicy:
         # 키·형식·열거(unlisted_string_action은 mask만)·불리언·정규식 문법은 계약 OpsFeedbackJobConfig의 Deid 정의가 정한다(모르는 키는 거부).
         check_part("OpsFeedbackJobConfig", "/$defs/Deid", cfg, "deid 설정")
         kp = dict(DEFAULT_KEEP_PATTERNS)
-        kp.update(cfg.get("keep_string_patterns") or {})
+        extra = dict(cfg.get("keep_string_patterns") or {})      # 4.0.0: 기본을 바꿔치기하지 않고 AND 거르개로 더한다
         keep = frozenset(cfg.get("keep_string_keys") or [])
         return cls(
             policy_id=str(cfg["policy_id"]),
@@ -99,10 +100,11 @@ class DeidPolicy:
             mask_value_keys=frozenset(cfg.get("mask_value_keys") or []),
             residual_patterns=dict(cfg.get("residual_patterns") or {}),
             keep_patterns={k: v for k, v in kp.items() if k in keep},
+            keep_filters={k: v for k, v in extra.items() if k in keep},
             count_map_keys=frozenset(cfg.get("keep_count_map_keys") or []),
             keep_pause_reason=bool(cfg.get("keep_pause_reason", False)),
             review_utterance_keep=bool((cfg.get("review_utterance") or {}).get("keep", False)),
-            review_utterance_max_chars=int((cfg.get("review_utterance") or {}).get("max_chars", 1000)),
+            review_utterance_max_chars=int((cfg.get("review_utterance") or {}).get("max_chars", RULES["review_utterance"]["max_chars"])),
         )
 
     def fingerprint(self) -> str:
@@ -115,16 +117,16 @@ class DeidPolicy:
             "policy_id": self.policy_id, "keep": sorted(self.keep_string_keys),
             "pseudo": sorted(self.pseudonymize_keys), "mask_defs": sorted(self.mask_defs), "drop_defs": sorted(self.drop_defs),
             "num": sorted(self.mask_number_keys), "mask_value_keys": sorted(self.mask_value_keys),
-            "residual": self.residual_patterns, "keep_patterns": self.keep_patterns})
+            "residual": self.residual_patterns, "keep_patterns": self.keep_patterns,
+            **({"keep_filters": self.keep_filters} if self.keep_filters else {})})      # 거르개가 없는 기존 설정의 지문은 그대로
 
 
 # 정지 사유(boundary-contracts 2.1.0, CR-H002)가 실릴 수 있는 자리(문진 스키마의 TurnFailureSignal). 스키마 걷기는 열거에 없는 값을 마스킹하고
 # 스키마가 이 필드를 모르는 옛 스냅샷에서는 버리므로, 걷기 밖에서 원본 값을 열거값으로 정규화해 같은 자리에 다시 넣는다(모르는 값은 OTHER).
-PAUSE_REASONS = ("RISK", "REASK_LIMIT", "OTHER")
+PAUSE_REASONS = tuple(RULES["pause_reason"]["values"])
 # 검토 사본에서만 원문으로 남기는 발화 두 칸(계약 OpsFeedbackReviewTrace). 키 이름 기준(keep_string_keys)이 아니라 경로로 지정한다(계약 OpsFeedbackJobConfig.deid.review_utterance).
-REVIEW_UTTERANCE_PATHS = (("frontend_message", "utterance"), ("extract_input", "user_utterance"))
-PAUSE_REASON_PATHS = (("frontend_input", "turn_failure_signal"), ("orchestrator_output", "turn_failure_signal"),
-                      ("log_entry", "turn_failure_signal"), ("orchestrator_output", "log_entry", "turn_failure_signal"))
+REVIEW_UTTERANCE_PATHS = tuple(tuple(x) for x in RULES["review_utterance"]["paths"])
+PAUSE_REASON_PATHS = tuple(tuple(x) for x in RULES["pause_reason"]["paths"])
 
 
 def normalize_pause_reason(v: Any) -> Optional[str]:
@@ -158,7 +160,7 @@ def _jtype(v: Any) -> str:
     if isinstance(v, int):
         return "integer"
     if isinstance(v, float):
-        return "number"
+        return "integer" if v.is_integer() else "number"   # JSON Schema 는 1.0 을 integer 로 본다(계약 4.0.0 교차검증: 유효한 extract_attempts=1.0 의 필수 키를 지우던 것)
     if isinstance(v, str):
         return "string"
     if isinstance(v, list):
@@ -173,6 +175,7 @@ class _Walker:
         self.pseudonymize = pseudonymize
         self.stats: Counter = Counter()
         self._keep = {k: re.compile(p) for k, p in policy.keep_patterns.items()}
+        self._filters = {k: re.compile(p) for k, p in policy.keep_filters.items()}
         self._count_key = re.compile(COUNT_MAP_KEY_PATTERN)
 
     # --- 스키마 해석 ---
@@ -306,8 +309,8 @@ class _Walker:
             self.stats["pseudonymized"] += 1
             return self.pseudonymize(key, s)
         if key in self.p.keep_string_keys:
-            rx = self._keep.get(key)
-            if rx is not None and not rx.fullmatch(s):       # 식별자 모양이 아니면 원문을 남기지 않는다
+            rx, fx = self._keep.get(key), self._filters.get(key)
+            if (rx is not None and not rx.fullmatch(s)) or (fx is not None and not fx.fullmatch(s)):       # 식별자 모양이 아니면(기본·거르개 둘 다) 원문을 남기지 않는다
                 self.stats["masked_by_pattern"] += 1
                 self.stats[f"path_masked:{path}"] += 1
                 return MASK

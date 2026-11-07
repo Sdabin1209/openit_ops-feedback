@@ -55,22 +55,20 @@ def test_deterministic():
     assert a.trace == b.trace and a.stats == b.stats
 
 
-def test_unknown_keys_and_free_objects_dropped():
-    tr = pii_trace()
-    tr["frontend_message"]["secret_extra"] = "홍길동"      # 스키마에 없는 키
-    tr["judge_input"] = None                              # v1 키(없어진 키)
-    # 스키마에 없는 키가 있으면 가지가 어느 정의에도 맞지 않아 통째로 버려진다(보수적 제거). 그러면 필수 키가 빠져
-    # 비식별 뷰 계약(OpsFeedbackDeidentifiedTrace)을 어기므로 자기 검사가 이 턴을 닫는다(DEID_FAILED).
-    with pytest.raises(DeidError, match="OpsFeedbackDeidentifiedTrace"):
-        deid().deidentify(envelope(tr))
-    # 맞는 가지 안의 미지 키는 키만 버려진다
+def test_raw_trace_violating_turntrace_is_rejected_before_deid():
+    """계약 4.0.0: TraceEnvelope.trace 는 문진 스키마 TurnTrace(판 1)다. 스키마에 없는 키가 든 원본은 비식별 전에 입구 검증에서
+    INVALID_RECORD 로 거부된다(그 전에는 비식별기가 가지를 버린 뒤 자기 검사로 닫았다). 값은 오류에 싣지 않는다."""
+    from boundary_contracts.errors import BoundaryError
+    for mutate in (lambda t: t["frontend_message"].__setitem__("secret_extra", "홍길동"), lambda t: t.__setitem__("judge_input", None)):
+        tr = pii_trace(); mutate(tr)
+        with pytest.raises(BoundaryError) as e:
+            deid().deidentify(envelope(tr))
+        assert e.value.code == "INVALID_RECORD" and "홍길동" not in str(e.value)
+    # TurnTrace 가 허용하는 자리(열린 객체)의 모르는 키는 비식별기가 키째 버린다
     tr2 = pii_trace()
     tr2["extract_output"]["extra"] = "홍길동"
-    tr2["extract_output"]["values"][0]["extra"] = "홍길동"
     r2 = deid().deidentify(envelope(tr2))
-    assert "홍길동" not in json.dumps(r2.trace, ensure_ascii=False)
-    assert r2.stats["dropped_unknown_keys"] >= 2
-
+    assert "홍길동" not in json.dumps(r2.trace, ensure_ascii=False) and r2.stats["dropped_unknown_keys"] >= 1
 
 def test_mask_def_value_and_value_key():
     """저장된 값은 Value 정의로, 모델이 낸 추출 값(스키마가 형태를 정하지 않음)은 키로 가린다. 숫자·불리언도."""
@@ -98,15 +96,18 @@ def test_policy_naming_a_missing_def_fails_closed():
     """문진 스키마가 바뀌어 정책이 지목한 정의가 사라지면 조용히 넘어가지 않는다(v2 TurnTrace에는 QuestionBank가 없다)."""
     cfg = base_config()
     cfg["deid"]["drop_defs"] = ["QuestionBank"]
-    with pytest.raises(DeidError, match="QuestionBank"):
-        deid(cfg).deidentify(envelope(make_trace()))
+    # 계약 4.0.0: 고를 수 있는 정의 이름은 TurnTrace 에서 도출한 목록(OpsFeedbackJobConfig.$defs.DeidDefName)이라 설정 검증에서 먼저 거부된다
+    with pytest.raises(ValueError, match="deid 설정"):
+        deid(cfg)
 
 
 def test_residual_pattern_fails_closed():
     cfg = base_config()
-    cfg["deid"]["keep_string_keys"].append("utterance")        # 사용자가 발화를 남기기로 했는데 전화번호가 있다
+    # 계약 4.0.0: keep 키는 식별자 모양 8개뿐이라 자유 문장 키(utterance)는 고를 수 없다. 남는 경로(path)에 전화번호 모양 값이 와도 잔존 패턴 검사가 닫는다
+    tr = pii_trace()
+    tr["extract_input"]["question_id"] = "010-1234-5678"      # keep 키 question_id 의 식별자 패턴에는 맞지만 전화번호 모양
     with pytest.raises(DeidError):
-        deid(cfg).deidentify(envelope(pii_trace()))
+        deid(cfg).deidentify(envelope(tr))
 
 
 def test_scrub_options_are_gone_in_3_0_0():
