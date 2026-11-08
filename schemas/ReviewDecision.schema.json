@@ -33,8 +33,7 @@
       "minLength": 1
     },
     "note": {
-      "type": "string",
-      "maxLength": 20000
+      "type": "string"
     },
     "expected_kind": {
       "enum": [
@@ -154,34 +153,7 @@
   ],
   "$defs": {
     "Bounded": {
-      "description": "검토자가 쓴 값: 문자열 하나는 20000자 이하(ADR 0008의 임의 상한, 측정 안 함). 깊이·개인정보 패턴은 스키마 밖 조건 표.",
-      "oneOf": [
-        {
-          "type": "string",
-          "maxLength": 20000
-        },
-        {
-          "type": "number"
-        },
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "null"
-        },
-        {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Bounded"
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/Bounded"
-          }
-        }
-      ]
+      "description": "검토자가 쓴 값(어떤 JSON 값이든). 문자열 길이 20000·개인정보 패턴·깊이 64 는 계약이 정한다: boundary_contracts.review_input.review_value_problems (INTERFACES I7 '검토 게시 값의 판정 기준', D117). 이 스키마에 같은 값의 사본을 두지 않는다."
     }
   }
 }

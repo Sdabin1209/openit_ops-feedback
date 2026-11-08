@@ -132,6 +132,10 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - DB 파일 손상: `data/` 볼륨 백업이 정책 밖이다(O16 미정, 대장 번호 없음). 원본(`log.db`) 손실은 복구할 수 없다.
 - 원본 접근: 비식별 처리기 외에는 `log.db`를 열지 않는다. 운영 사고로 직접 열어야 하면 개인정보 접근으로 기록한다.
 
+## 계약 4.x 데이터가 남은 저장소 (계약 5.0.0)
+
+계약 5.0.0은 새 환경을 전제하고 4.x 데이터를 이전하지 않는다. 저장소에 `pipeline_schema_version` 4.x 레코드가 남아 있으면 서버(`ops_feedback.api`)와 잡은 `UNSUPPORTED_VERSION` 으로 시작을 거부하고 종료 코드 2 로 끝난다. 새 저장소를 쓰거나 `python -m ops_feedback.admin purge`(admin 은 이 검사를 하지 않는다)로 지운 뒤 다시 띄운다.
+
 ## 보존·삭제·스키마 (0.12.0)
 
 - 기본 보존: 원본 30일(처리 끝난 것만), 사례 180일, 지표·롤백 기록 365일(`retention.*`, docs/adr/0007). `null`은 거부, 무기한은 `"forever"`(경고). 보고서 `warnings`에 `RETENTION_FOREVER`, `UNPROCESSED_RAW_PAST_RETENTION`이 나오면 확인한다.

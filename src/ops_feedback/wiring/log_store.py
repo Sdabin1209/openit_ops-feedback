@@ -79,6 +79,9 @@ class LogStore:
     def ping(self) -> None:
         self._raw.ping()
 
+    def legacy_major_present(self) -> bool:
+        return self._raw.legacy_major_present()
+
     def dump(self, out) -> int:
         return self._raw.dump(out)
 

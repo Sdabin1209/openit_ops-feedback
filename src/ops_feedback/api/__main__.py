@@ -18,7 +18,7 @@ from ..components.link_ingest_api import READYZ_CACHE_SECONDS, make_server
 from ..config import JsonFormatter, parse_read_tokens, validate_server_env
 from ..wiring.check_settings import server_settings
 from ..wiring.ingest_service import REQUEST_DEADLINE_SECONDS, IngestService
-from ..wiring.storage import open_failure_store, open_log_store, require_verify
+from ..wiring.storage import open_failure_store, open_log_store, require_current_major, require_verify
 
 log = logging.getLogger("ingest-api")
 
@@ -50,6 +50,7 @@ def main() -> int:
             failures = open_failure_store(env, os.environ.get("OPS_FAILURE_DB"))
             if failures is not None:
                 rtoks = parse_read_tokens(read_raw)
+        require_current_major(store, failures)      # 4.x 데이터가 남은 저장소로는 뜨지 않는다(계약 5.0.0 '이전')
     except (BoundaryError, SecretError) as e:
         log.error("저장소를 열지 못했다: %s", getattr(e, "message", None) or type(e).__name__)
         return 2

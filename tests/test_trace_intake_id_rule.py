@@ -18,7 +18,7 @@ URLSAFE_43 = "_" + "aB3-" * 10 + "xy"           # token_urlsafe(32) 모양: 43�
 DASH_43 = "-" + "Qw_9" * 10 + "ab"
 assert len(URLSAFE_43) == len(DASH_43) == 43
 LONG_129 = "a" * 129
-ID_OK = "s-Abc.1:2_3"                            # Id 형식에 맞으면 그대로
+ID_OK = "s-Abc_1-2_3"                           # SessionId(5.0.0: 영문·숫자로 시작, 영문·숫자·_·-, 1~64자)이면 그대로
 
 
 def request(sid_original, tid_original, sid_env, tid_env):
@@ -76,3 +76,16 @@ def test_trace_contract_version_is_not_compared_with_the_envelope_d117():
     r = request("s-1", "t-1", "s-1", "t-1")
     r["envelope"]["trace"]["contract_version"] = 2        # TurnTrace.contract_version 은 integer(minimum 1)
     assert trace_intake.accept(r)["session_id"] == "s-1"
+
+
+def test_envelope_id_is_the_contracts_function_not_a_local_copy():
+    """D117: x- 변환은 계약 boundary_contracts.envelope_id 한 곳(CONVENTIONS 10절, 5.0.0). 이 컴포넌트가 자기 구현을 갖지 않는다."""
+    import boundary_contracts
+    assert trace_intake.envelope_id is boundary_contracts.envelope_id
+
+
+def test_session_id_outside_session_id_type_is_rejected_by_the_envelope_schema():
+    """5.0.0: 봉투 session_id 는 SessionId(.·: 없음, 64자 이하)다. Id 형식이어도 '.' 가 있으면 envelope_id 가 그대로 두므로 스키마가 거부한다(survey 는 token_hex 를 발급해 해당 없음)."""
+    with pytest.raises(BoundaryError) as x:
+        trace_intake.accept(request("s-a.b", "t-1", trace_intake.envelope_id("s-a.b"), "t-1"))
+    assert x.value.code == "INVALID_RECORD"

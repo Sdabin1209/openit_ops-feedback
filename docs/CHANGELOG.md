@@ -1,5 +1,13 @@
 # 변경 이력
 
+## 0.21.0 (제안, 계약 5.0.0)
+
+- 계약 v5.0.0 고정(`requirements.txt`). link·문진 스키마 태그는 헤드의 새 태그 공지를 기다리는 중이다(이 항목을 쓸 때 미반영).
+- x- 봉투 ID: 자체 `envelope_id` 구현을 지우고 계약 `boundary_contracts.envelope_id`를 쓴다. 봉투 session_id 는 계약 SessionId 라 `.`·`:` 가 든 세션 ID 는 스키마가 거부한다.
+- 검토 값 거부(D117): 개인정보 패턴·문자열 20000자·깊이 64 는 계약 `review_input.review_value_problems`에 맡기고 `review_decider`의 사본과 `ReviewDecision.Bounded`의 20000 을 지웠다. 원문 포함 거부는 계약 INTERFACES I7 2항의 판정 기준(공백 뺀 원문, 10자)대로 이 영역이 한다.
+- 영역 검증기는 `ContractValidator`로 감싼다: NaN·Infinity·1e999 를 type number 칸이 통과시키지 않는다(회귀 시험 있음).
+- 4.x 저장 데이터가 남은 저장소에서는 서버와 잡이 `UNSUPPORTED_VERSION`으로 시작을 거부한다(admin 은 열어서 지울 수 있다).
+
 ## 0.20.1 (제안)
 
 - `scripts/dev-postgres.sh` 준비 대기: 소켓 `pg_isready` + 고정 `sleep 2`(초기화용 임시 서버가 통과시키고 재시작 전에 시험이 접속할 수 있는 경쟁)를 TCP 확인으로 바꾸고 상한 120초(근거는 스크립트 주석). 이전 40초 상한 초과 1건의 원인은 판정하지 못했다.

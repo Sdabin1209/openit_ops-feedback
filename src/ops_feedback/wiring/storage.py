@@ -35,3 +35,12 @@ def open_failure_store(env: Mapping[str, str], sqlite_path: Optional[str]) -> Op
     if url:
         return FailureCaseStore.postgres(url, environ=env)
     return FailureCaseStore.sqlite(sqlite_path) if sqlite_path else None
+
+
+def require_current_major(log: Optional[LogStore], failures: Optional[FailureCaseStore]) -> None:
+    """서버·잡 기동 때: 저장소에 계약 4.x 레코드가 남아 있으면 UNSUPPORTED_VERSION 으로 시작을 거부한다(계약 5.0.0 '이전': 새 환경을 전제하고 4.x 데이터는 이전하지 않는다).
+    왜 거부인가: 4.x 사례를 5.0 으로 다시 내보낼 수 없고(ID 형식이 달라졌다) 조용히 섞이면 이웃이 받은 값이 계약을 어긴다. admin(삭제·purge)은 이 검사를 하지 않아 남은 데이터를 지울 수 있다."""
+    for what, store in (("로그 저장소", log), ("실패 사례 저장소", failures)):
+        if store is not None and store.legacy_major_present():
+            raise BoundaryError("UNSUPPORTED_VERSION", f"{what}에 계약 4.x 레코드가 남아 있다. 4.x 데이터는 이전하지 않는다: 새 저장소를 쓰거나 admin purge 로 지운다",
+                                {"expected_major": 5})

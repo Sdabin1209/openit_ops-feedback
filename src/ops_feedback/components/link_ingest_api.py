@@ -20,7 +20,7 @@ from typing import Optional
 
 import waitress
 import waitress.wasyncore
-from boundary_contracts import validator
+from boundary_contracts import strict_json, validator
 from boundary_contracts.errors import BoundaryError
 from openit_link import App, Request, Response, Route
 
@@ -47,8 +47,8 @@ _ENVELOPE = validator("TraceEnvelope")
 def _rejection_fields(raw: bytes) -> str:
     """거부 로그용: 수집 본문이 TraceEnvelope 에서 어긋난 칸의 경로와 규칙 종류(`brief`: 값 없이). 본문을 해석하지 못하면 빈 문자열."""
     try:
-        body = json.loads(raw)
-    except ValueError:
+        body = strict_json.loads(raw)      # 계약 JSON 공통 규칙(5.0.0). 어기면 칸 이름을 댈 수 없다: 거부 사유(메시지)가 그 위반을 말한다
+    except (BoundaryError, ValueError):
         return ""
     return "; ".join(brief(e) for e in sorted(_ENVELOPE.iter_errors(body), key=lambda e: list(map(str, e.absolute_path)))[:5])
 MAX_BODY = 8 * 1024 * 1024        # 수집 본문 상한: TurnTrace 봉투 하나. 임의 상한, 측정 안 함(ADR 0008)

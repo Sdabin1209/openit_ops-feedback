@@ -5,12 +5,11 @@ envelope 안팎의 값이 서로 같아야 한다는 교차 필드 검사.
 """
 from __future__ import annotations
 
-import hashlib
-import re
 from functools import lru_cache
 
 import survey_schema
-from boundary_contracts import load_schema
+from boundary_contracts import envelope_id
+from boundary_contracts.schemas_api import ContractValidator
 from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 from jsonschema import Draft202012Validator
@@ -22,28 +21,13 @@ from boundary_contracts import format_checker as _bc_format_checker  # 형식(fo
 
 
 @lru_cache(maxsize=None)
-def _trace_validator(version: int) -> Draft202012Validator:
+def _trace_validator(version: int) -> ContractValidator:
     # 왜 설치된 문진 스키마 패키지에서 읽나: 사본을 두면 문진 스키마가 바뀔 때 어긋난다(D110). 버전은 envelope가 정한다.
     try:
-        return Draft202012Validator(survey_schema.load_schema("TurnTrace", version), format_checker=_bc_format_checker(survey_schema.load_schema("TurnTrace", version)))
+        schema = survey_schema.load_schema("TurnTrace", version)
+        return ContractValidator(Draft202012Validator(schema, format_checker=_bc_format_checker(schema)))      # 계약 JSON 공통 규칙(비유한 수 거부)을 문진 스키마 검증에도 건다(5.0.0)
     except KeyError:
         raise BoundaryError("UNSUPPORTED_VERSION", f"지원하지 않는 문진 스키마 버전: {version}") from None
-
-
-@lru_cache(maxsize=1)
-def _id_rule() -> tuple:
-    # 왜 계약에서 읽나: Id 형식을 코드에 복사하면 계약이 바뀔 때 어긋난다(구조 규칙: 계약 사본 금지).
-    d = load_schema("_common")["$defs"]["Id"]
-    return re.compile(d["pattern"]), d["maxLength"]
-
-
-def envelope_id(original: str) -> str:
-    """봉투에 실리는 외부 식별자 값. 계약 boundary-contracts/CONVENTIONS.md 10절 "외부 식별자를 봉투에 넣을 때"(116행): Id 형식(128자 이하)에 맞으면 그대로,
-    맞지 않으면 `x-` + 원본 UTF-8 SHA-256 앞 32자(소문자 16진). 원본은 trace 본문에 남는다. 계약 패키지에 이 함수가 생기면(계약 5.0.0 예정) 그쪽으로 옮긴다."""
-    pattern, max_len = _id_rule()
-    if len(original) <= max_len and pattern.match(original):
-        return original
-    return "x-" + hashlib.sha256(original.encode("utf-8")).hexdigest()[:32]
 
 
 def accept(request: TraceIntakeRequest) -> RawTraceRecord:
@@ -58,6 +42,7 @@ def accept(request: TraceIntakeRequest) -> RawTraceRecord:
         briefs = [brief(e) for e in errs[:5]]      # 경로와 규칙 종류뿐(값 없음). 메시지에도 실어 호출자와 서버 로그가 어긋난 칸을 안다(대장 #20)
         raise BoundaryError("INVALID_RECORD", f"TurnTrace(v{ver}) 스키마 위반: " + "; ".join(briefs[:3]), {"errors": briefs})
     sid, tid = envelope["session_id"], envelope["turn_id"]
+    # envelope_id 는 계약 함수다(CONVENTIONS 10절, 5.0.0 정본·적합성 벡터 conformance/vectors/envelope_id.json): 자체 사본을 두지 않는다.
     # 왜 같음이 아니라 변환 규칙인가: 바깥이 정한 ID 가 Id 형식에 안 맞으면 봉투에는 x- 변환값이 실리고 원본은 trace 에 있다(CONVENTIONS 10절). 같음 비교는 그 세션을 전부 거부했다.
     # trace 에 ID 가 없으면 비교할 원본이 없어 거부한다(None 은 규칙에 넣지 않는다).
     t_sid, t_tid = trace.get("session_id"), trace.get("turn_id")

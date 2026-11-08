@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, TypeAlias, Union
+from typing import Any, Literal, TypeAlias
 
 from typing_extensions import NotRequired, TypedDict
 
-Bounded: TypeAlias = Optional[
-    Union[str, float, bool, list["Bounded"], dict[str, "Bounded"]]
-]
+Bounded: TypeAlias = Any
 
 
 class ReviewDecision(TypedDict, closed=True):

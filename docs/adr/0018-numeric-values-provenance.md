@@ -13,7 +13,7 @@
 | 동시 연결 64 | `components/link_ingest_api.py` Server(waitress) | 임의 | 측정 안 함(ADR 0008) |
 | `/readyz` 결과 공유 1.5초 | `components/link_ingest_api.py` READYZ_CACHE_SECONDS | 임의 | probe 상한 2초보다 짧게 잡았다는 관계만 있다 |
 | 수집 본문 8 MiB | `components/link_ingest_api.py` MAX_BODY | 출처 확인 못 함 | 계약 문서에서 8 MiB 정의를 찾지 못했다(`HTTP.md`·`_common.schema.json` 검색). 임의로 취급한다 |
-| 검토 본문 1 MiB, 문자열 20,000자 | `components/link_ingest_api.py`(MAX_REVIEW_BODY), `schemas/ReviewDecision.schema.json`(Bounded) | 임의 | 주석에 "임의 상한, 측정 안 함" |
+| 검토 본문 1 MiB, 문자열 20,000자 | `components/link_ingest_api.py`(MAX_REVIEW_BODY). 문자열 20,000자는 계약 `data/review_input_rules.json`(max_string_length) | 임의 | 본문 1 MiB는 주석에 "임의 상한, 측정 안 함". 20,000자는 이 영역의 ADR 0008 설계 상한을 계약 5.0.0이 가져갔다(사본 삭제) |
 | 목록 `limit` 최대 500 | `schemas/ListCasesQuery.schema.json` | 제약 | `boundary-contracts/HTTP.md`가 "기본 100, 최대 500"을 정한다 |
 | `X-Openit-User` 128자 | `schemas/ReviewHeaders.schema.json` | 제약 | `_common.schema.json` Id의 `maxLength: 128`과 같다(스키마 값을 읽어 맞춤, 코드에 복사되어 있어 스키마가 바뀌면 어긋난다) |
 | 잡 배치 500 | `wiring/pipeline.py` DEFAULT_BATCH_SIZE | 임의 | 메모리에 올리는 봉투 수. 봉투 최대 8 MiB를 감안했다는 설명뿐 |
@@ -21,7 +21,7 @@
 | SQLite `busy_timeout` 5000ms | `components/raw_log_store.py`, `components/failure_case_store.py` | 임의 | 개발·시험용 저장소. 근거 기록 없음 |
 | 잔존 검사 창 4,096자, 겹침 1,024자 | `components/deidentifier.py` | 임의 + 계산 | 겹침은 예시 패턴의 최대 일치 길이(이메일 약 64+1+255+1+TLD)보다 크게 잡았다(계산, 측정 아님). 창 크기는 측정 안 함(ADR 0011) |
 | 식별자 패턴 길이 한도 64, 160, 32 | `components/deidentifier.py` | 임의 | ADR 0004·0013이 "근거 기록 없음, 보수적 임의값"으로 적음 |
-| 검토 입력 중첩 깊이 64 | `components/review_decider.py` | 임의 | 근거 기록 없음 |
+| 검토 입력 중첩 깊이 64 | 계약 `boundary_contracts.strict_json`(MAX_JSON_DEPTH)을 `review_input.review_value_problems`가 건다 | 제약 | 계약 5.0.0이 정한다(근거 link 0.3.0 max_json_depth). 이 영역의 사본은 지웠다 |
 | 파생 ID 해시 길이: `fc-`·`tr-` 32 hex, `rb-`·`metric-` 24 hex | `components/case_builder.py`, `components/rollback_request_builder.py` | 임의 | 근거 기록 없음. 충돌 확률은 계산하지 않았다 |
 | 의사 식별자 128비트(32 hex) | `components/deidentifier.py` | 제약 | 기존 형식·스키마 패턴 유지(ADR 0016) |
 | salt 최소 32바이트 | `components/pseudonymizer.py` MIN_SALT_BYTES | 표준(이해) | HMAC-SHA256 출력 길이. RFC 2104 원문 대조 전(ADR 0017) |

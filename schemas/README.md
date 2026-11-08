@@ -12,15 +12,15 @@
 |---|---|---|---|
 | 1 | `trace_intake` | `envelope.trace`가 `runtime_contract_version`에 해당하는 문진 스키마(TurnTrace)를 지킨다 | 문진 스키마는 외부 패키지(openit-survey-schema)이고 어느 버전을 쓸지는 데이터가 정한다. 버전별 `$ref`를 영역 스키마에 박으면 문진 스키마가 바뀔 때 어긋난다(사본 금지, D110) |
 | 2 | `trace_intake` | `envelope.runtime_contract_version`이 `supported_versions`에 든다(UNSUPPORTED_VERSION, 422) | 같은 문서 안의 두 값을 비교하는 교차 필드 조건(2020-12에는 값 참조가 없다). 오류 코드가 INVALID_RECORD와 달라야 해서 따로 둔다 |
-| 3 | `trace_intake` | `trace.session_id`·`trace.turn_id`가 `envelope`의 것과 같다 | 교차 필드 동일성 |
-| 4 | `trace_intake` | `trace.contract_version`이 `envelope.runtime_contract_version`과 같다 | 교차 필드 동일성 |
+| 3 | `trace_intake` | `envelope.session_id`·`turn_id`가 `trace`의 원본 값에 계약 `boundary_contracts.envelope_id`(CONVENTIONS 10절 "외부 식별자를 봉투에 넣을 때")를 적용한 값과 같다 | 교차 필드 비교이고 변환(SHA-256)은 JSON Schema로 쓸 수 없다. 변환 규칙과 적합성 벡터는 계약이 정본이고 이 영역은 자체 구현을 두지 않는다 |
+| 4 | (삭제됨) | `trace.contract_version == envelope.runtime_contract_version` 비교는 지웠다 | 계약에 같음을 요구하는 문장이 없다(D117). 봉투 버전의 TurnTrace 검증(#1)은 남는다 |
 | 5 | `pseudonymizer` | salt가 UTF-8로 32바이트 이상이다(`check_salt`, ADR 0017) | `minLength`는 문자 수라 바이트 수를 못 센다(한글은 3바이트). 기동 때 한 번 검사한다 |
 | 6 | `deidentifier` | 정책이 지목한 `mask_defs`·`drop_defs`가 해당 버전의 문진 스키마에 있다(없으면 DEID_FAILED로 닫는다) | 외부 스키마 안의 이름과의 대조(#1과 같은 이유) |
 | 7 | `deidentifier` | 결과에 잔존 패턴(설정의 `residual_patterns`)이 없다. 긴 문자열은 창으로 나눠 본다(ADR 0011) | 입력 조건이 아니라 출력에 대한 검사이고, 패턴이 설정에서 오며 선형 시간 보장을 위해 창으로 나눠 실행해야 한다 |
 | 8 | `failure_detector` | `factory`가 돌려준 객체가 `Detector` 인터페이스(`name`, `detect`)를 지킨다 | 임의 Python 객체의 모양은 JSON이 아니다 |
 | 9 | `review_decider` | `base_version`이 최신 version과 같다(CONFLICT, 409) | 입력(결정)과 다른 입력(현재 사례)의 교차 비교. 오류 코드가 달라야 한다 |
-| 10 | `review_decider` | 검토자가 쓴 값에 이메일·전화·주민번호 패턴이 없다(설정 가능한 패턴, 이메일은 선형 시간 탐지) | 설정으로 바뀌는 패턴이고, 이메일은 정규식이 `@` 없는 긴 문자열에서 제곱 시간이 되어(점검 round2 M2) 직접 선형으로 찾는다 |
-| 11 | `review_decider` | 검토 값의 중첩 깊이 64 이하, 객체 키도 패턴 검사 대상이다 | 재귀 깊이 한도와 키 문자열 검사는 JSON Schema로 쓸 수 없다. 문자열 길이(20000자)는 `ReviewDecision.Bounded`에 있다 |
+| 10 | `review_decider` | 검토자가 쓴 값의 개인정보 패턴·문자열 20000자·깊이 64는 **계약이 검사한다**: `boundary_contracts.review_input.review_value_problems`(INTERFACES I7 1항, 규칙 데이터 `review_input_rules.json`). 이 영역은 그 판정을 `INVALID_RECORD`로 옮길 뿐 사본이 없다 | (계약 몫) 정규식·재귀 깊이는 JSON Schema로 못 쓰므로 계약이 함수로 제공한다 |
+| 11 | `review_decider` | `reviewed_input`이 이 사례의 검토 사본에만 있는 환자 발화 원문을 담지 않는다(공백 뺀 원문과 같음, 공백 뺀 10자 이상 원문의 부분 포함) | 원문은 이 영역의 검토 사본에만 있어 계약이 함수로 줄 수 없다. 판정 기준은 계약 INTERFACES I7 2항이 정하고 이 영역이 수행한다(10자는 그 문서가 이 영역의 설계 값으로 선언, 측정 안 함) |
 | 12 | `link_ingest_api` | 본문 크기 상한(수집 8 MiB, 검토 1 MiB) | 전송 계층의 한도이고 `openit_link` Route의 `max_body`가 413으로 낸다. 값은 ADR 0008 |
 | 13 | `link_gate_send` | 영수증의 `request_id`가 보낸 요청의 것이다 | 교차 필드 동일성(응답 대 요청) |
 | 14 | `wiring/build.py` | 설정의 `factory` `모듈:함수`가 실제로 불러와진다 | 모듈 존재 여부는 실행 환경에 달렸다 |

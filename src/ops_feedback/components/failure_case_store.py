@@ -22,6 +22,10 @@ from ..wiring.pgbase import PgBase
 from ..wiring.validate import check
 
 
+# 왜 LIKE 인가·근거: raw_log_store.LEGACY_MAJOR_LIKE 와 같다(레코드는 json.dumps 기본 구분자의 TEXT, 계약 5.0.0 '이전').
+LEGACY_MAJOR_LIKE = '%"pipeline_schema_version": "4.%'
+
+
 class _Backend(ABC):
     @abstractmethod
     def insert_case(self, record: dict) -> int: ...
@@ -52,6 +56,10 @@ class _Backend(ABC):
     def list_aux(self, kind: str) -> list[dict]: ...
     @abstractmethod
     def ping(self) -> None: ...
+
+    def legacy_major_present(self) -> bool:
+        """계약 4.x 로 쓴 사례(pipeline_schema_version MAJOR 4)가 남아 있는가. 메모리 구현은 프로세스 안이라 없다."""
+        return False
 
 
 class MemoryBackend(_Backend):
@@ -221,6 +229,9 @@ class SqliteBackend(_Backend):
     def ping(self):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
 
+    def legacy_major_present(self):
+        return self._x(lambda: self._db.execute("SELECT 1 FROM cases WHERE record LIKE ? LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
+
     def close(self) -> None:
         self._db.close()
 
@@ -242,6 +253,9 @@ class PostgresFailureBackend(PgBase, _Backend):
     def versions(self, case_id):
         return self._x(lambda: [json.loads(r) for (r,) in self._db.execute(
             "SELECT record FROM cases WHERE case_id=%s ORDER BY version", (case_id,)).fetchall()])
+
+    def legacy_major_present(self):
+        return self._x(lambda: self._db.execute("SELECT 1 FROM cases WHERE record LIKE %s LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
 
     def scan(self, after_seq):
         rows = self._x(lambda: self._db.execute("SELECT seq,record FROM cases WHERE seq>%s ORDER BY seq", (after_seq,)).fetchall())
@@ -499,3 +513,6 @@ class FailureCaseStore:
 
     def ping(self) -> None:
         self._b.ping()
+
+    def legacy_major_present(self) -> bool:
+        return self._b.legacy_major_present()

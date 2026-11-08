@@ -5,7 +5,8 @@ import re
 import pytest
 import yaml
 
-from ops_feedback.components.review_decider import DEFAULT_REVIEW_PATTERNS
+from boundary_contracts.review_input import rules as _review_rules
+DEFAULT_REVIEW_PATTERNS = _review_rules()["patterns"]      # 검토 쪽 패턴의 정본은 계약 규칙 데이터다(5.0.0)
 
 EXAMPLE = yaml.safe_load(open("config/job.example.yaml", encoding="utf-8"))["deid"]["residual_patterns"]["rrn_kr"]
 

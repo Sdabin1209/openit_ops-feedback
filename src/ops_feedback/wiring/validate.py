@@ -14,6 +14,7 @@ from typing import Any
 
 from boundary_contracts import schema_dir as _contract_dir
 from boundary_contracts.errors import BoundaryError
+from boundary_contracts.schemas_api import ContractValidator
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
@@ -47,12 +48,13 @@ def _registry() -> Registry:
 
 
 @lru_cache(maxsize=None)
-def validator(name: str, *, contract: bool = False) -> Draft202012Validator:
+def validator(name: str, *, contract: bool = False) -> ContractValidator:
     """영역 스키마(기본) 또는 계약 스키마(contract=True)의 검증기."""
     base, d = (_BOUNDARY, _contract_dir()) if contract else (_OPS, area_schema_dir())
     if not (d / f"{name}.schema.json").exists():
         raise ValueError(f"알 수 없는 스키마: {name}")
-    return Draft202012Validator({"$ref": base + f"{name}.schema.json"}, registry=_registry(), format_checker=_bc_format_checker({"$ref": base + f"{name}.schema.json"}))
+    # 왜 ContractValidator 로 감싸나: 계약 JSON 공통 규칙(5.0.0) — NaN·Infinity·1e999 를 스키마 type 이 number 인 칸이 통과시키지 않게 한다. 영역 스키마는 계약 레지스트리와 같이 올려야 해서 계약 validator() 를 직접 쓸 수 없다.
+    return ContractValidator(Draft202012Validator({"$ref": base + f"{name}.schema.json"}, registry=_registry(), format_checker=_bc_format_checker({"$ref": base + f"{name}.schema.json"})))
 
 
 def brief(e) -> str:
@@ -69,9 +71,9 @@ def check(name: str, value: Any, *, contract: bool = False, code: str = "INVALID
 
 
 @lru_cache(maxsize=None)
-def contract_part(contract: str, pointer: str) -> Draft202012Validator:
+def contract_part(contract: str, pointer: str) -> ContractValidator:
     """계약 스키마의 한 부분(JSON Pointer, 예: `/properties/rollback`)을 검증하는 검증기. 영역이 같은 조건을 복사하지 않고 계약을 가리키게 한다."""
-    return Draft202012Validator({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"}, registry=_registry(), format_checker=_bc_format_checker({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"}))
+    return ContractValidator(Draft202012Validator({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"}, registry=_registry(), format_checker=_bc_format_checker({"$ref": f"{_BOUNDARY}{contract}.schema.json#{pointer}"})))
 
 
 def check_part(contract: str, pointer: str, value: Any, what: str, *, exc=ValueError) -> None:

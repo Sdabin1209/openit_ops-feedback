@@ -9,85 +9,60 @@ from typing import Optional
 
 from boundary_contracts import PIPELINE_SCHEMA_VERSION
 from boundary_contracts.errors import BoundaryError
+from boundary_contracts.review_input import review_value_problems
 
 from ..types.ReviewOutcome import ReviewOutcome
 from ..types.ReviewRequest import ReviewRequest
 from ..wiring.validate import check
 
-# 검토자가 직접 쓰는 expected·reviewed_input은 비식별 처리기를 거치지 않으므로, 개인정보 패턴(이메일·전화·주민번호)이 든 값은 받지 않는다.
-# 이름·주소 같은 것은 패턴으로 알 수 없다: 검토 화면 안내와 사람 책임이다(docs/boundary.md). 값은 오류에 싣지 않는다.
-# 시간: 전화·주민번호 패턴은 한도가 정해진 반복만 있어 입력 길이에 선형이다. 이메일은 '@'가 없으면 정규식 자체를 돌리지 않고, '@' 하나마다
-# 앞 문자 하나와 뒤쪽 도메인 문자 구간(다음 '@'나 도메인에 못 쓰는 문자에서 끝나므로 '@'마다 구간이 겹치지 않아 전체가 선형)만 본다
-# (점검 round2 M2: 앞쪽 무제한 문자 클래스 정규식은 '@' 없는 긴 문자열에서 제곱 시간이었다). 이전에는 뒤쪽을 254자에서 잘라, 첫 '.'이 254자 뒤에 있는
-# 이메일 모양(user@aaaa...(300자).com)을 놓쳤다. 정규식 `\.[A-Za-z]{2,}`와 같은 뜻을 길이와 상관없이 지키도록 상한을 없앴다.
-# 문자열 하나의 길이는 스키마 ReviewDecision.Bounded의 maxLength 20,000자로 입구에서 막는다(검토자가 쓰는 문장·JSON 값으로 충분한 임의 상한, 측정 안 함, docs/adr/0008).
-_EMAIL_LOCAL = re.compile(r"[A-Za-z0-9._%+-]")
-_EMAIL_TAIL = re.compile(r"[A-Za-z0-9.-]*")
-DEFAULT_REVIEW_PATTERNS = {
-    "phone_kr": r"0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}",
-    "rrn_kr": r"\d{6}[- ]?[1-8]\d{6}",
-}
+# 왜 개인정보 패턴·문자열 길이·깊이를 여기서 하지 않나(D117): 검토 값의 이 거부 기준은 계약이 정한다(INTERFACES I7 '검토 게시 값의 판정 기준' 1항, boundary_contracts.review_input.review_value_problems,
+# 규칙 데이터 data/review_input_rules.json). 4.x 까지 이 파일에 있던 사본(전화·주민번호 패턴, 이메일 선형 탐지, 20000자, 깊이 64)을 지웠다.
+# 아래 원문 포함 거부(2항)만 이 영역이 한다: 환자 발화 원문은 이 영역의 검토 사본에만 있어 계약이 함수로 줄 수 없고, 판정 기준만 계약에 있다.
+_WS = re.compile(r"\s+")
+MIN_ORIGINAL_CHARS = 10      # 부분 포함으로 거부하는 원문의 최소 길이(공백 제외). 계약 I7 가 ops-feedback 의 설계 값으로 선언한 값, 측정 안 함
 
 
-def _has_email(s: str) -> bool:
-    """local@domain.tld 모양이 있는가. '@' 위치마다 앞 문자 하나와 뒤 도메인 문자 구간만 본다(선형)."""
-    i = s.find("@")
-    while i != -1:
-        if i > 0 and _EMAIL_LOCAL.match(s[i - 1]):
-            dom = _EMAIL_TAIL.match(s, i + 1).group(0)
-            k = dom.rfind(".")
-            # 마지막 '.' 뒤가 영문 2자 이상이면 정규식 `\.[A-Za-z]{2,}`와 같은 뜻(그 앞 도메인 부분은 길이 제한 없는 `[A-Za-z0-9.-]*`)
-            while k != -1:
-                if k >= 1 and dom[k + 1:k + 3].isalpha() and dom[k + 1:k + 3].isascii() and len(dom[k + 1:k + 3]) == 2:
-                    return True
-                k = dom.rfind(".", 0, k)
-        i = s.find("@", i + 1)
-    return False
-
-
-def _strings(v, depth=0):
-    if depth > 64:
-        raise BoundaryError("INVALID_RECORD", "검토 입력의 중첩이 너무 깊다")
+def _strings(v):
+    """값 안의 모든 문자열(객체 키 포함). 깊이는 앞서 계약 검사(review_value_problems)가 64 로 막았으므로 재귀해도 안전하다."""
     if isinstance(v, str):
         yield v
     elif isinstance(v, list):
         for x in v:
-            yield from _strings(x, depth + 1)
+            yield from _strings(x)
     elif isinstance(v, dict):
         for k, x in v.items():
             yield str(k)
-            yield from _strings(x, depth + 1)
+            yield from _strings(x)
 
 
 class ReviewDecider:
-    def __init__(self, *, residual_patterns: Optional[dict] = None) -> None:
-        # 호출자가 준 패턴은 `email`이라는 이름이면 위의 선형 탐지로 대신하고, 나머지는 정규식 그대로 쓴다(길이는 스키마의 20000자 상한으로 이미 묶였다).
-        self._pii = {n: re.compile(p) for n, p in (residual_patterns if residual_patterns is not None else DEFAULT_REVIEW_PATTERNS).items() if n != "email"}
-
-    def _reject_pii(self, value, what: str) -> None:
-        for s_ in _strings(value):
-            if _has_email(s_):
-                raise BoundaryError("INVALID_RECORD", f"{what}에 개인정보로 보이는 패턴(email)이 있다. 개인정보 없이 다시 쓴다")
-            for name, rx in self._pii.items():
-                if rx.search(s_):
-                    raise BoundaryError("INVALID_RECORD", f"{what}에 개인정보로 보이는 패턴({name})이 있다. 개인정보 없이 다시 쓴다")
+    def _reject_value_problems(self, value, what: str) -> None:
+        """계약 검사(JSON 공통 규칙·문자열 길이·개인정보 패턴). 오류에는 위반 이름만 싣고 값은 싣지 않는다(개인정보일 수 있다, I7)."""
+        try:
+            problems = review_value_problems(value)
+        except BoundaryError as e:
+            raise BoundaryError("INVALID_RECORD", f"{what}가 계약 JSON 규칙을 어긴다: {e.code}") from None
+        if problems:
+            raise BoundaryError("INVALID_RECORD", f"{what}가 검토 값 규칙을 어긴다({', '.join(problems)}). 개인정보 없이 다시 쓴다")
 
     def _reject_preserved(self, value, originals: list) -> None:
         """reviewed_input은 읽기 역할 전체가 읽는 FailureCase에 실린다. 검토 사본에만 두기로 한 환자 발화 원문이 그대로 들어 있으면 reviewer 전용 경계가 무너지므로 거부한다.
         한계(측정하지 않은 보수 값): 10자 미만 발화는 다른 문장의 일부와 구별되지 않아 완전히 같은 문자열일 때만 막고, 바꿔 쓴 문장은 막지 못한다(개인정보 없는 문장을 쓰는 것은 검토자 책임)."""
+        squashed = [c for c in (_WS.sub("", o) for o in originals) if c]      # 계약 I7 2항: 공백을 뺀 원문으로 비교한다
         for s_ in _strings(value):
-            for o in originals:
-                if s_.strip() == o.strip() or (len(o.strip()) >= 10 and o.strip() in s_):
+            t = _WS.sub("", s_)
+            for o in squashed:
+                if t == o or (len(o) >= MIN_ORIGINAL_CHARS and o in t):
                     raise BoundaryError("INVALID_RECORD", "reviewed_input에 환자 발화 원문이 그대로 들어 있다. 개인정보 없이 다시 쓴다")
 
     def decide(self, request: ReviewRequest) -> ReviewOutcome:
         check("ReviewRequest", request)
         cur, d = request["current"], request["decision"]
+        for what in ("expected", "reviewed_input", "note"):      # 계약 검사가 먼저다: 깊이 64 를 넘는 값을 아래 순회가 보지 않게 한다
+            if d.get(what):
+                self._reject_value_problems(d[what], what)
         if d.get("reviewed_input"):
             self._reject_preserved(d["reviewed_input"], request.get("preserved_utterances") or [])
-        for what in ("expected", "reviewed_input", "note"):
-            if d.get(what):
-                self._reject_pii(d[what], what)
         base = d.get("base_version")
         if base is not None and base != cur["version"]:
             raise BoundaryError("CONFLICT", f"최신 version은 {cur['version']}")

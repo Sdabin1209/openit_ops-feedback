@@ -11,7 +11,7 @@ from ..components.failure_detector import FailureDetector
 from ..components.pseudonymizer import check_salt, pseudonymize as _pseudonymize
 from .clock import Clock, utc_now
 from .rollback_flow import RollbackPlanner
-from .storage import open_failure_store, open_log_store
+from .storage import open_failure_store, open_log_store, require_current_major
 
 
 def _http_client(name: str, settings: dict, env: dict, egress):
@@ -40,6 +40,7 @@ def build_from_config(cfg: dict, env: dict, *, clock: Clock = utc_now):
     check_salt(salt)          # 짧은 salt는 저장소를 열기 전에 거부한다(ADR 0017)
     log = open_log_store(env, cfg["storage"]["log_db"], clock=clock)
     store = open_failure_store(env, cfg["storage"]["failure_db"])
+    require_current_major(log, store)      # 4.x 데이터가 남은 저장소에서는 잡이 실패 종료한다(계약 5.0.0 '이전')
     pseudonymize = make_pseudonymizer(salt)
     deid = Deidentifier(policy, pseudonymize)
     detector = FailureDetector(cfg["detection"]["detectors"])

@@ -10,9 +10,9 @@ from .clock import Clock, utc_now
 
 
 class ReviewFlow:
-    def __init__(self, store: FailureCaseStore, *, clock: Clock = utc_now, residual_patterns: Optional[dict] = None) -> None:
+    def __init__(self, store: FailureCaseStore, *, clock: Clock = utc_now) -> None:
         self._store, self._clock = store, clock
-        self._decider = ReviewDecider(residual_patterns=residual_patterns)
+        self._decider = ReviewDecider()
 
     def pending(self, *, failure_type: Optional[str] = None, source_release_id: Optional[str] = None, cursor: Optional[str] = None, limit: int = 50):
         return self._store.list_cases(review_status="PENDING", failure_type=failure_type, source_release_id=source_release_id, cursor=cursor, limit=limit)

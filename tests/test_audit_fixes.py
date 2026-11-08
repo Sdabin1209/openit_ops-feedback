@@ -432,19 +432,56 @@ def test_review_pii_scan_gives_the_right_answer_on_hostile_inputs():
     q = ReviewQueue(FailureStoreImpl.memory())
     for name, mk in HOSTILE.items():
         v = mk(MAX_FIELD)[:MAX_FIELD]
-        assert _timed(lambda x: q._decider._reject_pii(x, "expected"), v) in (None, "rejected")      # 숫자열은 전화·주민번호 모양이라 거부될 수 있다(둘 다 맞는 답)
-        assert _timed(lambda x: q._decider._reject_pii(x, "expected"), v + " a@b.co") == "rejected"      # 끝에 이메일이 있으면 잡는다
+        assert _timed(lambda x: q._decider._reject_value_problems(x, "expected"), v) in (None, "rejected")      # 숫자열은 전화·주민번호 모양이라 거부될 수 있다(둘 다 맞는 답)
+        assert _timed(lambda x: q._decider._reject_value_problems(x, "expected"), v + " a@b.co") == "rejected"      # 끝에 이메일이 있으면 잡는다
 
 
-def test_review_email_scan_has_no_domain_length_blind_spot():
-    """L22: 예전에는 '@' 뒤 254자까지만 보아 첫 '.'이 254자 뒤에 있는 이메일 모양을 놓쳤다. 길이와 상관없이 정규식 `@[A-Za-z0-9.-]*\\.[A-Za-z]{2,}`와 같은 답을 낸다."""
-    from ops_feedback.components.review_decider import _has_email
-    assert _has_email("a@" + "b" * 300 + ".com")           # 254자 창 밖에 점이 있는 경우(예전에는 놓침)
-    assert _has_email("a@" + "b" * 249 + ".com")           # 도메인 253자(DNS 최대)
-    assert _has_email("x " * 5000 + "me@example.org" + " y" * 5000)
-    assert not _has_email("a@" + "b" * 300)                # 점·최상위 이름이 없다
-    assert not _has_email("a@" + "b" * 300 + ".c")         # 최상위 이름이 한 글자
-    assert not _has_email("@" + "b" * 300 + ".com")        # 앞에 지역 부분이 없다
+def test_review_value_rules_are_the_contracts_not_a_local_copy():
+    """D117: 검토 값의 개인정보 패턴·20000자·깊이 64 는 계약(boundary_contracts.review_input)이 정한다. decider 는 그 판정을 INVALID_RECORD 로 옮길 뿐 자기 패턴을 갖지 않는다.
+    L22(이메일 도메인 길이 사각지대)는 계약 쪽 선형 탐지의 몫이라 여기서는 계약이 거부하는 값을 decider 가 거부하는지만 본다."""
+    from ops_feedback.components import review_decider
+    from ops_feedback.components.review_decider import ReviewDecider
+    assert not hasattr(review_decider, "DEFAULT_REVIEW_PATTERNS") and not hasattr(review_decider, "_has_email")
+    d = ReviewDecider()
+    nest = "x"
+    for _ in range(65):
+        nest = [nest]
+    for bad in ("a@" + "b" * 300 + ".com", "x" * 20001, nest, {"k": 1e999}):
+        with pytest.raises(BoundaryError) as e:
+            d._reject_value_problems(bad, "expected")
+        assert e.value.code == "INVALID_RECORD"
+    d._reject_value_problems("x" * 20000, "expected")
+    d._reject_value_problems({"values": [{"key": "Q1.D01.count", "value": 3}]}, "expected")
+
+
+def test_review_original_utterance_match_ignores_whitespace_per_contract_i7():
+    """INTERFACES I7 2항: 공백을 뺀 원문과 같거나, 공백을 뺀 길이 10자 이상 원문을 부분으로 포함하면 거부한다."""
+    from ops_feedback.components.review_decider import ReviewDecider
+    d = ReviewDecider()
+    orig = "고혈압 약을 매일 아침 복용한다"
+    for bad in ("고혈압약을매일아침복용한다", {"a": "앞 고혈압  약을 매일\n아침 복용한다 뒤"}, ["고혈압 약을 매일 아침 복용한다"]):
+        with pytest.raises(BoundaryError) as e:
+            d._reject_preserved(bad, [orig])
+        assert e.value.code == "INVALID_RECORD" and "원문" in e.value.message
+    d._reject_preserved("혈압약 복용", [orig])
+    with pytest.raises(BoundaryError):
+        d._reject_preserved(" 네 ", ["네"])                 # 10자 미만 원문은 완전히 같을 때만 막는다
+    d._reject_preserved("네, 맞아요", ["네"])
+
+
+def test_review_number_column_rejects_1e999_nan_through_the_contract_validator():
+    """5.0.0 계약 JSON 공통 규칙: 스키마 type 이 number 인 칸(ReviewDecision.Bounded 가 받는 값)도 1e999(inf)·NaN 을 통과시키지 않는다. 영역 검증기는 ContractValidator 다."""
+    import json as _json
+    from ops_feedback.wiring.validate import check
+    def decision(v):
+        return {"review_status": "CONFIRMED", "reviewer_role": "reviewer", "expected_kind": "LORA_A",
+                "expected": {"action": "NEXT", "next_item": "END", "values": [{"key": "Q10.days", "precision": "exact", "save": True, "status": "ANSWERED", "value": v}]}}
+    check("ReviewDecision", decision(2))                      # 같은 모양에 유한한 수는 통과한다: 아래 거부는 수 때문이다
+    for lit in ("1e999", "NaN", "Infinity", "-Infinity"):
+        bad = decision(_json.loads(lit))
+        with pytest.raises(BoundaryError) as e:
+            check("ReviewDecision", bad)
+        assert e.value.code == "INVALID_RECORD" and lit not in str(e.value)
 
 
 def test_review_surface_refuses_a_body_over_its_limit_without_reading_it():

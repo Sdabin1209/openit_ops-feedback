@@ -25,6 +25,11 @@ MINIMIZED = '{"minimized": true}'          # 처리가 끝난 원본의 봉투 �
 MINIMIZABLE = ("DONE_CASE", "NO_FAILURE")  # 재처리가 필요한 상태(DEID_FAILED, PUBLISH_FAILED)는 원본을 남긴다
 
 
+# 왜 LIKE 인가: 레코드는 json.dumps 기본 구분자의 TEXT 라서 표지가 `"pipeline_schema_version": "4.` 로 나온다. 기동 때 한 번 훑는 검사라 색인이 필요 없다(측정 안 함).
+# 근거: 계약 5.0.0 CHANGELOG '이전': 4.x 저장 데이터는 이전하지 않고, 남아 있으면 조용히 섞이지 않고 실패해야 한다.
+LEGACY_MAJOR_LIKE = '%"pipeline_schema_version": "4.%'
+
+
 class _RawBackend(ABC):
     @abstractmethod
     def insert_if_absent(self, session_id: str, turn_id: str, release_id: str, received_at: str,
@@ -47,6 +52,10 @@ class _RawBackend(ABC):
     def purge_received_before(self, cutoff: str, statuses: Optional[tuple] = None) -> int: ...
     @abstractmethod
     def ping(self) -> None: ...
+
+    def legacy_major_present(self) -> bool:
+        """계약 4.x 로 받은 레코드(pipeline_schema_version MAJOR 4)가 남아 있는가. 메모리 구현은 프로세스 안이라 없다."""
+        return False
     @abstractmethod
     def received_at(self, session_id: str, turn_id: str) -> Optional[str]: ...
 
@@ -204,6 +213,9 @@ class SqliteBackend(_RawBackend):
     def ping(self):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
 
+    def legacy_major_present(self):
+        return self._x(lambda: self._db.execute("SELECT 1 FROM raw_traces WHERE envelope LIKE ? LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
+
     def received_at(self, session_id, turn_id):
         row = self._x(lambda: self._db.execute("SELECT received_at FROM raw_traces WHERE session_id=? AND turn_id=?",
                                                (session_id, turn_id)).fetchone())
@@ -234,6 +246,9 @@ class PostgresRawBackend(PgBase, _RawBackend):
 
     def count_session(self, session_id):
         return self._x(lambda: self._db.execute("SELECT COUNT(*) FROM raw_traces WHERE session_id=%s", (session_id,)).fetchone()[0])
+
+    def legacy_major_present(self):
+        return self._x(lambda: self._db.execute("SELECT 1 FROM raw_traces WHERE envelope LIKE %s LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
 
     def delete_session(self, session_id):
         return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE session_id=%s", (session_id,)).rowcount)
@@ -371,6 +386,9 @@ class RawLogStore:
 
     def ping(self) -> None:
         self._backend.ping()
+
+    def legacy_major_present(self) -> bool:
+        return self._backend.legacy_major_present()
 
     def grant_deidentifier_view(self) -> DeidentifierView:
         """비식별 단계에 원본 읽기 권한을 건네는 wiring 한 곳에서만 부른다."""
