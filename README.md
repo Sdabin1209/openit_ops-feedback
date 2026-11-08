@@ -133,6 +133,7 @@ GPU가 막는 항목은 없다. 이 영역의 문서(docs/STATUS.md, docs/runboo
 | [0032](docs/adr/0032-backup-logical-dump-restic.md) | 백업: COPY 논리 덤프를 restic 으로 platform 백업 저장소에(R10.1) |
 | [0033](docs/adr/0033-gateway-token-identity-header.md) | 사람 신원 헤더는 게이트웨이 토큰에서만 쓴다(CONVENTIONS 6절) |
 | [0035](docs/adr/0035-area-database-image.md) | 영역 DB 이미지 ops-feedback-db: 공식 postgres 위에 계정·권한·접속 규칙·TLS, 인증서 갱신 재읽기(D126) |
+| [0036](docs/adr/0036-db-image-non-root.md) | ops-feedback-db 는 root 가 아닌 postgres(999)로 실행, capability 없음(0035 의 실행 사용자 부분 대체) |
 | [0034](docs/adr/0034-request-body-limits.md) | 경로별 요청 본문 상한을 노출 선언에 적고 서버 상한과 같게 둔다(3.4.7) |
 
 ## 7. 더 자세한 문서

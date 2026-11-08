@@ -78,10 +78,9 @@ def start(tmp_path, image, with_certs=True, passwords_override=None):
     (su / "pw").chmod(0o640)
     name = f"ops-feedback-db-test-{uuid.uuid4().hex[:8]}"
     args = ["run", "-d", "--name", name,
-            "--read-only", "--tmpfs", "/tmp", "--tmpfs", "/run",
-            "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
-            "--cap-add", "CHOWN", "--cap-add", "DAC_OVERRIDE", "--cap-add", "FOWNER",
-            "--cap-add", "SETUID", "--cap-add", "SETGID", "--group-add", str(os.getgid()), "--health-interval=2s", "--health-retries=2", "--health-start-period=0s", "-p", "127.0.0.1::5432", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw"]
+            "--read-only", "--tmpfs", "/tmp", "--tmpfs", "/run:uid=999,gid=999,mode=0755",      # 쓰기 경로는 선언(inputs.json writable)대로 postgres(999) 소유로 준다(deploy 가 하는 일의 대역)
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",      # 더하는 capability 없음: inputs.json capabilities 가 비어 있다(ADR 0036)
+            "--group-add", str(os.getgid()), "--health-interval=2s", "--health-retries=2", "--health-start-period=0s", "-p", "127.0.0.1::5432", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw"]
     if with_certs:
         args += ["-v", f"{certs}:/certs:ro"]
     docker(*args, image)
@@ -232,7 +231,7 @@ def test_missing_account_secret_stops_initialisation(image, tmp_path):
     (su / "pw").write_text("su-pw\n")
     (su / "pw").chmod(0o644)
     name = f"ops-feedback-db-test-{uuid.uuid4().hex[:8]}"
-    docker("run", "-d", "--name", name, "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-v", f"{certs}:/certs:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw", image)
+    docker("run", "-d", "--name", name, "--tmpfs", "/run:uid=999,gid=999,mode=0755", "-v", f"{sec}:/run/secrets/db:ro", "-v", f"{su}:/run/su:ro", "-v", f"{certs}:/certs:ro", "-e", "POSTGRES_PASSWORD_FILE=/run/su/pw", image)
     try:
         assert docker("wait", name).stdout.strip() != "0"
         logs = docker("logs", name, check=False)
@@ -313,3 +312,17 @@ def test_empty_first_password_line_stops_before_database_initialisation(image, t
         assert "CREATE ROLE" not in logs.stdout + logs.stderr
     finally:
         docker("rm", "-fv", name, check=False)
+
+
+def test_server_runs_as_the_declared_non_root_user_without_capabilities(db, image):
+    """ADR 0036(대장 #8): 컨테이너는 root 가 아니다. 이미지 USER·실행 중 프로세스·inputs.json 선언의 uid/gid 가 같고, capability 를 하나도 더하지 않고 뜬다(db 픽스처가 cap-drop ALL 만으로 기동)."""
+    declared = json.loads((ROOT / "db" / "inputs.json").read_text())["roles"]["default"]
+    uid, gid = declared["process"]["uid"], declared["process"]["gid"]
+    assert (uid, gid) != (0, 0) and declared["capabilities"] == [] and all(w["written_by"] == {"uid": uid, "gid": gid} for w in declared["writable"])
+    user = docker("image", "inspect", "-f", "{{.Config.User}}", image).stdout.strip()
+    assert user not in ("", "0", "root")
+    assert docker("run", "--rm", "--entrypoint", "id", image, "-u").stdout.strip() == str(uid) and docker("run", "--rm", "--entrypoint", "id", image, "-g").stdout.strip() == str(gid)
+    pid1 = docker("exec", db.name, "sh", "-c", "stat -c '%u %g' /proc/1").stdout.split()
+    assert pid1 == [str(uid), str(gid)]
+    procs = docker("exec", db.name, "sh", "-c", "for p in /proc/[0-9]*; do stat -c %u $p 2>/dev/null; done; true").stdout.split()
+    assert procs and set(procs) == {str(uid)}, "다른 사용자(root 포함)로 도는 프로세스가 있다"

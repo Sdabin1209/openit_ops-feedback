@@ -158,8 +158,9 @@ HTTP: `POST /v1/cases/{case_id}/review` 본문 `{review_status: CONFIRMED|DISMIS
 - 지표: `GET /metrics`(인증 없음, 저장소가 멈춰도 200)는 카운터 넷(`ops_feedback_{auth_rejected,ingest_accepted,ingest_duplicate,unavailable}_total`)을 낸다.
 - 사람 신원 헤더는 역할 `reviewer`의 읽기·검토 토큰(게이트웨이 토큰)에서만 쓴다(docs/adr/0033).
 
-## 영역 DB 이미지 ops-feedback-db (D126, ADR 0035)
+## 영역 DB 이미지 ops-feedback-db (D126, ADR 0035, 0036)
 
+- 실행 사용자: root 가 아닌 postgres(999:999), capability 없음(ADR 0036). 배치는 `/run`·`/tmp`·데이터 폴더를 999 소유로 주고 비밀·인증서는 보조 그룹으로 읽게 한다(`db/inputs.json`).
 - 빌드: `bash scripts/build-image.sh <요청 JSON>`에 `"variant": "db"`(소스 `db/`). 라벨 `io.openit.database`가 선언(`db/database.json`)이다.
 - 입력(계약 AreaDatabaseEnv): `POSTGRES_PASSWORD_FILE`(슈퍼유저), `DB_ACCOUNT_SECRETS_DIR`(기본 /run/secrets/db, 계정마다 파일 하나: `ops_log_owner`, `ops_log_app`, `ops_failure_owner`, `ops_failure_app`), `DB_TLS_DIR`(기본 /certs, `tls.crt`·`tls.key`). 서버·잡 컨테이너는 `OPS_LOG_DATABASE_URL_FILE`, `OPS_FAILURE_DATABASE_URL_FILE`에 앱 계정 접속 URI(`sslmode=verify-full`)를, `admin migrate` 컨테이너는 같은 이름에 소유자 계정 URI 를 받는다.
 - 인증서를 갱신하면 `DB_TLS_DIR` 파일을 원자적으로 바꾼다. 컨테이너는 5초 안팎(두 번 연속 확인)에 새 인증서를 읽는다. 재시작이 필요 없다.

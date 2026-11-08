@@ -1,6 +1,6 @@
 # 0035. 영역 DB 이미지 ops-feedback-db: 공식 postgres 이미지 위에 계정·권한·접속 규칙·TLS
 
-- 상태: 채택(헤드 결정 D126 "DB 는 그 데이터 주인 영역의 컴포넌트", 계약 3.4.10~3.4.12 AreaDatabaseEnv·DatabaseDeclaration). [0031](0031-db-owner-and-app-roles.md)의 계정 분리를 이미지 안에서 만든다.
+- 상태: 채택(실행 사용자·capability 는 [0036](0036-db-image-non-root.md)이 대체. 헤드 결정 D126 "DB 는 그 데이터 주인 영역의 컴포넌트", 계약 3.4.10~3.4.12 AreaDatabaseEnv·DatabaseDeclaration). [0031](0031-db-owner-and-app-roles.md)의 계정 분리를 이미지 안에서 만든다.
 - 맥락: 지금까지 PostgreSQL 은 deploy 가 만들고 계정·권한은 문서(runbook)로만 있었다. D126 은 DB 를 데이터 주인 영역의 컴포넌트로 두고, deploy 는 선언대로 비밀을 만들어 배치만 한다.
 - 결정:
   1. 이미지 `ops-feedback-db`(`scripts/build-image.sh`의 variant `db`, 소스 `db/`): 베이스 `postgres:16`(공식 이미지). 엔진·버전은 라벨 `io.openit.database`(계약 DatabaseDeclaration: postgresql, major 16, port 5432)로 선언한다. 입력은 AreaDatabaseEnv(`POSTGRES_PASSWORD_FILE`, `DB_ACCOUNT_SECRETS_DIR`, `DB_TLS_DIR`)뿐이고 이미지에 비밀이 없다.
