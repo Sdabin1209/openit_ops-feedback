@@ -5,9 +5,12 @@ envelope 안팎의 값이 서로 같아야 한다는 교차 필드 검사.
 """
 from __future__ import annotations
 
+import hashlib
+import re
 from functools import lru_cache
 
 import survey_schema
+from boundary_contracts import load_schema
 from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 from jsonschema import Draft202012Validator
@@ -27,6 +30,22 @@ def _trace_validator(version: int) -> Draft202012Validator:
         raise BoundaryError("UNSUPPORTED_VERSION", f"지원하지 않는 문진 스키마 버전: {version}") from None
 
 
+@lru_cache(maxsize=1)
+def _id_rule() -> tuple:
+    # 왜 계약에서 읽나: Id 형식을 코드에 복사하면 계약이 바뀔 때 어긋난다(구조 규칙: 계약 사본 금지).
+    d = load_schema("_common")["$defs"]["Id"]
+    return re.compile(d["pattern"]), d["maxLength"]
+
+
+def envelope_id(original: str) -> str:
+    """봉투에 실리는 외부 식별자 값. 계약 boundary-contracts/CONVENTIONS.md 10절 "외부 식별자를 봉투에 넣을 때"(116행): Id 형식(128자 이하)에 맞으면 그대로,
+    맞지 않으면 `x-` + 원본 UTF-8 SHA-256 앞 32자(소문자 16진). 원본은 trace 본문에 남는다. 계약 패키지에 이 함수가 생기면(계약 5.0.0 예정) 그쪽으로 옮긴다."""
+    pattern, max_len = _id_rule()
+    if len(original) <= max_len and pattern.match(original):
+        return original
+    return "x-" + hashlib.sha256(original.encode("utf-8")).hexdigest()[:32]
+
+
 def accept(request: TraceIntakeRequest) -> RawTraceRecord:
     check("TraceIntakeRequest", request)
     envelope = request["envelope"]
@@ -38,8 +57,11 @@ def accept(request: TraceIntakeRequest) -> RawTraceRecord:
     if errs:
         raise BoundaryError("INVALID_RECORD", f"TurnTrace(v{ver}) 스키마 위반", {"errors": [brief(e) for e in errs[:5]]})
     sid, tid = envelope["session_id"], envelope["turn_id"]
-    if trace.get("session_id") != sid or trace.get("turn_id") != tid:
-        raise BoundaryError("INVALID_RECORD", "envelope와 trace의 session_id/turn_id가 다르다")
+    # 왜 같음이 아니라 변환 규칙인가: 바깥이 정한 ID 가 Id 형식에 안 맞으면 봉투에는 x- 변환값이 실리고 원본은 trace 에 있다(CONVENTIONS 10절). 같음 비교는 그 세션을 전부 거부했다.
+    # trace 에 ID 가 없으면 비교할 원본이 없어 거부한다(None 은 규칙에 넣지 않는다).
+    t_sid, t_tid = trace.get("session_id"), trace.get("turn_id")
+    if not isinstance(t_sid, str) or not isinstance(t_tid, str) or envelope_id(t_sid) != sid or envelope_id(t_tid) != tid:
+        raise BoundaryError("INVALID_RECORD", "envelope의 session_id/turn_id가 trace 원본 값에 계약 규칙(CONVENTIONS 10절)을 적용한 값과 다르다")
     if trace.get("contract_version") != ver:
         raise BoundaryError("INVALID_RECORD", "trace.contract_version이 envelope.runtime_contract_version과 다르다")
     out: RawTraceRecord = {"session_id": sid, "turn_id": tid, "release_id": envelope["release_id"], "received_at": request["received_at"],
