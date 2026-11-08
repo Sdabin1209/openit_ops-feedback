@@ -69,3 +69,10 @@ def test_accept_rejects_x_value_for_original_that_needs_no_conversion():
     with pytest.raises(BoundaryError) as x:
         trace_intake.accept(request("s-1", "t-1", x_of("s-1"), "t-1"))       # Id 형식에 맞는 원본은 그대로 써야 한다
     assert x.value.code == "INVALID_RECORD"
+
+
+def test_trace_contract_version_is_not_compared_with_the_envelope_d117():
+    """D117: trace.contract_version 과 envelope.runtime_contract_version 의 같음은 계약에 없는 거부 조건이다. 봉투 버전의 TurnTrace 스키마를 통과하면 받는다(변이: 옛 비교를 되살리면 실패)."""
+    r = request("s-1", "t-1", "s-1", "t-1")
+    r["envelope"]["trace"]["contract_version"] = 2        # TurnTrace.contract_version 은 integer(minimum 1)
+    assert trace_intake.accept(r)["session_id"] == "s-1"

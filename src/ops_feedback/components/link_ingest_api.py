@@ -12,6 +12,8 @@ publish_case는 HTTP로 열지 않는다(내부 잡). 본문(개인정보 가능
 """
 from __future__ import annotations
 
+import io
+import json
 import logging
 import threading
 from typing import Optional
@@ -23,7 +25,7 @@ from boundary_contracts.errors import BoundaryError
 from openit_link import App, Request, Response, Route
 
 from ..wiring import deadline as request_deadline_scope
-from ..wiring.validate import check
+from ..wiring.validate import brief, check
 
 log = logging.getLogger("ingest-api")
 
@@ -39,6 +41,16 @@ def _log_unavailable(e: BaseException) -> None:
     where = f"{tb.tb_frame.f_code.co_filename.rsplit('/', 1)[-1]}:{tb.tb_lineno}" if tb is not None else "?"
     log.error("503 UNAVAILABLE 원인=%s 위치=%s", type(root).__name__, where)
 _READYZ = validator("OpsFeedbackReadyz")
+_ENVELOPE = validator("TraceEnvelope")
+
+
+def _rejection_fields(raw: bytes) -> str:
+    """거부 로그용: 수집 본문이 TraceEnvelope 에서 어긋난 칸의 경로와 규칙 종류(`brief`: 값 없이). 본문을 해석하지 못하면 빈 문자열."""
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return ""
+    return "; ".join(brief(e) for e in sorted(_ENVELOPE.iter_errors(body), key=lambda e: list(map(str, e.absolute_path)))[:5])
 MAX_BODY = 8 * 1024 * 1024        # 수집 본문 상한: TurnTrace 봉투 하나. 임의 상한, 측정 안 함(ADR 0008)
 MAX_REVIEW_BODY = 1024 * 1024     # 검토 게시 본문: 검토자가 쓰는 짧은 JSON이라 수집(8 MiB)보다 작게 둔다. 임의 상한, 측정 안 함(ADR 0008)
 
@@ -264,8 +276,21 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
             start_response("200 OK", [("Content-Type", "text/plain; version=0.0.4; charset=utf-8"), ("Content-Length", str(len(body)))])
             return [body]
 
+        seen = {}
+        is_ingest = environ.get("REQUEST_METHOD") == "POST" and environ.get("PATH_INFO") == "/v1/traces"
+        raw = b""
+        if is_ingest:          # 거부 사유에 어긋난 칸 이름을 남기려면 본문이 한 번 더 필요하다: 본문 상한(MAX_BODY)은 서버가 이미 막았다. 통과한 요청에는 쓰지 않는다
+            try:
+                n = int(environ.get("CONTENT_LENGTH") or 0)
+            except ValueError:
+                n = -1          # 잘못된 Content-Length 는 openit_link 가 400 으로 거부한다: 본문을 건드리지 않는다
+            if n > 0:
+                raw = environ["wsgi.input"].read(n)
+                environ["wsgi.input"] = io.BytesIO(raw)
+
         def sr(status, headers, *a):
             code = int(status.split()[0])
+            seen["code"] = code
             if code in (401, 403):
                 counters["auth_rejected"] += 1
             elif code == 503 and environ.get("PATH_INFO") != "/readyz":
@@ -273,7 +298,20 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
             if code in (401, 403, 503):     # 접근 로그에는 상태 코드가 없다. 인증 실패(토큰 회전·오설정)와 저장소 장애가 로그에서 보이게 한다(값·토큰 없이 경로와 코드만).
                 log.warning("거절 %s %s -> %s %s", environ.get("REQUEST_METHOD"), environ.get("PATH_INFO"), code, "UNAVAILABLE" if code == 503 else "PERMISSION_DENIED")
             return start_response(status, headers, *a)
-        return inner(environ, sr)
+        out = inner(environ, sr)
+        if 400 <= seen.get("code", 0) < 500 and seen["code"] not in (401, 403):
+            # 요청 거부(400·404·409·422 등): 호출자가 받은 BoundaryError 의 코드와 메시지를 그대로 남긴다(호출자에게 이미 나간 문자열이라 새로운 노출이 없다: 값 없이 규칙 이름만 든 메시지다).
+            # 본문(발화·비밀)·원문 ID 는 싣지 않는다. 사유 없이 거부만 남아 원인을 못 찾던 것(대장 #20)을 막는다.
+            data = b"".join(out)
+            out = [data]
+            try:
+                rec = json.loads(data)
+                code, message = str(rec.get("code")), str(rec.get("message"))[:300]
+            except (ValueError, AttributeError):
+                code, message = "?", "?"
+            fields = _rejection_fields(raw) if is_ingest else ""
+            log.warning("거부 %s %s -> %s %s 사유=%s%s", environ.get("REQUEST_METHOD"), environ.get("PATH_INFO"), seen["code"], code, message, f" 칸={fields}" if fields else "")
+        return out
 
     return app
 

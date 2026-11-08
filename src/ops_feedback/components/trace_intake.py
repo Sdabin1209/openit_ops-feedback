@@ -55,15 +55,17 @@ def accept(request: TraceIntakeRequest) -> RawTraceRecord:
     trace = envelope["trace"]
     errs = list(_trace_validator(ver).iter_errors(trace))
     if errs:
-        raise BoundaryError("INVALID_RECORD", f"TurnTrace(v{ver}) 스키마 위반", {"errors": [brief(e) for e in errs[:5]]})
+        briefs = [brief(e) for e in errs[:5]]      # 경로와 규칙 종류뿐(값 없음). 메시지에도 실어 호출자와 서버 로그가 어긋난 칸을 안다(대장 #20)
+        raise BoundaryError("INVALID_RECORD", f"TurnTrace(v{ver}) 스키마 위반: " + "; ".join(briefs[:3]), {"errors": briefs})
     sid, tid = envelope["session_id"], envelope["turn_id"]
     # 왜 같음이 아니라 변환 규칙인가: 바깥이 정한 ID 가 Id 형식에 안 맞으면 봉투에는 x- 변환값이 실리고 원본은 trace 에 있다(CONVENTIONS 10절). 같음 비교는 그 세션을 전부 거부했다.
     # trace 에 ID 가 없으면 비교할 원본이 없어 거부한다(None 은 규칙에 넣지 않는다).
     t_sid, t_tid = trace.get("session_id"), trace.get("turn_id")
     if not isinstance(t_sid, str) or not isinstance(t_tid, str) or envelope_id(t_sid) != sid or envelope_id(t_tid) != tid:
         raise BoundaryError("INVALID_RECORD", "envelope의 session_id/turn_id가 trace 원본 값에 계약 규칙(CONVENTIONS 10절)을 적용한 값과 다르다")
-    if trace.get("contract_version") != ver:
-        raise BoundaryError("INVALID_RECORD", "trace.contract_version이 envelope.runtime_contract_version과 다르다")
+    # 왜 trace.contract_version == envelope.runtime_contract_version 비교가 없나(D117: 코드 안 거부 조건은 계약에 있는 것만): 계약에 그 같음을 요구하는 문장이 없다.
+    # TraceEnvelope 는 "trace 는 runtime_contract_version 에 해당하는 문진 스키마의 TurnTrace 로 별도 검증한다"까지만 정하고(위 _trace_validator 가 그것을 한다),
+    # TurnTrace.contract_version 은 {integer, minimum 1} 일 뿐 const 가 아니다. 같음 보장은 계약이 주지 않는다: 필요하면 헤드가 계약에 넣는다(변경 요청).
     out: RawTraceRecord = {"session_id": sid, "turn_id": tid, "release_id": envelope["release_id"], "received_at": request["received_at"],
                            "envelope": envelope, "envelope_hash": sha256_hash(envelope)}
     return out
