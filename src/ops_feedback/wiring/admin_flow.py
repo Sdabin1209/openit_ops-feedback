@@ -21,6 +21,7 @@ def delete_session(log: LogStore, fail: Optional[FailureCaseStore], salt: str, s
     refs = sorted({r for k in keys for r in fail.traces_of_session(k)}) if fail is not None else []
     if dry_run:
         counts["traces"] = len(refs)
+        counts["cases"] = fail.count_cases_by_trace_refs(refs) if fail is not None and refs else 0    # 실제 삭제가 지울 사례 수(version은 사례 하나로 센다)
         counts["raw_rows"] = log.count_session(session_id)       # 실제 삭제와 같은 대상: 아직 비식별되지 않은 세션은 원본 행만 있다
     else:
         counts["raw_rows"] = log.delete_session(session_id)

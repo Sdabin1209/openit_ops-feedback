@@ -233,10 +233,10 @@ def test_admin_cli_delete_session_purge_and_minimize(tmp_path):
         log.send(envelope(pii_trace(sid, "t-1"), release_id="rel-0002"))
     run_once(cfg=cfg, log=log, store=fail, deid=deid, pseudonymize=deid._pseudonymize, detector=FailureDetector(cfg["detection"]["detectors"]), classifier=Classifier(cfg["classification"]), clock=lambda: NOW)
     assert len(fail.list_cases(latest_only=False)[0]) == 2
-    env = {**os.environ, "OPS_DEID_SALT": "cli-salt-0123456789abcdef-0123456789abcdef"}
+    env = {**os.environ, "OPS_DEID_SALT": "cli-salt-0123456789abcdef-0123456789abcdef", "PYTHONPATH": str(__import__("pathlib").Path(admin.__file__).resolve().parents[2])}   # 시험 중인 소스를 부른다(설치본이 다른 체크아웃을 가리킬 수 있다)
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb]
     dry = subprocess.run(base + ["delete-session", "--session-id", "s-a", "--dry-run"], env=env, capture_output=True, text=True)
-    assert dry.returncode == 0 and json.loads(dry.stdout)["traces"] == 1 and len(fail.list_cases(latest_only=False)[0]) == 2
+    assert dry.returncode == 0 and json.loads(dry.stdout) == {"cases": 1, "dry_run": True, "raw_rows": 1, "traces": 1} and len(fail.list_cases(latest_only=False)[0]) == 2
     r = subprocess.run(base + ["delete-session", "--session-id", "s-a"], env=env, capture_output=True, text=True)
     assert r.returncode == 0 and json.loads(r.stdout) == {"cases": 1, "dry_run": False, "raw_rows": 1, "traces": 1}
     assert "s-a" not in r.stdout

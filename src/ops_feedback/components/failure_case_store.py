@@ -438,10 +438,18 @@ class FailureCaseStore:
         """비식별 trace 중 session_id(의사 식별자)가 일치하는 ref."""
         return [r for r, t in self._b.scan_traces() if t.get("session_id") == pseudonymized_session_id]
 
+    def _case_ids_of(self, refs) -> set:
+        refs = set(refs)
+        return {r["case_id"] for _, r in self._b.scan(0) if r["deidentified_trace_ref"] in refs}
+
+    def count_cases_by_trace_refs(self, refs: list[str]) -> int:
+        """delete_by_trace_refs가 지울 사례(case_id) 수. 지우지 않는다(admin delete-session --dry-run이 실제 삭제와 같은 대상을 세기 위한 것)."""
+        return len(self._case_ids_of(refs))      # 왜: 대상 선정을 delete_by_trace_refs와 한 함수로 공유해 dry-run과 실제 삭제가 어긋나지 않게 한다
+
     def delete_by_trace_refs(self, refs: list[str]) -> dict:
         """주어진 비식별 trace를 가리키는 사례(모든 version)와 그 trace를 지운다."""
         refs = set(refs)
-        case_ids = {r["case_id"] for _, r in self._b.scan(0) if r["deidentified_trace_ref"] in refs}
+        case_ids = self._case_ids_of(refs)
         for ref in refs:
             self._b.delete_aux("review_trace", ref)          # 원문 발화가 든 검토 사본도 지운다
         return {"cases": self._b.delete_cases(sorted(case_ids)), "traces": self._b.delete_traces(sorted(refs))}
