@@ -19,6 +19,7 @@ from ops_feedback.components.failure_case_store import FailureCaseStore
 from ops_feedback.wiring import backup_flow
 from ops_feedback.wiring.log_store import LogStore
 from waiting import HANG_GUARD_SECONDS, Proc
+from minenv import clean_env
 
 USER, PW = "backupuser", "pw-restic-canary-5"
 # 시험에 쓰는 이미지는 digest 로 고정한다(재현 가능한 시험: 태그 :latest 는 날마다 다른 이미지를 가리킬 수 있다). 값은 2026-11-04 에 `docker pull restic/rest-server:latest`,
@@ -28,7 +29,7 @@ RESTIC_IMAGE = "restic/restic@sha256:9940e6c7421ab3a21ee9fdc4e91596d04c792b600d3
 
 
 def _docker(*a, check=True):
-    return subprocess.run(["docker", *a], capture_output=True, text=True, check=check, timeout=HANG_GUARD_SECONDS)
+    return subprocess.run(["docker", *a], capture_output=True, text=True, check=check, timeout=HANG_GUARD_SECONDS, env=clean_env())
 
 
 @pytest.fixture(scope="module")
@@ -55,7 +56,7 @@ def rest_server(tmp_path):
     (data / ".htpasswd").chmod(0o644)
     name = f"ops-feedback-restsrv-{uuid.uuid4().hex[:8]}"
     _docker("run", "-d", "--name", name, "-p", "127.0.0.1::8000", "-v", f"{data}:/data", "--user", f"{os.getuid()}:{os.getgid()}", "--entrypoint", "rest-server", REST_SERVER_IMAGE, "--path", "/data")
-    logs = Proc(["docker", "logs", "-f", name], dict(os.environ))
+    logs = Proc(["docker", "logs", "-f", name], clean_env())
     try:
         logs.wait_for("Authentication enabled")                # 서버가 인증을 켜고 기동했다는 사건
         port = _docker("port", name, "8000/tcp").stdout.split(":")[-1].strip()

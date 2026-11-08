@@ -12,6 +12,7 @@ from boundary_contracts import validator
 
 import deps
 from waiting import HANG_GUARD_SECONDS, Proc
+from minenv import clean_env
 
 ROOT = Path(__file__).resolve().parents[1]
 DECL = json.loads((ROOT / "db" / "database.json").read_text("utf-8"))
@@ -38,7 +39,7 @@ def make_certs(d: Path) -> Path:
     c.mkdir()
 
     def sh(*a):
-        subprocess.run(a, cwd=c, check=True, capture_output=True, timeout=HANG_GUARD_SECONDS)
+        subprocess.run(a, cwd=c, check=True, capture_output=True, timeout=HANG_GUARD_SECONDS, env=clean_env())
     sh("openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", "ca.key", "-out", "ca.pem", "-days", "1", "-subj", "/CN=test-root")
     sh("openssl", "req", "-newkey", "rsa:2048", "-nodes", "-keyout", "tls.key", "-out", "srv.csr", "-subj", "/CN=localhost")
     (c / "ext.cnf").write_text("subjectAltName=DNS:localhost,IP:127.0.0.1\n")
@@ -89,7 +90,7 @@ def start(tmp_path, image, with_certs=True, passwords_override=None):
 
 def wait_ready(name):
     """초기화가 끝난 뒤 본 서버가 뜬 사건(로그 줄)을 기다린다."""
-    p = Proc(["docker", "logs", "-f", name], dict(os.environ))
+    p = Proc(["docker", "logs", "-f", name], clean_env())
     try:
         with p._cond:
             ok = p._cond.wait_for(lambda: p.eof.is_set() or _ready(p.lines), HANG_GUARD_SECONDS)      # 매달림 감시
@@ -253,7 +254,7 @@ def test_renewed_server_certificate_is_read_again_without_restart(image, tmp_pat
         new = tmp_path / "newcerts"
         new.mkdir()
         sub = make_certs(new)                                      # 다른 인증기관이 서명한 새 인증서
-        logs = Proc(["docker", "logs", "-f", "--since", "0s", name], dict(os.environ))
+        logs = Proc(["docker", "logs", "-f", "--since", "0s", name], clean_env())
         try:
             for f in ("tls.crt", "tls.key"):
                 shutil.copyfile(sub / f, certs / (f + ".tmp"))
@@ -278,7 +279,7 @@ def test_healthcheck_is_healthy_with_declared_accounts_and_unhealthy_when_broken
     decl = json.loads(docker("image", "inspect", image, "--format", "{{json .Config.Healthcheck}}").stdout)
     assert decl["Test"][-1] == "ops-feedback-db-healthcheck.sh" and decl["Retries"] == 3
     name, certs, pw = start(tmp_path, image)
-    ev = Proc(["docker", "events", "--filter", f"container={name}", "--filter", "event=health_status"], dict(os.environ))
+    ev = Proc(["docker", "events", "--filter", f"container={name}", "--filter", "event=health_status"], clean_env())
     try:
         ev.wait_for("health_status: healthy")
         assert docker("inspect", name, "--format", "{{.State.Health.Status}}").stdout.strip() == "healthy"

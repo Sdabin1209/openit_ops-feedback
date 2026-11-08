@@ -39,30 +39,37 @@ def test_envelope_id_follows_contract_rule(original, expected):
     assert trace_intake.envelope_id(original) == expected
 
 
-@pytest.mark.parametrize("sid,tid", [(URLSAFE_43, "t-1"), (DASH_43, "t-1"), (ID_OK, "t-1"), ("s-1", LONG_129), (URLSAFE_43, URLSAFE_43)])
+# 문진 스키마 5.0.0 의 TurnTrace 는 session_id 를 계약 SessionId, turn_id 를 계약 Id 로 제한한다. 그래서 Id 형식에 맞지 않는 원본은 trace 에 들어올 수 없고(수집이 계약 검증이 거부한다),
+# x- 변환 규칙(envelope_id)을 거치는 원본은 위 표가 보이는 계약 함수 그대로다. 계약 CONVENTIONS 10절은 "원본은 trace 본문에 남는다"고 하지만 문진 스키마 5.0.0 이 그 원본을 받지 않는다: 헤드에게 보고한 어긋남.
+@pytest.mark.parametrize("sid,tid", [("s-1", "t-1"), (ID_OK, "t-1"), ("s-1", "a" * 128), ("s-1", "turn.1:2_3-x")])
 def test_accept_takes_envelope_with_rule_value(sid, tid):
     rec = trace_intake.accept(request(sid, tid, trace_intake.envelope_id(sid), trace_intake.envelope_id(tid)))
-    assert rec["session_id"] == (sid if sid in (ID_OK, "s-1") else x_of(sid))
+    assert rec["session_id"] == sid and rec["turn_id"] == tid
 
 
 def test_accept_end_to_end_through_log_store():
     log = LogStore.memory()
-    e = envelope(make_trace(URLSAFE_43, "t-1"))
-    e["session_id"] = x_of(URLSAFE_43)
-    assert log.send(e)["status"] == "ACCEPTED"
+    assert log.send(envelope(make_trace("s-1", "t-1")))["status"] == "ACCEPTED"
 
 
 @pytest.mark.parametrize("sid_env,tid_env", [
-    (URLSAFE_43, "t-1"),                          # 변환해야 하는데 원본을 그대로 실음(Id 위반이기도 하다)
-    ("x-" + "0" * 32, "t-1"),                     # 규칙과 다른 x- 값
-    (x_of(URLSAFE_43)[:-1] + "0", "t-1"),         # 한 글자 다른 해시
-    (x_of(URLSAFE_43).upper(), "t-1"),            # 대문자 16진은 규칙(소문자)이 아니다
-    (x_of(URLSAFE_43), "t-9"),
+    ("s-1", x_of("t-1")),                         # Id 형식에 맞는 원본은 그대로 써야 한다
+    ("s-1", "x-" + "0" * 32),                     # 규칙과 다른 x- 값
+    ("s-1", "t-1" + "0"),                         # 한 글자 다른 값
+    ("s-9", "t-1"),                               # session_id 가 trace 와 다르다
 ])
 def test_accept_rejects_value_that_differs_from_rule(sid_env, tid_env):
     with pytest.raises(BoundaryError) as x:
-        trace_intake.accept(request(URLSAFE_43, "t-1", sid_env, tid_env))
+        trace_intake.accept(request("s-1", "t-1", sid_env, tid_env))
     assert x.value.code == "INVALID_RECORD"
+
+
+@pytest.mark.parametrize("sid,tid", [(URLSAFE_43, "t-1"), (DASH_43, "t-1"), ("a" * 65, "t-1"), ("s-1", URLSAFE_43), ("s-1", LONG_129)])
+def test_original_outside_the_id_types_is_rejected_by_turn_trace_5_0_0(sid, tid):
+    """문진 스키마 5.0.0: TurnTrace.session_id(SessionId)·turn_id(Id)에 맞지 않는 원본은 trace 에 실을 수 없어 TurnTrace 위반으로 거부된다(survey 는 token_hex 를 발급해 해당 없음)."""
+    with pytest.raises(BoundaryError) as x:
+        trace_intake.accept(request(sid, tid, trace_intake.envelope_id(sid), trace_intake.envelope_id(tid)))
+    assert x.value.code == "INVALID_RECORD" and "envelope/trace/" in x.value.message      # 입구의 TraceIntakeRequest(계약 TraceEnvelope + 문진 TurnTrace)가 trace 칸을 거부한다
 
 
 def test_accept_rejects_x_value_for_original_that_needs_no_conversion():

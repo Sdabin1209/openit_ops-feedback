@@ -6,6 +6,7 @@ import tempfile
 
 import pytest
 from waiting import HANG_GUARD_SECONDS
+from minenv import clean_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,7 +36,7 @@ INGEST_TOKEN=$MARKER; READ_TOKEN=$MARKER; REVIEW_TOKEN=$MARKER; DEID_SALT=$MARKE
 ''' + actual_checks
         result = subprocess.run(
             ['bash', '-c', shell], capture_output=True, text=True, timeout=HANG_GUARD_SECONDS,
-            env={**os.environ, 'FIXTURE': str(fixture), 'MARKER': token,
-                 'ENV_FIXTURE': token if leak == 'env' else 'TOKEN_FILE=/run/secrets/qa-read-tokens'},
+            env=clean_env({'FIXTURE': str(fixture), 'MARKER': token,
+                 'ENV_FIXTURE': token if leak == 'env' else 'TOKEN_FILE=/run/secrets/qa-read-tokens'}),
         )
         assert result.returncode == (0 if leak is None else 1), result.stderr

@@ -1,6 +1,7 @@
 """시험이 쓰는 의존 소스 트리(계약, 문진 스키마)를 requirements.txt의 고정 태그에서 꺼낸다. 건너뛰지 않는다.
 먼저 이웃 리포(WORKSPACE_DIR, 기본: 이 리포의 상위)의 git archive를 쓰고, 없으면 requirements.txt와 같은 GitHub 주소에서 그 태그만 얕게 받는다
 (setup-env.sh가 이미 같은 접근을 요구한다). 둘 다 안 되면 시험이 실패한다: 이웃 리포 배치에 따라 시험이 조용히 빠지지 않게 한다(U50 재현에서 14건이 빠졌다)."""
+from minenv import clean_env
 import io
 import os
 import re
@@ -29,15 +30,15 @@ def tree(repo: str, tag: str, path: str = "") -> Path:
     dest = Path(tempfile.mkdtemp(prefix=f"ops-deps-{repo}-"))
     local = WS / repo
     cmd = ["git", "-C", str(local), "archive", tag] + ([path] if path else [])
-    r = subprocess.run(cmd, capture_output=True) if local.is_dir() else None
+    r = subprocess.run(cmd, capture_output=True, env=clean_env()) if local.is_dir() else None
     if r is not None and r.returncode == 0:
         tarfile.open(fileobj=io.BytesIO(r.stdout)).extractall(dest, filter="data")
     else:
         url = f"git@github.com:Sdabin1209/openit_{repo}.git"
-        c = subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", tag, url, str(dest / "clone")], capture_output=True, text=True)
+        c = subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", tag, url, str(dest / "clone")], capture_output=True, text=True, env=clean_env({}, "SSH_AUTH_SOCK", "GIT_SSH_COMMAND"))      # 이웃 리포를 ssh 로 받는다: 에이전트 소켓 이름만 더한다
         if c.returncode != 0:
             raise RuntimeError(f"{repo} {tag}를 이웃 리포({local})에서도 {url}에서도 꺼내지 못했다: {c.stderr.strip()[-200:]}")
-        tarball = subprocess.run(["git", "-C", str(dest / "clone"), "archive", "HEAD"] + ([path] if path else []), capture_output=True, check=True).stdout
+        tarball = subprocess.run(["git", "-C", str(dest / "clone"), "archive", "HEAD"] + ([path] if path else []), capture_output=True, check=True, env=clean_env()).stdout
         out = dest / "tree"
         out.mkdir()
         tarfile.open(fileobj=io.BytesIO(tarball)).extractall(out, filter="data")

@@ -4,6 +4,7 @@ from conftest import envelope
 from ops_feedback.components.failure_detector import RuleDetector
 from ops_feedback.wiring.pipeline import run_once
 from test_pause_reason import SIG, ext, log_entry, make_trace, orch
+from minenv import clean_env
 
 
 def turn(prior: int, pause_reason=None):
@@ -78,6 +79,6 @@ def test_job_exits_2_with_reason_on_that_combination(tmp_path):
     import os
     import subprocess
     import sys
-    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
+    env = clean_env({"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"})
     r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(_cfg(tmp_path, keep=False))], env=env, capture_output=True, text=True)
     assert r.returncode == 2 and "keep_pause_reason" in r.stderr and "Traceback" not in r.stderr

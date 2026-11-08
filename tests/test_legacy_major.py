@@ -14,6 +14,8 @@ from conftest import base_config, envelope, make_trace
 from ops_feedback.components.failure_case_store import FailureCaseStore
 from ops_feedback.wiring.log_store import LogStore
 from ops_feedback.wiring.storage import require_current_major
+from minenv import clean_env
+from waiting import HANG_GUARD_SECONDS
 
 SALT = "test-salt-0123456789abcdef-0123456789abcdef"
 
@@ -64,7 +66,7 @@ def test_job_exits_nonzero_when_4x_data_remains(tmp_path):
     cp = tmp_path / "job.yaml"
     cp.write_text(yaml.safe_dump(cfg))
     seed_legacy_log(cfg["storage"]["log_db"])
-    r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(cp)], env={**os.environ, "OPS_DEID_SALT": SALT}, capture_output=True, text=True)
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.job", "--config", str(cp)], env=clean_env({"OPS_DEID_SALT": SALT}), capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2 and "UNSUPPORTED_VERSION" in r.stderr
     assert r.stdout == ""
 
@@ -73,13 +75,13 @@ def test_admin_can_still_open_a_store_with_4x_data(tmp_path):
     path = str(tmp_path / "l.db")
     seed_legacy_log(path)
     r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", path, "--failure-db", str(tmp_path / "f.db"), "purge", "--raw-days", "0", "--include-unprocessed"],
-                       env={**os.environ, "OPS_DEID_SALT": SALT}, capture_output=True, text=True)
+                       env=clean_env({"OPS_DEID_SALT": SALT}), capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 0, r.stderr
 
 
 def test_server_exits_nonzero_when_4x_data_remains(tmp_path):
     path = str(tmp_path / "l.db")
     seed_legacy_log(path)
-    env = {**os.environ, "OPS_LOG_DB": path, "OPS_INGEST_TOKEN": "t" * 40, "OPS_DEID_SALT": SALT}
-    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=60)
+    env = clean_env({"OPS_LOG_DB": path, "OPS_INGEST_TOKEN": "t" * 40, "OPS_DEID_SALT": SALT})
+    r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2 and "4.x" in (r.stderr + r.stdout)

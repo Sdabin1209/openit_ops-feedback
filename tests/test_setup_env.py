@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from boundary_contracts import validator
+from minenv import clean_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,7 +27,7 @@ def sandbox(tmp_path: Path, pip_exit: int) -> Path:
 def run(tmp_path, pip_exit):
     d = sandbox(tmp_path, pip_exit)
     return subprocess.run(["bash", "scripts/setup-env.sh"], cwd=d, capture_output=True, text=True,
-                          env={**os.environ, "SETUP_ENV_RETRY_WAIT": "0"})
+                          env=clean_env({"SETUP_ENV_RETRY_WAIT": "0"}))
 
 
 def test_last_stdout_line_is_a_valid_setup_env_report(tmp_path):
@@ -51,5 +52,5 @@ def test_failure_still_ends_with_a_report_and_nonzero_exit(tmp_path):
 def test_reported_test_command_starts_the_area_tests(tmp_path):
     """보고의 test_command를 리포 루트에서 실행하면 영역 시험이 돈다(전체를 되돌아 돌리지 않으려고 한 파일만 수집해 시작 가능성만 본다)."""
     cmd = json.loads(run(tmp_path, 0).stdout.strip().splitlines()[-1])["environment"]["test_command"]
-    r = subprocess.run([*cmd, "--collect-only", "tests/test_setup_env.py"], cwd=ROOT, capture_output=True, text=True)
+    r = subprocess.run([*cmd, "--collect-only", "tests/test_setup_env.py"], cwd=ROOT, capture_output=True, text=True, env=clean_env())
     assert r.returncode == 0 and "test_setup_env.py" in r.stdout, r.stdout[-300:] + r.stderr[-300:]

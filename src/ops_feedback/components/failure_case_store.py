@@ -22,7 +22,7 @@ from ..wiring.pgbase import PgBase
 from ..wiring.validate import check
 
 
-# 왜 LIKE 인가·근거: raw_log_store.LEGACY_MAJOR_LIKE 와 같다(레코드는 json.dumps 기본 구분자의 TEXT, 계약 5.0.0 '이전').
+# 왜 LIKE 인가·근거: 원본 로그 저장소의 같은 상수와 같은 뜻이다(레코드는 json.dumps 기본 구분자의 TEXT, 계약 5.0.0 '이전').
 LEGACY_MAJOR_LIKE = '%"pipeline_schema_version": "4.%'
 
 

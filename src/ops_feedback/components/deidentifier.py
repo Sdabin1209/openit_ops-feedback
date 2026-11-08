@@ -17,6 +17,7 @@ from functools import lru_cache
 from typing import Any, Iterator, Optional
 
 import survey_schema
+from boundary_contracts import load_schema as _load_contract_schema
 from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
 
@@ -164,6 +165,33 @@ def _jtype(v: Any) -> str:
     return "object"
 
 
+from boundary_contracts.schema_sources import CONTRACT_URI as _CONTRACT_URI      # 문진 스키마 5.0.0 이 계약 타입(Id·SessionId·QuestionId 등)을 가리키는 안정 URI: 접두를 코드에 복사하지 않고 계약에서 읽는다(5.0.1)
+
+
+def _contract_node(ref: str) -> dict:
+    """문진 스키마의 계약 안정 URI $ref(`<URI>/<파일>.schema.json#/$defs/X`)를 계약 패키지에서 읽은 정의로 푼다(그 정의가 같은 계약 파일 안의 `#/...` 로 다시 가리키면 끝까지 따라간다).
+    왜: 이전에는 이름만 보고 문진 스키마 $defs 에서 찾아 같은 이름의 별칭이 자기 자신을 가리키며 끝없이 돌았다(survey-schema 5.0.0)."""
+    if not ref.startswith(_CONTRACT_URI):
+        raise ValueError(f"알 수 없는 외부 $ref: {ref.split('#')[0]}")
+    file, _, frag = ref[len(_CONTRACT_URI):].partition("#")
+    name = file.removesuffix(".schema.json")
+    for _ in range(32):                    # 계약 정의의 별칭 사슬 상한(순환 방지, 실제 사슬은 1~2단)
+        doc: Any = _load_contract_cached(name)
+        node: Any = doc
+        for part in [p for p in frag.split("/") if p]:
+            node = node[part]
+        if isinstance(node, dict) and isinstance(node.get("$ref"), str) and node["$ref"].startswith("#"):
+            frag = node["$ref"][1:]
+            continue
+        return node
+    raise ValueError("계약 $ref 별칭이 끝나지 않는다")
+
+
+@lru_cache(maxsize=None)
+def _load_contract_cached(name: str) -> dict:
+    return _load_contract_schema(name)
+
+
 class _Walker:
     def __init__(self, defs: dict, policy: DeidPolicy, pseudonymize) -> None:
         self.defs = defs
@@ -177,9 +205,10 @@ class _Walker:
     # --- 스키마 해석 ---
     def _resolve(self, node: dict, names: tuple = ()) -> tuple[dict, tuple]:
         while "$ref" in node:
-            name = node["$ref"].rsplit("/", 1)[-1]
+            ref = node["$ref"]
+            name = ref.rsplit("/", 1)[-1]
             names += (name,)
-            node = self.defs[name]
+            node = _contract_node(ref) if not ref.startswith("#") else self.defs[name]
         return node, names
 
     def _match(self, node: dict, data: Any) -> bool:

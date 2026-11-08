@@ -8,26 +8,24 @@ from __future__ import annotations
 from functools import lru_cache
 
 import survey_schema
-from boundary_contracts import envelope_id
-from boundary_contracts.schemas_api import ContractValidator
+from boundary_contracts import envelope_id, schema_validator
 from boundary_contracts.canonical import sha256_hash
 from boundary_contracts.errors import BoundaryError
-from jsonschema import Draft202012Validator
 
 from ..types.RawTraceRecord import RawTraceRecord
 from ..types.TraceIntakeRequest import TraceIntakeRequest
 from ..wiring.validate import brief, check
-from boundary_contracts import format_checker as _bc_format_checker  # 형식(format) 검증기가 없으면 조용히 넘기지 않고 실패한다(계약 3.5.0)
 
 
 @lru_cache(maxsize=None)
-def _trace_validator(version: int) -> ContractValidator:
+def _trace_validator(version: int):
     # 왜 설치된 문진 스키마 패키지에서 읽나: 사본을 두면 문진 스키마가 바뀔 때 어긋난다(D110). 버전은 envelope가 정한다.
+    # 왜 schema_validator 인가: 문진 스키마 5.0.0 은 계약 안정 URI 의 $ref 를 가져 표준 검증기로는 풀리지 않는다. 계약 검증기는 registry·형식 검사·비유한 수 거부(5.0.1)를 한 번에 건다.
     try:
         schema = survey_schema.load_schema("TurnTrace", version)
-        return ContractValidator(Draft202012Validator(schema, format_checker=_bc_format_checker(schema)))      # 계약 JSON 공통 규칙(비유한 수 거부)을 문진 스키마 검증에도 건다(5.0.0)
     except KeyError:
         raise BoundaryError("UNSUPPORTED_VERSION", f"지원하지 않는 문진 스키마 버전: {version}") from None
+    return schema_validator(schema)
 
 
 def accept(request: TraceIntakeRequest) -> RawTraceRecord:

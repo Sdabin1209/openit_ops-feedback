@@ -4,9 +4,11 @@ import os as _os
 import subprocess as _sp
 from pathlib import Path as _Path
 
+from minenv import clean_env as _clean_env
+
 # docker 를 부르는 시험은 사용자 전역 ~/.docker 설정에 기대지 않는다: scripts/docker-env.sh 가 규칙의 한 곳이고 여기서 한 번 읽어 환경에 넣는다(DOCKER_CONFIG 가 이미 있으면 그대로).
 _out = _sp.run(["bash", "-c", '. "$1"; printf "%s\\0%s" "${DOCKER_CONFIG:-}" "${DOCKER_HOST:-}"', "_", str(_Path(__file__).resolve().parents[1] / "scripts" / "docker-env.sh")],
-               capture_output=True, text=True).stdout.split("\0")
+               capture_output=True, text=True, env=_clean_env()).stdout.split("\0")      # R9.1: 최소 환경(허용 목록은 tests/minenv.py 한 곳)
 if len(_out) == 2 and _out[0]:
     _os.environ["DOCKER_CONFIG"] = _out[0]
     if _out[1]:

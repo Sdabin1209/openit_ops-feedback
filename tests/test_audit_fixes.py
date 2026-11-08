@@ -30,6 +30,7 @@ from ops_feedback.components.failure_case_store import FailureCaseStore as Failu
 from ops_feedback.wiring.pipeline import run_once
 from ops_feedback.wiring.log_store import LogStore
 from ops_feedback.wiring.review_flow import ReviewFlow as ReviewQueue
+from minenv import clean_env
 
 NOW = "2026-10-14T12:00:00Z"
 
@@ -233,7 +234,7 @@ def test_admin_cli_delete_session_purge_and_minimize(tmp_path):
         log.send(envelope(pii_trace(sid, "t-1"), release_id="rel-0002"))
     run_once(cfg=cfg, log=log, store=fail, deid=deid, pseudonymize=deid._pseudonymize, detector=FailureDetector(cfg["detection"]["detectors"]), classifier=Classifier(cfg["classification"]), clock=lambda: NOW)
     assert len(fail.list_cases(latest_only=False)[0]) == 2
-    env = {**os.environ, "OPS_DEID_SALT": "cli-salt-0123456789abcdef-0123456789abcdef", "PYTHONPATH": str(__import__("pathlib").Path(admin.__file__).resolve().parents[2])}   # 시험 중인 소스를 부른다(설치본이 다른 체크아웃을 가리킬 수 있다)
+    env = clean_env({"OPS_DEID_SALT": "cli-salt-0123456789abcdef-0123456789abcdef", "PYTHONPATH": str(__import__("pathlib").Path(admin.__file__).resolve().parents[2])})   # 시험 중인 소스를 부른다(설치본이 다른 체크아웃을 가리킬 수 있다)
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb]
     dry = subprocess.run(base + ["delete-session", "--session-id", "s-a", "--dry-run"], env=env, capture_output=True, text=True)
     assert dry.returncode == 0 and json.loads(dry.stdout) == {"cases": 1, "dry_run": True, "raw_rows": 1, "traces": 1} and len(fail.list_cases(latest_only=False)[0]) == 2
@@ -243,7 +244,7 @@ def test_admin_cli_delete_session_purge_and_minimize(tmp_path):
     left = fail.list_cases(latest_only=False)[0]
     assert len(left) == 1 and fail.get_trace(left[0]["deidentified_trace_ref"])["session_id"] == admin.session_pseudonym("cli-salt-0123456789abcdef-0123456789abcdef", "s-b")
     assert log.send(envelope(pii_trace("s-a", "t-1"), release_id="rel-0002"))["status"] == "ACCEPTED"      # 삭제됐으니 새로 받는다
-    nosalt = subprocess.run(base + ["delete-session", "--session-id", "s-b"], env={k: v for k, v in os.environ.items() if not k.startswith("OPS_")}, capture_output=True, text=True)
+    nosalt = subprocess.run(base + ["delete-session", "--session-id", "s-b"], env=clean_env(), capture_output=True, text=True)
     assert nosalt.returncode == 2
     assert subprocess.run(base + ["purge"], env=env, capture_output=True, text=True).returncode == 2        # 기간 값이 없으면 거부(기본값 없음)
     p = subprocess.run(base + ["purge", "--cases-days", "1", "--include-confirmed"], env=env, capture_output=True, text=True)
@@ -563,9 +564,9 @@ def test_job_default_deletes_confirmed_but_admin_purge_keeps_them_without_flag(t
     fail.publish_case(case("fc-c", created_at="2026-01-01T00:00:00Z"))
     fail.publish_case(case("fc-c", version=2, review_status="CONFIRMED", expected={"action": "NEXT", "next_item": "END", "values": []}, expected_kind="LORA_A", created_at="2026-10-01T00:00:00Z"))
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb]
-    r = subprocess.run(base + ["purge", "--cases-days", "30"], capture_output=True, text=True, env=os.environ)
+    r = subprocess.run(base + ["purge", "--cases-days", "30"], capture_output=True, text=True, env=clean_env())
     assert r.returncode == 0 and json.loads(r.stdout)["cases"]["cases"] == 0               # 확정 사례는 플래그 없이는 보존
-    r = subprocess.run(base + ["purge", "--cases-days", "30", "--include-confirmed"], capture_output=True, text=True, env=os.environ)
+    r = subprocess.run(base + ["purge", "--cases-days", "30", "--include-confirmed"], capture_output=True, text=True, env=clean_env())
     assert json.loads(r.stdout)["cases"]["cases"] == 2
     # 잡의 기본(cases_purge_confirmed 생략)은 확정도 지운다: 두 기본값의 차이는 docs/boundary.md에 적혀 있다
 
@@ -599,7 +600,7 @@ def test_delete_session_reports_nothing_found_with_exit_3(tmp_path):
     ldb, fdb = str(tmp_path / "l.db"), str(tmp_path / "f.db")
     LogStore.sqlite(ldb)
     FailureStoreImpl.sqlite(fdb)
-    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
+    env = clean_env({"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"})
     r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "none"],
                        env=env, capture_output=True, text=True)
     assert r.returncode == 3 and "NOTHING_FOUND" in r.stdout
@@ -614,7 +615,7 @@ def test_delete_session_finds_raw_session_id_when_policy_does_not_pseudonymize(t
     fail.publish_case(case("fc-raw", deidentified_trace_ref="tr-x"))
     log.send(envelope(t))
     r = subprocess.run([sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "s-raw"],
-                       env={**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}, capture_output=True, text=True)
+                       env=clean_env({"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}), capture_output=True, text=True)
     assert r.returncode == 0 and json.loads(r.stdout)["cases"] == 1 and json.loads(r.stdout)["raw_rows"] == 1
 
 
@@ -687,7 +688,7 @@ def test_delete_session_dry_run_counts_raw_rows(tmp_path):
     FailureStoreImpl.sqlite(fdb)
     log.send(envelope(make_trace("s-only-raw", "t-1")))
     base = [sys.executable, "-m", "ops_feedback.admin", "--log-db", ldb, "--failure-db", fdb, "delete-session", "--session-id", "s-only-raw"]
-    env = {**os.environ, "OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"}
+    env = clean_env({"OPS_DEID_SALT": "test-salt-0123456789abcdef-0123456789abcdef"})
     dry = subprocess.run(base + ["--dry-run"], env=env, capture_output=True, text=True)
     assert dry.returncode == 0 and json.loads(dry.stdout)["raw_rows"] == 1
     assert log.count_session("s-only-raw") == 1                                # dry-run은 지우지 않는다

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from minenv import clean_env
 
 ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "src" / "ops_feedback"
@@ -67,7 +68,7 @@ def test_4_every_schema_has_passing_and_rejecting_examples():
 
 
 def test_5_types_match_the_regenerated_output():
-    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "gen_types.py"), "--check"], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "gen_types.py"), "--check"], capture_output=True, text=True, env=clean_env())
     assert r.returncode == 0, r.stderr[-500:]
 
 

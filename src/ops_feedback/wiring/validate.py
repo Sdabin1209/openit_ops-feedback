@@ -14,7 +14,7 @@ from typing import Any
 
 from boundary_contracts import schema_dir as _contract_dir
 from boundary_contracts.errors import BoundaryError
-from boundary_contracts.schemas_api import ContractValidator
+from boundary_contracts.schemas_api import ContractValidator, schema_registry
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
@@ -40,7 +40,8 @@ def _retrieve(uri: str) -> Resource:
 
 @lru_cache(maxsize=1)
 def _registry() -> Registry:
-    reg = Registry(retrieve=_retrieve)
+    # 계약 registry(안정 URI·문진 스키마 오프라인 해석)에서 시작하고, 영역 스키마(서로를 $ref 한다)와 file:///boundary/ 별칭을 더한다. schema_validator 는 계약 registry 만 쓰므로 영역 스키마끼리의 $ref 를 못 풀어 여기서 같은 ContractValidator 로 직접 짠다.
+    reg = schema_registry()
     for base, d in ((_BOUNDARY, _contract_dir()), (_OPS, area_schema_dir())):
         for p in sorted(d.glob("*.schema.json")):
             reg = reg.with_resource(base + p.name, Resource.from_contents(json.loads(p.read_text("utf-8")), DRAFT202012))

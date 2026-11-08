@@ -1,6 +1,7 @@
 """영역 빌드 진입점(scripts/build-image.sh, 계약 BuildImageRequest/BuildImageResult, ADR 0022).
 요청 거부 시험은 docker를 쓰지 않는다(DOCKER=/bin/false로 호출되면 실패하게 한다). 실제 빌드 시험은 docker 데몬이 있을 때만 돈다.
 의존 소스 트리는 계약·문진 스키마 리포의 태그에서 git archive로 꺼낸다(리포가 없으면 건너뛴다). 위치는 WORKSPACE_DIR(기본: 이 리포의 상위)."""
+from minenv import clean_env
 import json
 import uuid
 import os
@@ -36,7 +37,7 @@ def request(trees, **over):
 def run(tmp_path, req, docker="/bin/false"):
     p = tmp_path / "req.json"
     p.write_text(json.dumps(req))
-    return subprocess.run(["bash", str(SCRIPT), str(p)], capture_output=True, text=True, env={**os.environ, "DOCKER": docker})
+    return subprocess.run(["bash", str(SCRIPT), str(p)], capture_output=True, text=True, env=clean_env({"DOCKER": docker}, "WORKSPACE_DIR"))
 
 
 def mutate(trees, fn):
@@ -86,12 +87,12 @@ def test_survey_schema_request_different_from_the_pinned_one_fails(trees, tmp_pa
 
 def test_unreadable_request_file_fails(tmp_path):
     p = tmp_path / "nope.json"
-    r = subprocess.run(["bash", str(SCRIPT), str(p)], capture_output=True, text=True)
+    r = subprocess.run(["bash", str(SCRIPT), str(p)], capture_output=True, text=True, env=clean_env())
     assert r.returncode == 2
 
 
 def _docker_ok() -> bool:
-    return shutil.which("docker") is not None and subprocess.run(["docker", "info"], capture_output=True).returncode == 0
+    return shutil.which("docker") is not None and subprocess.run(["docker", "info"], capture_output=True, env=clean_env()).returncode == 0
 
 
 @pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
@@ -116,14 +117,14 @@ def test_real_build_result_and_labels_follow_the_request_and_are_idempotent(tree
         assert not list(validator("JobsDeclaration").iter_errors(jobs))
         assert jobs == json.loads((ROOT / "deploy-jobs.json").read_text(encoding="utf-8"))
         def layers():
-            out = subprocess.run(["docker", "image", "inspect", f"ops-feedback-buildtest:t42-{UNIQ}", "--format", "{{json .RootFS.Layers}}"], capture_output=True, text=True)
+            out = subprocess.run(["docker", "image", "inspect", f"ops-feedback-buildtest:t42-{UNIQ}", "--format", "{{json .RootFS.Layers}}"], capture_output=True, text=True, env=clean_env())
             return json.loads(out.stdout)
         first = layers()
         assert run(tmp_path, req, docker="docker").returncode == 0
         # 같은 요청 -> 같은 내용: 층(RootFS.Layers)이 같다. 이미지 ID는 BuildKit이 설정에 넣는 시각 때문에 매번 달라서 비교하지 않는다(ADR 0022).
         assert layers() == first
     finally:
-        subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t42-{UNIQ}"], capture_output=True)
+        subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t42-{UNIQ}"], capture_output=True, env=clean_env())
 
 
 @pytest.mark.skipif(not _docker_ok(), reason="docker 데몬 없음")
@@ -141,7 +142,7 @@ def test_survey_schema_label_is_the_package_major_not_the_integer_contract_versi
         label = json.loads(r.stdout.strip().splitlines()[-1])["labels"]["io.openit.contracts.survey-schema"]
         assert label == SS_TAG.removeprefix("survey-schema-v").split(".")[0] and label != "7"
     finally:
-        subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t43-{UNIQ}"], capture_output=True)
+        subprocess.run(["docker", "rmi", "-f", f"ops-feedback-buildtest:t43-{UNIQ}"], capture_output=True, env=clean_env())
 
 
 def db_request(trees, **over):
@@ -166,7 +167,7 @@ def test_db_variant_builds_the_database_image_and_labels_it_with_the_declaration
         assert not list(validator("DatabaseDeclaration").iter_errors(decl)) and decl == json.loads((ROOT / "db" / "database.json").read_text("utf-8"))
         assert "io.openit.exposure" not in lb and "io.openit.jobs" not in lb           # DB 이미지에는 노출·잡 선언이 없다
     finally:
-        subprocess.run(["docker", "rmi", "-f", req["image_tag"]], capture_output=True)
+        subprocess.run(["docker", "rmi", "-f", req["image_tag"]], capture_output=True, env=clean_env())
 
 
 def test_db_variant_rejects_a_bad_request_without_docker(trees, tmp_path):

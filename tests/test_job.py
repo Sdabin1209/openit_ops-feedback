@@ -7,6 +7,7 @@ from boundary_contracts.errors import BoundaryError
 from conftest import FAKE_PII, envelope, make_trace, pii_trace
 from ops_feedback.wiring.pipeline import run_once
 from ops_feedback.wiring.review_flow import ReviewFlow as ReviewQueue
+from minenv import clean_env
 
 
 def run(p, **kw):
@@ -111,7 +112,7 @@ def test_examples_match_generator(tmp_path):
     import subprocess, sys, shutil, pathlib
     root = pathlib.Path(__file__).parent.parent
     before = {p.name: p.read_text() for p in (root / "examples").glob("*.json")}
-    subprocess.run([sys.executable, "scripts/make_examples.py"], cwd=root, check=True)
+    subprocess.run([sys.executable, "scripts/make_examples.py"], cwd=root, check=True, env=clean_env())
     assert before == {p.name: p.read_text() for p in (root / "examples").glob("*.json")}
 
 

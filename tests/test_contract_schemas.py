@@ -21,6 +21,7 @@ from conftest import base_config, envelope, make_trace, pii_trace
 from ops_feedback.config import load_config, validate_server_env
 from ops_feedback.components.deidentifier import DeidError, DeidPolicy
 from tdeid import Deidentifier
+from minenv import clean_env
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,7 +80,7 @@ def test_job_config_contract_valid_examples_accepted(p, tmp_path):
 
 def test_server_env_rejects_unknown_ops_variable():
     with pytest.raises(ValueError, match="OPS_RAW_RETENTON_DAYS"):
-        validate_server_env({"OPS_PORT": "8080", "OPS_RAW_RETENTON_DAYS": "30"})
+        validate_server_env({"OPS_PORT": "8080", "OPS_RAW_RETENTON_DAYS": "30"}))
     with pytest.raises(ValueError, match="OPS_DB_SCHEMA"):
         validate_server_env({"OPS_DB_SCHEMA": "skip"})
     validate_server_env({"PATH": "/usr/bin", "OPS_PORT": "8080", "OPS_DB_SCHEMA": "verify"})     # OPS_ 아닌 변수는 대상이 아니다
@@ -102,7 +103,7 @@ def test_server_env_contract_valid_example_accepted():
 
 
 def test_api_main_refuses_unknown_ops_variable(tmp_path):
-    env = {**os.environ, "OPS_INGEST_TOKEN": "t", "OPS_LOG_DB": str(tmp_path / "l.db"), "OPS_RAW_RETENTON_DAYS": "30"}
+    env = clean_env({"OPS_INGEST_TOKEN": "t", "OPS_LOG_DB": str(tmp_path / "l.db"), "OPS_RAW_RETENTON_DAYS": "30"})
     r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2 and "OPS_RAW_RETENTON_DAYS" in (r.stdout + r.stderr)
 

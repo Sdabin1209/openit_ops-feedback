@@ -4,11 +4,11 @@ import pytest
 
 from conftest import FAKE_PII, envelope, make_trace, pii_trace, base_config
 import survey_schema
-from jsonschema import Draft202012Validator
+from boundary_contracts import schema_validator
 
 
 def validate_trace(version, trace):
-    Draft202012Validator(survey_schema.load_schema("TurnTrace", version)).validate(trace)
+    schema_validator(survey_schema.load_schema("TurnTrace", version)).validate(trace)      # 문진 스키마 5.0.0 은 계약 안정 URI $ref 를 가져 계약 검증기로만 풀린다
 
 from ops_feedback.components.deidentifier import MASK, DROPPED, DeidError, DeidPolicy
 from tdeid import Deidentifier
@@ -105,7 +105,8 @@ def test_residual_pattern_fails_closed():
     cfg = base_config()
     # 계약 4.0.0: keep 키는 식별자 모양 8개뿐이라 자유 문장 키(utterance)는 고를 수 없다. 남는 경로(path)에 전화번호 모양 값이 와도 잔존 패턴 검사가 닫는다
     tr = pii_trace()
-    tr["extract_input"]["question_id"] = "010-1234-5678"      # keep 키 question_id 의 식별자 패턴에는 맞지만 전화번호 모양
+    tr["validation_ok"] = False
+    tr["validation_violations"] = [{"code": "RANGE", "path": "010-1234-5678", "message": "m"}]      # keep 키 path 의 식별자 패턴에는 맞지만 전화번호 모양(question_id 는 5.0.0 에서 Q 문법만 받는다)
     with pytest.raises(DeidError):
         deid(cfg).deidentify(envelope(tr))
 
@@ -179,7 +180,11 @@ NEW_KEYS = ["extract_input", "extract_output", "extract_protections", "validatio
 
 
 def _leaves(defs: dict, node: dict, path: str, out: set, seen=()) -> None:
+    from ops_feedback.components.deidentifier import _contract_node
     while "$ref" in node:
+        if not node["$ref"].startswith("#"):      # 문진 스키마 5.0.0 의 계약 안정 URI $ref(Id·SessionId·QuestionId): 계약 정의로 푼다
+            node = _contract_node(node["$ref"])
+            continue
         name = node["$ref"].rsplit("/", 1)[-1]
         if name in seen:
             return
