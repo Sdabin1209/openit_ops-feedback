@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import os
 
-ALLOWED = ("PATH", "HOME", "LANG", "TMPDIR", "DOCKER_CONFIG", "DOCKER_HOST")
+# 왜 Docker 연결 이름까지: 컨테이너를 부르는 시험이 소켓·컨텍스트·TLS·ssh 연결을 잃지 않게 한다(codex C2 검토, 2026-11-09).
+ALLOWED = ("PATH", "HOME", "LANG", "TMPDIR", "DOCKER_CONFIG", "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH", "SSH_AUTH_SOCK")
 
 
 def clean_env(extra: dict | None = None, *names: str) -> dict:

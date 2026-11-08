@@ -11,6 +11,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 import pytest
+from minenv import clean_env
 import yaml
 
 from boundary_contracts.errors import BoundaryError
@@ -22,7 +23,7 @@ DEAD_URL = f"postgresql://svc:{CANARY}@127.0.0.1:1/db"      # 아무도 듣지 �
 
 
 def _scrub(**extra):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("OPS_")}
+    env = clean_env()
     env.update(extra)
     return env
 

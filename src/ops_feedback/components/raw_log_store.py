@@ -17,6 +17,7 @@ from boundary_contracts.errors import BoundaryError
 from ..migrate import migrate_sqlite
 from ..types.RawStatusMark import RawStatusMark
 from ..types.RawTraceRecord import RawTraceRecord
+from ..wiring.legacy_major import any_legacy_major
 from ..wiring.pgbase import PgBase
 from ..wiring.validate import check
 
@@ -24,10 +25,6 @@ from ..wiring.validate import check
 MINIMIZED = '{"minimized": true}'          # 처리가 끝난 원본의 봉투 자리에 남기는 표지(중복 판별 키·해시·시각·릴리스는 남는다)
 MINIMIZABLE = ("DONE_CASE", "NO_FAILURE")  # 재처리가 필요한 상태(DEID_FAILED, PUBLISH_FAILED)는 원본을 남긴다
 
-
-# 왜 LIKE 인가: 레코드는 json.dumps 기본 구분자의 TEXT 라서 표지가 `"pipeline_schema_version": "4.` 로 나온다. 기동 때 한 번 훑는 검사라 색인이 필요 없다(측정 안 함).
-# 근거: 계약 5.0.0 CHANGELOG '이전': 4.x 저장 데이터는 이전하지 않고, 남아 있으면 조용히 섞이지 않고 실패해야 한다.
-LEGACY_MAJOR_LIKE = '%"pipeline_schema_version": "4.%'
 
 
 class _RawBackend(ABC):
@@ -214,7 +211,7 @@ class SqliteBackend(_RawBackend):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
 
     def legacy_major_present(self):
-        return self._x(lambda: self._db.execute("SELECT 1 FROM raw_traces WHERE envelope LIKE ? LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
+        return self._x(lambda: any_legacy_major(self._db.execute("SELECT envelope FROM raw_traces")))
 
     def received_at(self, session_id, turn_id):
         row = self._x(lambda: self._db.execute("SELECT received_at FROM raw_traces WHERE session_id=? AND turn_id=?",
@@ -248,7 +245,7 @@ class PostgresRawBackend(PgBase, _RawBackend):
         return self._x(lambda: self._db.execute("SELECT COUNT(*) FROM raw_traces WHERE session_id=%s", (session_id,)).fetchone()[0])
 
     def legacy_major_present(self):
-        return self._x(lambda: self._db.execute("SELECT 1 FROM raw_traces WHERE envelope LIKE %s LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
+        return self._x(lambda: any_legacy_major(self._db.execute("SELECT envelope FROM raw_traces")))
 
     def delete_session(self, session_id):
         return self._x(lambda: self._db.execute("DELETE FROM raw_traces WHERE session_id=%s", (session_id,)).rowcount)

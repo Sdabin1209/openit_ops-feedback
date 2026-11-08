@@ -85,3 +85,39 @@ def test_server_exits_nonzero_when_4x_data_remains(tmp_path):
     env = clean_env({"OPS_LOG_DB": path, "OPS_INGEST_TOKEN": "t" * 40, "OPS_DEID_SALT": SALT})
     r = subprocess.run([sys.executable, "-m", "ops_feedback.api"], env=env, capture_output=True, text=True, timeout=HANG_GUARD_SECONDS)      # 매달림 감시
     assert r.returncode == 2 and "4.x" in (r.stderr + r.stdout)
+
+
+# 최상위 pipeline_schema_version 의 MAJOR 만 본다(codex C2 검토, 2026-11-09): LIKE 판별의 세 결함을 고정한다.
+from ops_feedback.wiring.legacy_major import is_legacy_major
+
+
+def test_top_level_5x_with_nested_4x_is_not_legacy():
+    assert not is_legacy_major(json.dumps({"pipeline_schema_version": "5.0", "ext": {"pipeline_schema_version": "4.0"}}))
+
+
+@pytest.mark.parametrize("text", [
+    '{"pipeline_schema_version":"4.0"}', '{"pipeline_schema_version" :   "4.2"}',
+    json.dumps({"pipeline_schema_version": "4.0"}, indent=2), json.dumps({"pipeline_schema_version": "4.0"}, separators=(",", ":")),
+    json.dumps({"pipeline_schema_version": "4.0"}, ensure_ascii=False)])
+def test_top_level_4x_is_legacy_regardless_of_serialization(text):
+    assert is_legacy_major(text)
+
+
+def test_other_keys_and_non_json_are_not_mistaken():
+    assert not is_legacy_major('{"pipeline-schema-version": "4.0"}')
+    assert not is_legacy_major('{"pipelineXschemaXversion": "4.0"}')
+    assert not is_legacy_major('{"minimized": true}')
+    assert not is_legacy_major("not json")
+    assert not is_legacy_major('{"pipeline_schema_version": "40.0"}')
+
+
+def test_store_ignores_nested_4x_in_ext(tmp_path):
+    path = str(tmp_path / "f.db")
+    FailureCaseStore.sqlite(path)
+    rec = {"case_id": "fc-y", "version": 1, "pipeline_schema_version": "5.0", "ext": {"pipeline_schema_version": "4.0"}}
+    db = sqlite3.connect(path)
+    db.execute("INSERT INTO cases(case_id,version,review_status,failure_type,source_release_id,created_at,record) VALUES('fc-y',1,'PENDING','T','rel-1','2026-11-08T00:00:00Z',?)",
+               (json.dumps(rec),))
+    db.commit()
+    db.close()
+    require_current_major(None, FailureCaseStore.sqlite(path))

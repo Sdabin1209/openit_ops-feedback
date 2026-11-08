@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 
 import pytest
+from minenv import clean_env
 import yaml
 
 from conftest import envelope, make_trace, pii_trace, base_config
@@ -21,7 +22,7 @@ ING, RD, RV = "ing-canary-11aa", "rd-canary-22bb", "rv-canary-33cc"
 
 
 def _scrub_env(**extra):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("OPS_")}
+    env = clean_env()
     env.update(extra)
     return env
 

@@ -350,7 +350,7 @@ def test_sigterm_stops_the_server_cleanly(tmp_path):
     with socket.socket() as sk:
         sk.bind(("127.0.0.1", 0))
         port = sk.getsockname()[1]
-    env = {k: v for k, v in os.environ.items() if not k.startswith("OPS_")}
+    env = clean_env()
     env.update(OPS_INGEST_TOKEN="tok", OPS_LOG_DB=str(tmp_path / "l.db"), OPS_PORT=str(port))
     p = Proc([sys.executable, "-m", "ops_feedback.api"], env)
     p.wait_for("listening on")      # 기동은 로그 줄이라는 사건으로 안다(시계 없음)

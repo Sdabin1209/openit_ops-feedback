@@ -18,12 +18,11 @@ from boundary_contracts.errors import BoundaryError
 
 from ..migrate import migrate_sqlite
 from ..wiring.clock import fmt_ts
+from ..wiring.legacy_major import any_legacy_major
 from ..wiring.pgbase import PgBase
 from ..wiring.validate import check
 
 
-# 왜 LIKE 인가·근거: 원본 로그 저장소의 같은 상수와 같은 뜻이다(레코드는 json.dumps 기본 구분자의 TEXT, 계약 5.0.0 '이전').
-LEGACY_MAJOR_LIKE = '%"pipeline_schema_version": "4.%'
 
 
 class _Backend(ABC):
@@ -230,7 +229,7 @@ class SqliteBackend(_Backend):
         self._x(lambda: self._db.execute("SELECT 1").fetchone())
 
     def legacy_major_present(self):
-        return self._x(lambda: self._db.execute("SELECT 1 FROM cases WHERE record LIKE ? LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
+        return self._x(lambda: any_legacy_major(self._db.execute("SELECT record FROM cases")))
 
     def close(self) -> None:
         self._db.close()
@@ -255,7 +254,7 @@ class PostgresFailureBackend(PgBase, _Backend):
             "SELECT record FROM cases WHERE case_id=%s ORDER BY version", (case_id,)).fetchall()])
 
     def legacy_major_present(self):
-        return self._x(lambda: self._db.execute("SELECT 1 FROM cases WHERE record LIKE %s LIMIT 1", (LEGACY_MAJOR_LIKE,)).fetchone()) is not None
+        return self._x(lambda: any_legacy_major(self._db.execute("SELECT record FROM cases")))
 
     def scan(self, after_seq):
         rows = self._x(lambda: self._db.execute("SELECT seq,record FROM cases WHERE seq>%s ORDER BY seq", (after_seq,)).fetchall())

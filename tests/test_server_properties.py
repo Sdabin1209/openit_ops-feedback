@@ -4,6 +4,7 @@ import io
 import threading
 
 import pytest
+from minenv import clean_env
 
 import ops_feedback.components.link_ingest_api as api
 from ops_feedback.components.failure_case_store import FailureCaseStore
@@ -221,7 +222,7 @@ def test_ops_host_binds_only_that_address(tmp_path):
     with socket.socket() as sk:
         sk.bind(("127.0.0.1", 0))
         port = sk.getsockname()[1]
-    env = {k: v for k, v in os.environ.items() if not k.startswith("OPS_")}
+    env = clean_env()
     env.update(OPS_INGEST_TOKEN="tok", OPS_LOG_DB=str(tmp_path / "l.db"), OPS_PORT=str(port), OPS_HOST="127.0.0.1")
     p = Proc([sys.executable, "-m", "ops_feedback.api"], env)
     try:
