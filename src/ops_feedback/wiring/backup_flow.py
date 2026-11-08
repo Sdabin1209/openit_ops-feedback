@@ -45,7 +45,7 @@ def keep_within_days(env: Mapping[str, str]) -> int:
         return DEFAULT_RAW_RETENTION_DAYS
     try:
         days = int(float(raw))
-    except ValueError:
+    except (ValueError, OverflowError):      # 'inf'·'1e999'는 float 가 무한대로 읽어 int()가 OverflowError 를 낸다: 같은 거부로 모은다
         days = 0
     if days < 1:
         raise BoundaryError("INVALID_RECORD", "OPS_RAW_RETENTION_DAYS 는 1 이상의 일 수여야 한다(백업 보존 기간의 상한)")

@@ -139,7 +139,7 @@ def test_backup_retention_follows_the_raw_retention_and_refuses_unbounded(reques
     forget = [json.loads(l)["argv"] for l in log.read_text().splitlines() if json.loads(l)["argv"][0] == "forget"]
     assert forget[0][2] == "14d"
     assert backup_flow.keep_within_days({}) == 30             # 기본은 ADR 0007 의 원본 기본 보존 30일
-    for bad in ("forever", "0", "-3", "abc"):
+    for bad in ("forever", "0", "-3", "abc", "inf", "1e999", "nan"):
         with pytest.raises(BoundaryError) as e:
             backup_flow.keep_within_days({"OPS_RAW_RETENTION_DAYS": bad})
         assert e.value.code == "INVALID_RECORD"

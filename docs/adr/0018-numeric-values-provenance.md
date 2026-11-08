@@ -6,29 +6,29 @@
 
 | 값 | 위치 | 분류 | 출처·메모 |
 | --- | --- | --- | --- |
-| DB 접속 3초, 문장 3초 | `pgbase.py` DEFAULTS | 제약 + 추정 | survey-service가 같은 문제에 쓴 값과 맞춤(그 영역 문서가 정본, 이 영역은 직접 확인 안 함) + 문장이 단건 INSERT/SELECT라는 코드 읽기. 정상 지연 측정 안 함(ADR 0008) |
-| `/readyz` DB probe 2초 | `pgbase.py` | 제약 | FAULT_POLICY 원칙 5(헤드 문서, 이 영역은 ADR 0008이 인용한 내용만 확인) |
-| 스키마 생성(DDL) 30초 | `pgbase.py` | 임의 | advisory lock 대기를 감안했다는 설명뿐(ADR 0008이 "임의"로 적음) |
-| 소켓 요청 timeout 30초 | `api.py` REQUEST_TIMEOUT | 임의 | 측정 안 함(ADR 0008) |
-| 동시 연결 64 | `api.py` BoundedServer | 임의 | 측정 안 함(ADR 0008) |
-| `/readyz` 결과 공유 1.5초 | `api.py` READYZ_CACHE_SECONDS | 임의 | probe 상한 2초보다 짧게 잡았다는 관계만 있다 |
-| 수집 본문 8 MiB | `api.py` MAX_BODY | 출처 확인 못 함 | 계약 문서에서 8 MiB 정의를 찾지 못했다(`HTTP.md`·`_common.schema.json` 검색). 임의로 취급한다 |
-| 검토 본문 1 MiB, 문자열 20,000자 | `api.py`, `review.py` | 임의 | 주석에 "임의 상한, 측정 안 함" |
-| 목록 `limit` 최대 500 | `api.py` MAX_LIMIT | 제약 | `boundary-contracts/HTTP.md`가 "기본 100, 최대 500"을 정한다 |
-| `X-Openit-User` 128자 | `api.py` `_ID` | 제약 | `_common.schema.json` Id의 `maxLength: 128`과 같다(스키마 값을 읽어 맞춤, 코드에 복사되어 있어 스키마가 바뀌면 어긋난다) |
-| 잡 배치 500 | `job.py` DEFAULT_BATCH_SIZE | 임의 | 메모리에 올리는 봉투 수. 봉투 최대 8 MiB를 감안했다는 설명뿐 |
-| 롤백 평가 60초 | `job.py` DEFAULT_ROLLBACK_DEADLINE | 임의 | ADR 0008이 "임의"로 적음 |
-| SQLite `busy_timeout` 5000ms | `logstore.py`, `failurestore.py` | 임의 | 개발·시험용 저장소. 근거 기록 없음 |
-| 잔존 검사 창 4,096자, 겹침 1,024자 | `deid.py` | 임의 + 계산 | 겹침은 예시 패턴의 최대 일치 길이(이메일 약 64+1+255+1+TLD)보다 크게 잡았다(계산, 측정 아님). 창 크기는 측정 안 함(ADR 0011) |
-| 식별자 패턴 길이 한도 64, 160, 32 | `deid.py` | 임의 | ADR 0004·0013이 "근거 기록 없음, 보수적 임의값"으로 적음 |
-| 검토 입력 중첩 깊이 64 | `review.py` | 임의 | 근거 기록 없음 |
-| 파생 ID 해시 길이: `fc-`·`tr-` 32 hex, `rb-`·`metric-` 24 hex | `job.py`, `rollback.py` | 임의 | 근거 기록 없음. 충돌 확률은 계산하지 않았다 |
-| 의사 식별자 128비트(32 hex) | `deid.py` | 제약 | 기존 형식·스키마 패턴 유지(ADR 0016) |
-| salt 최소 32바이트 | `deid.py` MIN_SALT_BYTES | 표준(이해) | HMAC-SHA256 출력 길이. RFC 2104 원문 대조 전(ADR 0017) |
-| 보존 30일 / 180일 / 365일 | `config.py` RETENTION_DEFAULTS | 제약 | D88/U4 사용자 결정(잠정). 법정 기준 대조 못 함(ADR 0007) |
+| DB 접속 3초, 문장 3초 | `wiring/pgbase.py` DEFAULTS | 제약 + 추정 | survey-service가 같은 문제에 쓴 값과 맞춤(그 영역 문서가 정본, 이 영역은 직접 확인 안 함) + 문장이 단건 INSERT/SELECT라는 코드 읽기. 정상 지연 측정 안 함(ADR 0008) |
+| `/readyz` DB probe 2초 | `wiring/pgbase.py` | 제약 | FAULT_POLICY 원칙 5(헤드 문서, 이 영역은 ADR 0008이 인용한 내용만 확인) |
+| 스키마 생성(DDL) 30초 | `wiring/pgbase.py` | 임의 | advisory lock 대기를 감안했다는 설명뿐(ADR 0008이 "임의"로 적음) |
+| 소켓 요청 timeout 30초 | `components/link_ingest_api.py` REQUEST_TIMEOUT | 임의 | 측정 안 함(ADR 0008) |
+| 동시 연결 64 | `components/link_ingest_api.py` Server(waitress) | 임의 | 측정 안 함(ADR 0008) |
+| `/readyz` 결과 공유 1.5초 | `components/link_ingest_api.py` READYZ_CACHE_SECONDS | 임의 | probe 상한 2초보다 짧게 잡았다는 관계만 있다 |
+| 수집 본문 8 MiB | `components/link_ingest_api.py` MAX_BODY | 출처 확인 못 함 | 계약 문서에서 8 MiB 정의를 찾지 못했다(`HTTP.md`·`_common.schema.json` 검색). 임의로 취급한다 |
+| 검토 본문 1 MiB, 문자열 20,000자 | `components/link_ingest_api.py`(MAX_REVIEW_BODY), `schemas/ReviewDecision.schema.json`(Bounded) | 임의 | 주석에 "임의 상한, 측정 안 함" |
+| 목록 `limit` 최대 500 | `schemas/ListCasesQuery.schema.json` | 제약 | `boundary-contracts/HTTP.md`가 "기본 100, 최대 500"을 정한다 |
+| `X-Openit-User` 128자 | `schemas/ReviewHeaders.schema.json` | 제약 | `_common.schema.json` Id의 `maxLength: 128`과 같다(스키마 값을 읽어 맞춤, 코드에 복사되어 있어 스키마가 바뀌면 어긋난다) |
+| 잡 배치 500 | `wiring/pipeline.py` DEFAULT_BATCH_SIZE | 임의 | 메모리에 올리는 봉투 수. 봉투 최대 8 MiB를 감안했다는 설명뿐 |
+| 롤백 평가 60초 | `wiring/pipeline.py` DEFAULT_ROLLBACK_DEADLINE | 임의 | ADR 0008이 "임의"로 적음 |
+| SQLite `busy_timeout` 5000ms | `components/raw_log_store.py`, `components/failure_case_store.py` | 임의 | 개발·시험용 저장소. 근거 기록 없음 |
+| 잔존 검사 창 4,096자, 겹침 1,024자 | `components/deidentifier.py` | 임의 + 계산 | 겹침은 예시 패턴의 최대 일치 길이(이메일 약 64+1+255+1+TLD)보다 크게 잡았다(계산, 측정 아님). 창 크기는 측정 안 함(ADR 0011) |
+| 식별자 패턴 길이 한도 64, 160, 32 | `components/deidentifier.py` | 임의 | ADR 0004·0013이 "근거 기록 없음, 보수적 임의값"으로 적음 |
+| 검토 입력 중첩 깊이 64 | `components/review_decider.py` | 임의 | 근거 기록 없음 |
+| 파생 ID 해시 길이: `fc-`·`tr-` 32 hex, `rb-`·`metric-` 24 hex | `components/case_builder.py`, `components/rollback_request_builder.py` | 임의 | 근거 기록 없음. 충돌 확률은 계산하지 않았다 |
+| 의사 식별자 128비트(32 hex) | `components/deidentifier.py` | 제약 | 기존 형식·스키마 패턴 유지(ADR 0016) |
+| salt 최소 32바이트 | `components/pseudonymizer.py` MIN_SALT_BYTES | 표준(이해) | HMAC-SHA256 출력 길이. RFC 2104 원문 대조 전(ADR 0017) |
+| 보존 30일 / 180일 / 365일 | `components/retention_planner.py` RETENTION_DEFAULTS | 제약 | D88/U4 사용자 결정(잠정). 법정 기준 대조 못 함(ADR 0007) |
 | `REASK_STREAK` threshold 3 | 예시 설정 | 제약 | survey-service `SURVEY_MAX_CONSECUTIVE_REASK` 기본 3과 맞춤. 오탐·미탐 측정 안 함(ADR 0012) |
-| advisory lock 키 7264001 | `pgbase.py` | 임의 | 다른 락 키와 겹치지 않기만 하면 되는 식별 숫자 |
-| DB 재시도 1회, 소켓 shutdown 여유 +1초 | `pgbase.py` | 임의 | 재시도 1회는 멱등 근거(docstring)가 있고 횟수 자체는 임의. +1초는 근거 없음 |
+| (삭제됨) advisory lock 키 7264001 | 스키마 생성이 yoyo 마이그레이션 잠금(`migrate.py`)으로 바뀌어 이 값은 코드에 없다 | 임의 | 다른 락 키와 겹치지 않기만 하면 되는 식별 숫자 |
+| DB 재시도 1회, 소켓 shutdown 여유 +1초 | `wiring/pgbase.py` | 임의 | 재시도 1회는 멱등 근거(docstring)가 있고 횟수 자체는 임의. +1초는 근거 없음 |
 
 - 왜 값을 바꾸지 않았나: 임의 값을 다른 임의 값으로 바꾸면 근거가 생기지 않는다. 측정하기 전까지는 설정으로 바꿀 수 있는 것(환경 변수, 설정 파일)은 이미 그렇게 되어 있다. 코드 상수인 것은 측정 계획이 생기면 설정으로 올린다.
 - 측정 계획: **없다**(이 영역은 운영 trace도 부하도 갖고 있지 않다). 운영 지연·처리량이 측정되면 이 표의 "임의" 행부터 다시 정한다.

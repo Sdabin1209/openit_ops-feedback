@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 일회용 PostgreSQL 16 컨테이너를 띄워 그 위에서 시험을 돌리고, 끝나면 컨테이너를 내린다. PostgreSQL 시험(110건)이 건너뛰어지지 않는다.
+# 일회용 PostgreSQL 16 컨테이너를 띄워 그 위에서 시험을 돌리고, 끝나면 컨테이너를 내린다. PostgreSQL 시험이 건너뛰어지지 않는다.
 #   scripts/dev-postgres.sh                 # 전체 pytest
 #   scripts/dev-postgres.sh -k timeout -x   # pytest 인자를 그대로 넘긴다
 # 호스트 포트는 Docker가 배정한다(고정 포트 없음). 컨테이너 이름에 리포지토리 이름과 PID를 넣는다. 종료 코드는 pytest의 것이다.

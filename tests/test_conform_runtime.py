@@ -68,6 +68,26 @@ def test_r8_1_unavailable_logs_exception_kind_and_location_not_message(caplog):
     assert "ValueError" in text and "test_conform_runtime.py:" in text and "SECRET-PATIENT-TEXT" not in text
 
 
+def test_r8_1_unexpected_handler_exception_logs_kind_not_message(caplog):
+    """R8.1: 핸들러의 예상 밖 예외도 503 이고, 로그에는 예외 클래스 이름과 위치만 남고 메시지(환자 발화일 수 있다)는 남지 않는다."""
+    import json, threading
+    from test_http_401 import ING, call
+    from ops_feedback.wiring.ingest_service import make_ingest_server
+    log = LogStore.memory()
+
+    def boom(_envelope):
+        raise RuntimeError("SECRET-PATIENT-TEXT")
+    log.send = boom
+    s = make_ingest_server(log, ING, "127.0.0.1", 0)
+    threading.Thread(target=s.serve_forever, daemon=True).start()
+    try:
+        with caplog.at_level(logging.ERROR, logger="ingest-api"):
+            st, _, _ = call(s.server_address[1], "POST", "/v1/traces", f"Bearer {ING}", body=json.dumps(envelope(make_trace("s-x", "t-1"))).encode())
+    finally:
+        s.shutdown()
+    assert st == 503 and "RuntimeError" in caplog.text and "SECRET-PATIENT-TEXT" not in caplog.text
+
+
 def test_r10_5_log_write_failure_does_not_fail_the_request():
     """R10.5: 표준 출력(로그 핸들러)이 막혀 쓰기에 실패해도 요청의 출력은 바뀌지 않는다(수집 200 ACCEPTED)."""
     import json, threading
@@ -149,7 +169,7 @@ def test_c18_f19_resent_turn_with_other_content_is_200_duplicate_over_http():
         b = json.dumps(envelope(make_trace("s-d", "t-1"), release_id="rel-0003")).encode()
         st1, _, r1 = call(s.server_address[1], "POST", "/v1/traces", f"Bearer {ING}", body=a)
         st2, _, r2 = call(s.server_address[1], "POST", "/v1/traces", f"Bearer {ING}", body=b)
-        assert (st1, r1["status"]) == (200, "ACCEPTED") or (st1, r1["status"]) == (201, "ACCEPTED")
+        assert (st1, r1["status"]) == (200, "ACCEPTED")
         assert st2 == 200 and r2["status"] == "DUPLICATE" and r2["session_id"] == "s-d" and r2["turn_id"] == "t-1"
     finally:
         s.shutdown()

@@ -51,10 +51,10 @@ REVIEW_TOKEN=$($PYBIN -c 'import secrets; print(secrets.token_hex(32))')
 DEID_SALT=$($PYBIN -c 'import secrets; print(secrets.token_hex(32))')
 printf %s "$INGEST_TOKEN" > $SECDIR/ingest; printf %s "synthetic-data=$READ_TOKEN" > $SECDIR/read; printf %s "reviewer=$REVIEW_TOKEN" > $SECDIR/review; printf %s "$DEID_SALT" > $SECDIR/salt
 chmod 640 $SECDIR/*
-# 잡 설정은 시작할 때 마운트한다(deploy 와 같다): 읽기 전용 루트에서는 실행 중 컨테이너로 docker cp 를 할 수 없다
+# 잡 설정은 시작할 때 마운트한다(경로는 deploy-jobs.json 의 config.container_path 와 같다, deploy 와 같다): 읽기 전용 루트에서는 실행 중 컨테이너로 docker cp 를 할 수 없다
 JOBDIR=$(mktemp -d); chmod 755 $JOBDIR
 sed 's#data/log.db#/data/log.db#; s#data/failures.db#/data/failures.db#' config/job.example.yaml > $JOBDIR/job.yaml; chmod 644 $JOBDIR/job.yaml
-$DOCKER run -d --name $NAME --group-add "$(id -g)" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro -v $JOBDIR/job.yaml:/etc/openit/job.yaml:ro \
+$DOCKER run -d --name $NAME --group-add "$(id -g)" --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true -p 127.0.0.1::8080 -v $SECDIR:/run/secrets:ro -v $JOBDIR/job.yaml:/etc/ops-feedback/job.yaml:ro \
   -e OPS_INGEST_TOKEN_FILE=/run/secrets/ingest -e OPS_READ_TOKENS_FILE=/run/secrets/read -e OPS_REVIEW_TOKENS_FILE=/run/secrets/review \
   -e OPS_DEID_SALT_FILE=/run/secrets/salt $IMG >/dev/null
 inspection=$($DOCKER inspect "$NAME")
@@ -104,7 +104,7 @@ rm -f /tmp/smoke-labels-$$.json
 FAIL=$(echo "$BODY" | python3 -c 'import json,sys
 b=json.load(sys.stdin); b["turn_id"]=b["trace"]["turn_id"]="t-fail"; b["trace"]["response_output"]="x"; b["trace"]["response_outcome"]="fallback"; print(json.dumps(b))')
 curl -fsS -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $INGEST_TOKEN" -d "$FAIL" http://127.0.0.1:$PORT/v1/traces >/dev/null
-$DOCKER exec $NAME python -m ops_feedback.job --config /etc/openit/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
+$DOCKER exec $NAME python -m ops_feedback.job --config /etc/ops-feedback/job.yaml --no-rollback | tee /tmp/smoke-job-$$.out
 CID=$(curl -fsS -H "Authorization: Bearer $READ_TOKEN" "http://127.0.0.1:$PORT/v1/cases?review_status=PENDING" | python3 -c 'import json,sys;print(json.load(sys.stdin)["items"][0]["case_id"])')
 rv() { curl -s -o /tmp/smoke-$$.out -w '%{http_code}' -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $1" ${3:+-H "X-Openit-User: $3"} -d "$2" "http://127.0.0.1:$PORT/v1/cases/$CID/review"; }
 [ "$(rv "$READ_TOKEN" '{"review_status":"DISMISSED"}')" = "403" ] || { echo "읽기 토큰으로 검토가 거부되지 않음"; exit 1; }

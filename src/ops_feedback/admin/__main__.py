@@ -116,7 +116,7 @@ def main(argv=None) -> int:
             return 0
         if a.cmd == "purge":
             if a.raw_days is None and a.cases_days is None and a.metrics_days is None:
-                print("오류: --raw-days 또는 --cases-days가 필요하다(기간은 사용자가 정한다)", file=sys.stderr)
+                print("오류: --raw-days, --cases-days, --metrics-days 중 하나가 필요하다(기간은 사용자가 정한다)", file=sys.stderr)
                 return 2
             out = admin_flow.purge(log, fail, raw_days=a.raw_days, cases_days=a.cases_days, metrics_days=a.metrics_days,
                                    include_confirmed=a.include_confirmed, include_unprocessed=a.include_unprocessed)

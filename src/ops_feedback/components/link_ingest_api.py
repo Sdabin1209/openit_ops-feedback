@@ -116,8 +116,8 @@ def make_app(service, token: str, *, read_tokens: Optional[dict[str, str]] = Non
                 if e.code == "UNAVAILABLE":
                     _log_unavailable(e)
                 raise
-            except Exception:                    # 예상 밖 오류도 연결을 끊지 않고 503 본문으로 알린다
-                log.exception("처리 중 예외")
+            except Exception as e:               # 예상 밖 오류도 연결을 끊지 않고 503 본문으로 알린다
+                _log_unavailable(e)              # R8.1: 원인 클래스 이름과 위치만 남긴다. 로그 형식(JsonFormatter)은 traceback 을 싣지 않아 이전의 log.exception 은 "처리 중 예외" 한 줄뿐이었다
                 raise BoundaryError("UNAVAILABLE", "내부 오류") from None
         return run
 
