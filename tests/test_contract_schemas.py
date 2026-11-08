@@ -80,7 +80,7 @@ def test_job_config_contract_valid_examples_accepted(p, tmp_path):
 
 def test_server_env_rejects_unknown_ops_variable():
     with pytest.raises(ValueError, match="OPS_RAW_RETENTON_DAYS"):
-        validate_server_env({"OPS_PORT": "8080", "OPS_RAW_RETENTON_DAYS": "30"}))
+        validate_server_env({"OPS_PORT": "8080", "OPS_RAW_RETENTON_DAYS": "30"})
     with pytest.raises(ValueError, match="OPS_DB_SCHEMA"):
         validate_server_env({"OPS_DB_SCHEMA": "skip"})
     validate_server_env({"PATH": "/usr/bin", "OPS_PORT": "8080", "OPS_DB_SCHEMA": "verify"})     # OPS_ 아닌 변수는 대상이 아니다
